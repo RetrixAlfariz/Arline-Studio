@@ -1300,7 +1300,7 @@ function projectActions(event) {
 
 async function deleteProject(project) {
   if (!project) return;
-  const ok = confirm(`Permanently delete project “${project.name}”?\n\nThis removes the project workspace: folders, documents, manifest references, project overlays, active-scene metadata, and project-scoped chats. Shared World Bible worlds, sheets, relationships, and canon remain available. This cannot be undone.`);
+  const ok = confirm(`Permanently delete project “${project.name}”?\n\nThis removes the project workspace: folders, documents, manifest references, project overlays, active-scene metadata, and project-scoped chats. Shared Library worlds, sheets, relationships, and canon remain available. This cannot be undone.`);
   if (!ok) return;
   loading(true, "Deleting project…", "Cleaning workspace lineage and chat scope");
   try {
@@ -1349,7 +1349,7 @@ async function deleteBranch(branch) {
 }
 
 function openProjectForm() {
-  openForm({ title: "New project", eyebrow: "Workspace", description: "A project is a focused story workspace: manuscript, folders, notes, research, assets, and references. World Bible sheets/canon stay shared and are linked through the project context manifest.", fields: [
+  openForm({ title: "New project", eyebrow: "Workspace", description: "A project is a focused story workspace: manuscript, folders, notes, research, assets, and references. Library sheets/canon stay shared and are linked through the project context manifest.", fields: [
     { name: "name", label: "Project name", required: true },
     { name: "description", label: "Description", type: "textarea", full: true },
     { name: "language", label: "Default language", type: "select", options: [{ value: "follow_prompt", label: "Follow prompt" }, { value: "id-ID", label: "Bahasa Indonesia" }, { value: "en-US", label: "English" }], value: "follow_prompt" },
@@ -1635,7 +1635,7 @@ function openEntityForm(defaultType = "character", folderId = null) {
     .filter((item) => item.entity_type === ($('[name="entity_type"]', byId("formFields"))?.value || defaultType))
     .map((item) => ({ value: item.id, label: `${item.name} · ${item.entity_type}` }));
 
-  openForm({ title: "New entity / variant", eyebrow: "World Bible", description: "Create an independent identity family or attach a new world/branch variant to an existing conceptual identity. Names never act as IDs.", fields: [
+  openForm({ title: "New entity / variant", eyebrow: "Library", description: "Create an independent identity family or attach a new world/branch variant to an existing conceptual identity. Names never act as IDs.", fields: [
     { name: "identity_mode", label: "Identity", type: "select", options: [{ value: "independent", label: "New independent entity family" }, { value: "variant_existing", label: "Variant of existing family" }], value: "independent" },
     { name: "existing_family_id", label: "Existing family (variant mode)", type: "select", options: [{ value: "", label: "Select family…" }, ...familyOptions()], value: "" },
     { name: "name", label: "Name / display name", required: true },
@@ -2334,7 +2334,7 @@ async function loadWorkspaceBootstrap() {
 
 async function selectScope(projectId, worldId = null, branchId = null) {
   if (!projectId) return;
-  loading(true, "Opening workspace…", "Resolving project workspace and shared World Bible");
+  loading(true, "Opening workspace…", "Resolving project workspace and shared Library");
   try {
     const [project, projectList, bootstrap] = await Promise.all([
       api(`/api/projects/${encodeURIComponent(projectId)}`),
@@ -2632,8 +2632,8 @@ function showReferencePeek(ref, anchor) {
   clearTimeout(referencePeekHideTimer);
   const peek = byId("referencePeek");
   let body = "";
-  if (!ref.resolved) body = `<b>@${escapeHTML(ref.label)}</b><small>Unresolved reference</small><p>Create it or choose a known World Bible object.</p>`;
-  else if (ref.family) body = `<b>${escapeHTML(ref.family.name)}</b><small>${escapeHTML(ref.family.entity_type)} · World Bible</small><p>${escapeHTML(ref.family.description || "No description")}</p>`;
+  if (!ref.resolved) body = `<b>@${escapeHTML(ref.label)}</b><small>Unresolved reference</small><p>Create it or choose a known Library object.</p>`;
+  else if (ref.family) body = `<b>${escapeHTML(ref.family.name)}</b><small>${escapeHTML(ref.family.entity_type)} · Library</small><p>${escapeHTML(ref.family.description || "No description")}</p>`;
   else if (ref.variant) body = `<b>${escapeHTML(ref.variant.display_name)}</b><small>${escapeHTML(worldName(ref.variant.world_id))} · ${escapeHTML(ref.variant.canon_status || "draft")}</small><p>${escapeHTML(ref.variant.summary || "No summary")}</p>`;
   else if (ref.world) body = `<b>${escapeHTML(ref.world.name)}</b><small>World · ${escapeHTML(ref.world.canon_status || "draft")}</small><p>${escapeHTML(ref.world.description || "No description")}</p>`;
   else if (ref.document) body = `<b>${escapeHTML(ref.document.title)}</b><small>Project ${escapeHTML(ref.document.document_type)}</small><p>${escapeHTML((ref.document.content || "").slice(0, 180))}</p>`;
@@ -2684,7 +2684,7 @@ function updateScopeVisualization() {
   const explicit = collectPromptReferences(); const auto = ws?.auto_selected || []; const pinned = ws?.pinned || [];
   const recipe = state.contextRecipes.find((r) => r.id === byId("contextRecipeSelect")?.value);
   const scene = state.activeScene;
-  byId("scopeVisualization").innerHTML = `<div class="scope-path"><span>${escapeHTML(state.activeProject?.name || "No project")}</span><b>›</b><span>${escapeHTML(state.activeWorld?.name || "World Bible")}</span><b>›</b><span>${escapeHTML(state.activeBranch?.name || "Main")}</span></div><div class="scope-list"><b>Recipe</b>: ${escapeHTML(recipe?.name || "default")}<br><b>Explicit</b>: ${explicit.length ? explicit.map((x) => `@${escapeHTML(x.label)}`).join(", ") : "none"}<br><b>Auto-selected</b>: ${auto.length}<br><b>Pinned</b>: ${pinned.length}<br><b>Project overlays</b>: ${state.overlays.length}<br><b>Pending canon changes</b>: ${state.stagedChanges.length}${scene ? `<br><b>Active scene</b>: ${escapeHTML(scene.document_title || scene.document_id || scene.notes || "set")}` : ""}</div>`;
+  byId("scopeVisualization").innerHTML = `<div class="scope-path"><span>${escapeHTML(state.activeProject?.name || "No project")}</span><b>›</b><span>${escapeHTML(state.activeWorld?.name || "Library")}</span><b>›</b><span>${escapeHTML(state.activeBranch?.name || "Main")}</span></div><div class="scope-list"><b>Recipe</b>: ${escapeHTML(recipe?.name || "default")}<br><b>Explicit</b>: ${explicit.length ? explicit.map((x) => `@${escapeHTML(x.label)}`).join(", ") : "none"}<br><b>Auto-selected</b>: ${auto.length}<br><b>Pinned</b>: ${pinned.length}<br><b>Project overlays</b>: ${state.overlays.length}<br><b>Pending canon changes</b>: ${state.stagedChanges.length}${scene ? `<br><b>Active scene</b>: ${escapeHTML(scene.document_title || scene.document_id || scene.notes || "set")}` : ""}</div>`;
   renderContextWhy();
 }
 
@@ -2717,7 +2717,7 @@ async function previewQuickCreate() {
     const detail = preview.kind === "entity" ? `${preview.entity_type || "entity"}${preview.attributes && Object.keys(preview.attributes).length ? ` · ${Object.entries(preview.attributes).filter(([k])=>k!=="hierarchy").map(([k,v]) => `${k}: ${Array.isArray(v)?v.join(" › "):v}`).join(" · ")}` : ""}` : (preview.document_type || preview.description || preview.kind);
     const matches = (preview.possible_matches || []).map((item)=>`<button type="button" class="qc-existing-match" data-id="${escapeHTML(item.id)}"><span>↪</span><div><b>Use existing ${escapeHTML(item.label)}</b><small>${escapeHTML(item.entity_type || "sheet")}${item.alias?` · alias: ${escapeHTML(item.alias)}`:""} · ${Math.round((item.score||0)*100)}% match</small></div></button>`).join("");
     byId("quickCreatePreview").innerHTML = `<span class="preview-icon">${escapeHTML(ENTITY_ICONS[preview.entity_type || preview.kind] || "◇")}</span><div><b>${escapeHTML(preview.name || text)}</b><small>Detected ${escapeHTML(preview.kind)} · ${escapeHTML(detail || "ready")}</small>${preview.attributes?.hierarchy ? `<code>${escapeHTML(preview.attributes.hierarchy.join(" › "))}</code>` : ""}${matches ? `<div class="quick-create-matches"><em>Possible existing sheets</em>${matches}</div>` : ""}</div>`;
-    $$('.qc-existing-match',byId("quickCreatePreview")).forEach((button)=>button.addEventListener("click",async()=>{byId("quickCreateDialog").close();await openEntitySheet(button.dataset.id);toast("Linked to the existing World Bible sheet instead of duplicating it");}));
+    $$('.qc-existing-match',byId("quickCreatePreview")).forEach((button)=>button.addEventListener("click",async()=>{byId("quickCreateDialog").close();await openEntitySheet(button.dataset.id);toast("Linked to the existing Library sheet instead of duplicating it");}));
   } catch (error) { byId("quickCreatePreview").innerHTML = `<span class="preview-icon">!</span><div><b>Could not infer structure</b><small>${escapeHTML(error.message)}</small></div>`; }
 }
 
@@ -2742,7 +2742,7 @@ function quickCreateAdvanced() {
 
 function openEntityForm(defaultType = "character") {
   const typeOptions = (state.bootstrap?.entity_types || ["character","location","item","organization","world_rule","lore"]).map((x) => ({ value:x,label:x.replaceAll("_"," ") }));
-  openForm({ title: "Advanced entity / variant", eyebrow: "World Bible · schema inspector", description: "Use Quick Create for normal creation. This screen exposes the underlying family/variant schema when you explicitly need it.", fields: [
+  openForm({ title: "Advanced entity / variant", eyebrow: "Library · schema inspector", description: "Use Quick Create for normal creation. This screen exposes the underlying family/variant schema when you explicitly need it.", fields: [
     { name:"name",label:"Name / display name",required:true,full:true },
     { name:"entity_type",label:"Type",type:"select",options:typeOptions,value:defaultType },
     { name:"description",label:"Family description",type:"textarea",full:true },
@@ -2759,7 +2759,7 @@ function openEntityForm(defaultType = "character") {
 }
 
 function openFolderForm(parentId = null) {
-  openForm({ title:"New project folder", eyebrow:"Project filesystem", description:"Folders organize project files only. World Bible sheets and chats remain independent.", fields:[
+  openForm({ title:"New project folder", eyebrow:"Project filesystem", description:"Folders organize project files only. Library sheets and chats remain independent.", fields:[
     {name:"name",label:"Folder name",required:true,full:true},
     {name:"kind",label:"Purpose",type:"select",options:["mixed","manuscript","notes","research","assets","references"].map((x)=>({value:x,label:x[0].toUpperCase()+x.slice(1)})),value:"mixed"},
   ], onSubmit: async (values)=>{ await api("/api/folders",{method:"POST",body:{project_id:state.activeProject.id,name:values.name,parent_id:parentId,kind:values.kind,world_id:null,branch_id:null}}); await loadProjectData(); }});
@@ -2768,7 +2768,7 @@ function openFolderForm(parentId = null) {
 function worldName(id) { return state.worlds.find((item) => item.id === id)?.name || state.activeWorld?.id === id && state.activeWorld?.name || id || ""; }
 
 function openVariantForm(family, sourceVariant = null) {
-  openForm({ title:`New ${family.name} variant`, eyebrow:"World Bible variant", description:"Variants belong to worlds/branches, never to project folders.", fields:[
+  openForm({ title:`New ${family.name} variant`, eyebrow:"Library variant", description:"Variants belong to worlds/branches, never to project folders.", fields:[
     {name:"world_id",label:"Target world",type:"select",options:state.worlds.map((x)=>({value:x.id,label:x.name})),value:state.activeWorld?.id},
     {name:"display_name",label:"Display name",value:family.name,required:true},
     {name:"canon_status",label:"Status",type:"select",options:(state.bootstrap?.canon_statuses||[]).map((x)=>({value:x,label:x})),value:"draft"},
@@ -2779,9 +2779,9 @@ function openVariantForm(family, sourceVariant = null) {
 
 function editFamily(family) {
   const folderOptions=[{value:"",label:"No folder"},...(state.worldBibleFolders||[]).map((folder)=>({value:folder.id,label:folder.name}))];
-  openForm({ title:`Edit ${family.name}`, eyebrow:"World Bible · shared identity", description:"Folder changes organization only. The sheet remains shared World Bible knowledge.", fields:[
+  openForm({ title:`Edit ${family.name}`, eyebrow:"Library · shared identity", description:"Folder changes organization only. The sheet remains shared Library knowledge.", fields:[
     {name:"name",label:"Family name",value:family.name,required:true},
-    {name:"folder_id",label:"World Bible folder",type:"select",options:folderOptions,value:family.folder_id||""},
+    {name:"folder_id",label:"Library folder",type:"select",options:folderOptions,value:family.folder_id||""},
     {name:"description",label:"Description",type:"textarea",value:family.description,full:true},
     {name:"shared_core",label:"Shared core (JSON)",type:"json",value:family.shared_core,full:true}
   ], onSubmit:async(values)=>{await api(`/api/entities/families/${family.id}`,{method:"PATCH",body:{...values,note:"edited in Studio"}});await loadProjectData();await openEntitySheet(family.id);}});
@@ -2835,7 +2835,7 @@ function openSceneCardForm(doc) {
   if(!state.activeProject||!doc)return;
   const card=state.sceneCards.find((item)=>item.document_id===doc.id)||{};
   const variantOptions=state.variants.map((v)=>({value:v.id,label:`${v.display_name} · ${v.entity_type||"entity"}`}));
-  openForm({title:`Scene card · ${doc.title}`,eyebrow:"Project story outline",description:"Plan this scene while keeping its character/location references in the shared World Bible.",fields:[
+  openForm({title:`Scene card · ${doc.title}`,eyebrow:"Project story outline",description:"Plan this scene while keeping its character/location references in the shared Library.",fields:[
     {name:"status",label:"Status",type:"select",options:["planned","drafting","complete","skipped"].map((x)=>({value:x,label:x})),value:card.status||"planned"},
     {name:"sort_order",label:"Outline order",type:"number",step:0.1,value:card.sort_order??doc.sort_order??state.sceneCards.length},
     {name:"pov_variant_id",label:"POV",type:"select",options:[{value:"",label:"Unspecified"},...variantOptions],value:card.pov_variant_id||""},
@@ -2852,7 +2852,7 @@ function openStoryOutline() {
   const docs=state.documents.filter((d)=>["chapter","scene","draft","outline"].includes(d.document_type));
   const rows=docs.map((doc)=>({doc,card:state.sceneCards.find((c)=>c.document_id===doc.id)||null})).sort((a,b)=>Number(a.card?.sort_order??a.doc.sort_order??0)-Number(b.card?.sort_order??b.doc.sort_order??0));
   const variantName=(id)=>state.variants.find((v)=>v.id===id)?.display_name||"—";
-  byId("sheetEyebrow").textContent="Project story outline";byId("sheetTitle").textContent=state.activeProject.name;byId("sheetSubtitle").textContent="Narrative plan linked to World Bible state, without moving sheets into the project";
+  byId("sheetEyebrow").textContent="Project story outline";byId("sheetTitle").textContent=state.activeProject.name;byId("sheetSubtitle").textContent="Narrative plan linked to Library state, without moving sheets into the project";
   byId("sheetBody").innerHTML=`<section class="sheet-section"><div class="sheet-section-head"><h3>Story sequence</h3><span>${rows.length} documents</span></div><div class="story-outline-list">${rows.map(({doc,card},i)=>`<article class="story-outline-row ${state.activeScene?.document_id===doc.id?"active":""}" data-doc-id="${escapeHTML(doc.id)}"><div class="story-outline-order">${escapeHTML(String(card?.sort_order??doc.sort_order??i+1))}</div><div class="story-outline-main"><div><b>${escapeHTML(doc.title)}</b><span class="canon-badge ${escapeHTML(card?.status||doc.status||"planned")}">${escapeHTML(card?.status||doc.status||"planned")}</span></div><small>${escapeHTML(doc.document_type)}${card?.narrative_time?` · ${escapeHTML(card.narrative_time)}`:""}${card?.pov_variant_id?` · POV ${escapeHTML(variantName(card.pov_variant_id))}`:""}${card?.location_variant_id?` · @${escapeHTML(variantName(card.location_variant_id))}`:""}</small>${card?.target_outcome?`<p>${escapeHTML(card.target_outcome)}</p>`:""}</div><div class="story-outline-actions"><button class="tiny-btn outline-open">Open</button><button class="tiny-btn outline-edit">Plan</button><button class="tiny-btn outline-active">${state.activeScene?.document_id===doc.id?"Active":"Set active"}</button></div></article>`).join("")||`<div class="empty-note">No chapter/scene/draft documents yet.</div>`}</div></section>`;
   byId("sheetFooter").innerHTML=`<button id="outlineNewDocBtn" class="secondary-btn">＋ Story document</button><button id="outlineSceneBtn" class="primary-btn">Set narrative cursor</button>`;
   $$('.story-outline-row',byId("sheetBody")).forEach((row)=>{const doc=state.documents.find((d)=>d.id===row.dataset.docId);$('.outline-open',row).addEventListener('click',()=>openDocument(doc.id));$('.outline-edit',row).addEventListener('click',()=>openSceneCardForm(doc));$('.outline-active',row).addEventListener('click',()=>openActiveSceneForm(doc.id));});
@@ -2861,7 +2861,7 @@ function openStoryOutline() {
 
 function openOverlayForm() {
   if(!state.activeProject)return; const targets=[...state.variants.map((v)=>({value:`entity_variant:${v.id}`,label:`${v.display_name} · entity variant`})),...(state.activeWorld?[{value:`world:${state.activeWorld.id}`,label:`${state.activeWorld.name} · world`}]:[])];
-  openForm({title:"Project overlay",eyebrow:"Project-specific canon view",description:"Overrides the project view of base canon without mutating the shared World Bible.",fields:[{name:"target",label:"Target",type:"select",options:targets,full:true},{name:"path",label:"Semantic path",placeholder:"attributes.bedrooms",required:true},{name:"value",label:"Override value (JSON or text)",type:"textarea",full:true}],onSubmit:async(values)=>{const [owner_type,owner_id]=values.target.split(":");let value;try{value=JSON.parse(values.value);}catch(_){value=values.value;}await api(`/api/projects/${state.activeProject.id}/overlays`,{method:"POST",body:{owner_type,owner_id,path:values.path,value,world_id:state.activeWorld?.id||null,branch_id:state.activeBranch?.kind==="main"?null:state.activeBranch?.id}});await loadProjectData();}});
+  openForm({title:"Project overlay",eyebrow:"Project-specific canon view",description:"Overrides the project view of base canon without mutating the shared Library.",fields:[{name:"target",label:"Target",type:"select",options:targets,full:true},{name:"path",label:"Semantic path",placeholder:"attributes.bedrooms",required:true},{name:"value",label:"Override value (JSON or text)",type:"textarea",full:true}],onSubmit:async(values)=>{const [owner_type,owner_id]=values.target.split(":");let value;try{value=JSON.parse(values.value);}catch(_){value=values.value;}await api(`/api/projects/${state.activeProject.id}/overlays`,{method:"POST",body:{owner_type,owner_id,path:values.path,value,world_id:state.activeWorld?.id||null,branch_id:state.activeBranch?.kind==="main"?null:state.activeBranch?.id}});await loadProjectData();}});
 }
 
 function openStagedChangeForm(turnId = null, sourceText = "", proposal = null) {
@@ -2885,7 +2885,7 @@ async function resolveStagedChange(id, accept) { await api(`/api/staged-changes/
 async function openProjectContextSheet() {
   if(!state.activeProject)return;
   const scene=state.activeScene;const doc=scene?.document_id?state.documents.find((d)=>d.id===scene.document_id):null;
-  byId("sheetEyebrow").textContent="Project context manifest";byId("sheetTitle").textContent=state.activeProject.name;byId("sheetSubtitle").textContent="What this project is making · shared canon stays in World Bible";
+  byId("sheetEyebrow").textContent="Project context manifest";byId("sheetTitle").textContent=state.activeProject.name;byId("sheetSubtitle").textContent="What this project is making · shared canon stays in Library";
   byId("sheetBody").innerHTML=`<section class="sheet-section"><div class="sheet-section-head"><h3>Working set</h3><button id="manifestAddBtn" class="tiny-btn">＋ Reference</button></div>${state.manifestRefs.map((r)=>`<div class="resource-inline-row"><div><b>${escapeHTML(r.label||r.resource_id)}</b><small>${escapeHTML(r.resource_type)} · priority ${r.priority}</small></div><button class="tiny-danger-btn manifest-remove" data-type="${escapeHTML(r.resource_type)}" data-id="${escapeHTML(r.resource_id)}">×</button></div>`).join("")||`<div class="empty-note">No explicit working-set references yet. @ references still work normally.</div>`}</section>
   <section class="sheet-section"><div class="sheet-section-head"><h3>Active scene</h3><button id="sceneEditBtn" class="tiny-btn">Edit</button></div><p>${scene?escapeHTML(doc?.title||scene.narrative_time||scene.notes||"Active scene configured"):"No narrative cursor set."}</p>${scene?`<pre class="json-block">${escapeHTML(pretty(scene))}</pre>`:""}</section>
   <section class="sheet-section"><div class="sheet-section-head"><h3>Project overlays</h3><button id="overlayAddBtn" class="tiny-btn">＋ Overlay</button></div>${state.overlays.map((o)=>`<div class="fact-row"><div><code>${escapeHTML(o.owner_type)}:${escapeHTML(o.owner_id)} · ${escapeHTML(o.path)}</code><small>${escapeHTML(JSON.stringify(o.value))}</small></div><button class="tiny-danger-btn overlay-remove" data-id="${escapeHTML(o.id)}">×</button></div>`).join("")||`<div class="empty-note">No project-specific overrides.</div>`}</section>
@@ -2893,13 +2893,13 @@ async function openProjectContextSheet() {
   byId("sheetFooter").innerHTML=`<button id="projectOutlineSheetBtn" class="secondary-btn">Story outline</button><button id="projectContinuitySheetBtn" class="secondary-btn">Continuity · ${state.continuity?.warning_count||0}</button><button id="projectSceneSheetBtn" class="primary-btn">Set active scene</button>`;
   byId("manifestAddBtn").addEventListener("click",openManifestRefForm);byId("sceneEditBtn").addEventListener("click",()=>openActiveSceneForm());byId("overlayAddBtn").addEventListener("click",openOverlayForm);byId("projectOutlineSheetBtn").addEventListener("click",openStoryOutline);byId("projectContinuitySheetBtn").addEventListener("click",openContinuityReport);byId("projectSceneSheetBtn").addEventListener("click",()=>openActiveSceneForm());
   $$('.manifest-remove',byId("sheetBody")).forEach((b)=>b.addEventListener("click",async()=>{const q=new URLSearchParams({resource_type:b.dataset.type,resource_id:b.dataset.id});await api(`/api/projects/${state.activeProject.id}/manifest/refs?${q}`,{method:"DELETE"});await loadProjectData();await openProjectContextSheet();}));
-  $$('.overlay-remove',byId("sheetBody")).forEach((b)=>b.addEventListener("click",async()=>{if(!confirm("Remove this project overlay? Shared World Bible canon will be unchanged."))return;await api(`/api/overlays/${b.dataset.id}`,{method:"DELETE"});await loadProjectData();await openProjectContextSheet();}));
+  $$('.overlay-remove',byId("sheetBody")).forEach((b)=>b.addEventListener("click",async()=>{if(!confirm("Remove this project overlay? Shared Library canon will be unchanged."))return;await api(`/api/overlays/${b.dataset.id}`,{method:"DELETE"});await loadProjectData();await openProjectContextSheet();}));
   $$('.staged-accept',byId("sheetBody")).forEach((b)=>b.addEventListener("click",()=>resolveStagedChange(b.dataset.id,true)));$$('.staged-reject',byId("sheetBody")).forEach((b)=>b.addEventListener("click",()=>resolveStagedChange(b.dataset.id,false)));openSheet();
 }
 
 function openManifestRefForm() {
   const resources=[...state.families.map((f)=>({value:`entity_family:${f.id}`,label:`${f.name} · ${f.entity_type}`})),...state.worlds.map((w)=>({value:`world:${w.id}`,label:`${w.name} · world`})),...state.documents.map((d)=>({value:`document:${d.id}`,label:`${d.title} · project document`}))];
-  openForm({title:"Add to project working set",eyebrow:"Reference, don't copy",fields:[{name:"resource",label:"World Bible / project resource",type:"select",options:resources,full:true},{name:"priority",label:"Context priority",type:"number",min:0,max:10,step:1,value:1}],onSubmit:async(values)=>{const [resource_type,resource_id]=values.resource.split(":");const item=referenceRegistry().find((r)=>r.type===resource_type&&r.id===resource_id);await api(`/api/projects/${state.activeProject.id}/manifest/refs`,{method:"POST",body:{resource_type,resource_id,label:item?.label||resource_id,priority:Number(values.priority||1)}});await loadProjectData();await openProjectContextSheet();}});
+  openForm({title:"Add to project working set",eyebrow:"Reference, don't copy",fields:[{name:"resource",label:"Library / project resource",type:"select",options:resources,full:true},{name:"priority",label:"Context priority",type:"number",min:0,max:10,step:1,value:1}],onSubmit:async(values)=>{const [resource_type,resource_id]=values.resource.split(":");const item=referenceRegistry().find((r)=>r.type===resource_type&&r.id===resource_id);await api(`/api/projects/${state.activeProject.id}/manifest/refs`,{method:"POST",body:{resource_type,resource_id,label:item?.label||resource_id,priority:Number(values.priority||1)}});await loadProjectData();await openProjectContextSheet();}});
 }
 
 async function openContinuityReport() {
@@ -2915,7 +2915,7 @@ async function openEntityTimelineState(variant, family) {
   const timeline = await api(`/api/timeline?${params}`);
   const events = timeline.events || [];
   const options = [{value:"",label:"Latest state"},...events.map((event)=>({value:String(event.order_key),label:`${event.time_label || `#${event.order_key}`} · ${event.summary}`}))];
-  openForm({title:`Timeline state · ${family?.name || variant.display_name}`,eyebrow:"World Bible · temporal state",description:"Inspect the accumulated state patches for this entity at a specific point in its timeline. This never changes current canon.",submit:"Inspect",fields:[{name:"at_order",label:"Timeline point",type:"select",options,value:"",full:true}],onSubmit:async(values)=>{
+  openForm({title:`Timeline state · ${family?.name || variant.display_name}`,eyebrow:"Library · temporal state",description:"Inspect the accumulated state patches for this entity at a specific point in its timeline. This never changes current canon.",submit:"Inspect",fields:[{name:"at_order",label:"Timeline point",type:"select",options,value:"",full:true}],onSubmit:async(values)=>{
     const q = new URLSearchParams({world_id:state.activeWorld.id,owner_type:"entity_variant",owner_id:variant.id,...(branchId?{branch_id:branchId}:{})});
     if(values.at_order!=="")q.set("at_order",values.at_order);
     const snapshot=await api(`/api/timeline/state?${q}`);
@@ -2927,7 +2927,7 @@ async function openEntityTimelineState(variant, family) {
   }});
 }
 
-function openTimelineEventForm() {if(!state.activeWorld)return;openForm({title:"New timeline event",eyebrow:"World Bible timeline",fields:[{name:"time_label",label:"Time label",placeholder:"17 Aug 2026 · 21:32"},{name:"order_key",label:"Sort order",type:"number",step:0.01,value:state.timelineEvents.length+1},{name:"summary",label:"Event",type:"textarea",required:true,full:true},{name:"event_type",label:"Type",value:"event"},{name:"state_patch",label:"Optional state patch (JSON)",type:"json",value:{},full:true}],onSubmit:async(values)=>{await api("/api/timeline",{method:"POST",body:{world_id:state.activeWorld.id,branch_id:state.activeBranch?.kind==="main"?null:state.activeBranch?.id,time_label:values.time_label,order_key:Number(values.order_key||0),summary:values.summary,event_type:values.event_type,state_patch:values.state_patch,status:state.activeBranch?.kind==="main"?"canon":"what_if"}});await loadProjectData();}});}
+function openTimelineEventForm() {if(!state.activeWorld)return;openForm({title:"New timeline event",eyebrow:"Library timeline",fields:[{name:"time_label",label:"Time label",placeholder:"17 Aug 2026 · 21:32"},{name:"order_key",label:"Sort order",type:"number",step:0.01,value:state.timelineEvents.length+1},{name:"summary",label:"Event",type:"textarea",required:true,full:true},{name:"event_type",label:"Type",value:"event"},{name:"state_patch",label:"Optional state patch (JSON)",type:"json",value:{},full:true}],onSubmit:async(values)=>{await api("/api/timeline",{method:"POST",body:{world_id:state.activeWorld.id,branch_id:state.activeBranch?.kind==="main"?null:state.activeBranch?.id,time_label:values.time_label,order_key:Number(values.order_key||0),summary:values.summary,event_type:values.event_type,state_patch:values.state_patch,status:state.activeBranch?.kind==="main"?"canon":"what_if"}});await loadProjectData();}});}
 
 function renderWorldGrid() {
   if(state.activeView!=="world")return;const tab=state.activeWorldTab;let cards=[];
@@ -2942,7 +2942,7 @@ function renderWorldGrid() {
 
 function openWorldActionsForTab() {if(state.activeWorldTab==="relationship")return openRelationshipForm();if(["character","location","item","organization","lore"].includes(state.activeWorldTab))return openQuickCreate("", "entity");if(state.activeWorldTab==="worlds")return openQuickCreate("","world");if(state.activeWorldTab==="timeline")return openTimelineEventForm();return addCanonFact("world",state.activeWorld.id);}
 
-function openWorldCompare() {const worlds=state.worlds;if(worlds.length<2)return toast("Create another world first");openForm({title:"Compare worlds",eyebrow:"World Bible diff",fields:[{name:"other",label:"Compare current world with",type:"select",options:worlds.filter((x)=>x.id!==state.activeWorld.id).map((x)=>({value:x.id,label:x.name})),full:true}],submit:"Compare",onSubmit:async(values)=>showCompare("World canon diff",await api(`/api/worlds/compare/${state.activeWorld.id}/${values.other}`))});}
+function openWorldCompare() {const worlds=state.worlds;if(worlds.length<2)return toast("Create another world first");openForm({title:"Compare worlds",eyebrow:"Library diff",fields:[{name:"other",label:"Compare current world with",type:"select",options:worlds.filter((x)=>x.id!==state.activeWorld.id).map((x)=>({value:x.id,label:x.name})),full:true}],submit:"Compare",onSubmit:async(values)=>showCompare("World canon diff",await api(`/api/worlds/compare/${state.activeWorld.id}/${values.other}`))});}
 
 async function openBranchCompare() {const branches=state.activeWorld?.branches||[];if(branches.length<2)return toast("Create a sandbox/what-if branch first");openForm({title:"Compare branches",eyebrow:"Semantic state diff",description:"Compare semantic state, then selectively merge only the changes you want.",fields:[{name:"target",label:"Compare current branch with",type:"select",options:branches.filter((b)=>b.id!==state.activeBranch.id).map((b)=>({value:b.id,label:`${b.name} · ${b.kind}`})),full:true}],submit:"Compare",onSubmit:async(values)=>showBranchCompare(await api(`/api/branches/compare/${state.activeBranch.id}/${values.target}`),state.activeBranch.id,values.target)});}
 
@@ -2963,16 +2963,16 @@ function promoteStorySelection(turnId,story){openStagedChangeForm(turnId,window.
 
 function retconFact(fact){openForm({title:"Retcon fact",eyebrow:"Impact preview",description:"Retcon preserves semantic history and previews downstream effects.",fields:[{name:"new_value",label:"New value (JSON or text)",type:"textarea",value:pretty(fact.value),full:true},{name:"note",label:"Reason",type:"textarea",full:true}],submit:"Preview impact",onSubmit:async(values)=>{let value;try{value=JSON.parse(values.new_value);}catch(_){value=values.new_value;}const payload={project_id:fact.project_id||state.bootstrap?.world_bible?.backing_project_id,world_id:fact.world_id||state.activeWorld.id,branch_id:fact.branch_id||null,owner_type:fact.owner_type,owner_id:fact.owner_id,path:fact.path,new_value:value,note:values.note};showRetconPreview(payload,await api("/api/retcon/preview",{method:"POST",body:payload}));}});}
 
-async function deleteWorld(world){if(!world)return;if(world.id===state.bootstrap?.world_bible?.default_world_id)return toast("The shared World Bible Main world is protected");if(!confirm(`Delete world “${world.name}”?\n\nWorld-specific variants, relationships, facts, timeline and branches are removed. Project files and shared entity families remain.`))return;loading(true,"Deleting world…","Removing world-scoped state");try{await api(`/api/worlds/${world.id}`,{method:"DELETE"});closeSheet();state.activeSession=null;state.activeDocument=null;await loadWorkspaceBootstrap();if(state.activeProject)await selectScope(state.activeProject.id);toast(`Deleted world “${world.name}”`);}catch(error){toast(error.message,5000);}finally{loading(false);}}
+async function deleteWorld(world){if(!world)return;if(world.id===state.bootstrap?.world_bible?.default_world_id)return toast("The shared Library Main world is protected");if(!confirm(`Delete world “${world.name}”?\n\nWorld-specific variants, relationships, facts, timeline and branches are removed. Project files and shared entity families remain.`))return;loading(true,"Deleting world…","Removing world-scoped state");try{await api(`/api/worlds/${world.id}`,{method:"DELETE"});closeSheet();state.activeSession=null;state.activeDocument=null;await loadWorkspaceBootstrap();if(state.activeProject)await selectScope(state.activeProject.id);toast(`Deleted world “${world.name}”`);}catch(error){toast(error.message,5000);}finally{loading(false);}}
 
-function updateBreadcrumbs(){const project=state.activeProject?.name||"No project";const world=state.activeWorld?.name||"World Bible";const branch=state.activeBranch?.name||"Main";const buttons=$$("#breadcrumbs button");if(buttons[0])buttons[0].textContent=project;if(buttons[1])buttons[1].textContent=world;if(buttons[2])buttons[2].textContent=branch;const sandbox=["sandbox","what_if"].includes(state.activeBranch?.kind);byId("sandboxBadge").classList.toggle("hidden",!sandbox&&!state.scratchMode);byId("sandboxBadge").textContent=state.scratchMode?"Scratch":sandbox?"What-if":"Sandbox";byId("scopeStatus").innerHTML=`<span class="status-dot"></span><span>${escapeHTML(world)} · ${escapeHTML(branch)}</span>`;byId("worldTitle").textContent=world;byId("worldDescription").textContent=state.activeWorld?.description||"Shared World Bible: canonical entities, variants, relationships, timeline, and lore.";}
+function updateBreadcrumbs(){const project=state.activeProject?.name||"No project";const world=state.activeWorld?.name||"Library";const branch=state.activeBranch?.name||"Main";const buttons=$$("#breadcrumbs button");if(buttons[0])buttons[0].textContent=project;if(buttons[1])buttons[1].textContent=world;if(buttons[2])buttons[2].textContent=branch;const sandbox=["sandbox","what_if"].includes(state.activeBranch?.kind);byId("sandboxBadge").classList.toggle("hidden",!sandbox&&!state.scratchMode);byId("sandboxBadge").textContent=state.scratchMode?"Scratch":sandbox?"What-if":"Sandbox";byId("scopeStatus").innerHTML=`<span class="status-dot"></span><span>${escapeHTML(world)} · ${escapeHTML(branch)}</span>`;byId("worldTitle").textContent=world;byId("worldDescription").textContent=state.activeWorld?.description||"Shared Library: canonical entities, variants, relationships, timeline, and lore.";}
 
 function setDocumentActiveScene(){if(!state.activeDocument)return toast("Open a project document first");openActiveSceneForm(state.activeDocument.id);}
 
 async function generateStory(){const payload=promptPayload();if(!payload.prompt.trim())return toast("Write a prompt first");if(!payload.model)return toast("Select a model first");loading(true,payload.generation_mode==="beats"?"Writing story beats…":"Writing story…",state.scratchMode?"Scratch mode · canon staging disabled":"Compiling explainable context and calling LM Studio");try{const result=await api("/api/generate",{method:"POST",body:payload});state.activeRunId=result.run_id;state.activeSession={id:result.session_id,title:result.session_title,workspace_refs:payload.references,scratch_mode:result.scratch_mode};state.activeTurn={id:result.turn_id};state.scratchMode=Boolean(result.scratch_mode);loadContextResult(result);byId("postValidation").textContent=pretty(result.post_validation||{});byId("reasoningOutput").textContent=result.reasoning||"No separate reasoning output.";byId("statsOutput").textContent=pretty(result.stats||{});await Promise.all([loadSessions(),openSession(result.session_id),loadDatasetStats()]);byId("promptInput").value="";refreshPromptHighlight();updateBudgetUI();toast(`Generated ${result.run_id}${state.scratchMode?" · scratch":""}`);}catch(error){toast(`Generation failed: ${error.message}`,6000);}finally{loading(false);}}
 
 function openWorldSheet(world) {
-  byId("sheetEyebrow").textContent="World Bible · World";byId("sheetTitle").textContent=world.name;byId("sheetSubtitle").textContent=`${world.canon_status} · ${world.inheritance_mode}`;const lineage=world.lineage||[];
+  byId("sheetEyebrow").textContent="Library · World";byId("sheetTitle").textContent=world.name;byId("sheetSubtitle").textContent=`${world.canon_status} · ${world.inheritance_mode}`;const lineage=world.lineage||[];
   byId("sheetBody").innerHTML=`<section class="sheet-section"><p>${escapeHTML(world.description||"No description")}</p><div class="sheet-grid"><div class="sheet-field"><span>Canon status</span><b>${escapeHTML(world.canon_status)}</b></div><div class="sheet-field"><span>Inheritance</span><b>${escapeHTML(world.inheritance_mode)}</b></div></div></section><section class="sheet-section"><div class="sheet-section-head"><h3>World lineage</h3></div><div class="variant-switcher">${lineage.map((x)=>`<button data-world-id="${x.id}">${escapeHTML(x.name)}</button>`).join(" → ")}</div></section><section class="sheet-section"><div class="sheet-section-head"><h3>Branches</h3></div>${(world.branches||[]).map((branch)=>`<div class="resource-inline-row"><button class="relationship-mini" data-branch-id="${branch.id}">${escapeHTML(branch.name)} · ${escapeHTML(branch.kind)} · ${escapeHTML(branch.canon_status)}</button>${branch.kind!=="main"?`<button class="tiny-danger-btn delete-branch" data-delete-branch-id="${branch.id}">Delete</button>`:`<span class="protected-note">protected</span>`}</div>`).join("")}</section><section class="sheet-section"><div class="sheet-section-head"><h3>Snapshots</h3></div>${state.snapshots.map((snap)=>`<div class="revision-item resource-inline-row"><div><b>${escapeHTML(snap.name)}</b><small>${formatDate(snap.created_at)}</small></div><div class="inline-actions"><button class="tiny-btn restore-snapshot" data-snapshot-id="${snap.id}">Restore</button><button class="tiny-danger-btn delete-snapshot" data-snapshot-id="${snap.id}">Delete</button></div></div>`).join("")||`<div class="empty-note">No snapshots.</div>`}</section>`;
   const protectedWorld=world.id===state.bootstrap?.world_bible?.default_world_id;byId("sheetFooter").innerHTML=`${protectedWorld?`<span class="protected-note">Shared Main world protected</span>`:`<button id="deleteWorldBtn" class="danger-text-btn">Delete world</button>`}<button id="worldBacklinksBtn" class="secondary-btn">Where used</button><button id="editWorldBtn" class="primary-btn">Edit world</button>`;
   byId("deleteWorldBtn")?.addEventListener("click",()=>deleteWorld(world));byId("worldBacklinksBtn").addEventListener("click",()=>openBacklinks("world",world.id,world.name));byId("editWorldBtn").addEventListener("click",()=>editWorld(world));$$('[data-world-id]',byId("sheetBody")).forEach((b)=>b.addEventListener("click",()=>selectScope(state.activeProject.id,b.dataset.worldId,null)));$$('[data-branch-id]',byId("sheetBody")).forEach((b)=>b.addEventListener("click",()=>selectScope(state.activeProject.id,world.id,b.dataset.branchId)));$$('.delete-branch',byId("sheetBody")).forEach((b)=>b.addEventListener("click",(e)=>{e.stopPropagation();const branch=(world.branches||[]).find((x)=>x.id===b.dataset.deleteBranchId);if(branch)deleteBranch(branch);}));$$('.restore-snapshot',byId("sheetBody")).forEach((b)=>b.addEventListener("click",()=>restoreSnapshot(b.dataset.snapshotId)));$$('.delete-snapshot',byId("sheetBody")).forEach((b)=>b.addEventListener("click",()=>deleteSnapshot(b.dataset.snapshotId)));openSheet();
@@ -3094,7 +3094,7 @@ async function syncContextStack() {
 
 function updateContextStackUI() {
   const project = state.activeProject?.name || "No project";
-  const world = state.activeWorld?.name || "World Bible";
+  const world = state.activeWorld?.name || "Library";
   const branch = state.activeBranch?.name || "Main";
   const doc = state.activeScene?.document_id ? state.documents.find((item) => item.id === state.activeScene.document_id) : null;
   if (byId("contextStackProject")) byId("contextStackProject").textContent = project;
@@ -3206,7 +3206,7 @@ async function loadRunProfiles(selectId = null) {
 
 function updateBreadcrumbs() {
   const project = state.activeProject?.name || "No project";
-  const world = state.activeWorld?.name || "World Bible";
+  const world = state.activeWorld?.name || "Library";
   const branch = state.activeBranch?.name || "Main";
   const buttons = $$("#breadcrumbs button");
   if (buttons[0]) buttons[0].textContent = project;
@@ -3217,7 +3217,7 @@ function updateBreadcrumbs() {
   if (byId("sandboxBadge")) byId("sandboxBadge").textContent = state.scratchMode ? "Scratch" : sandbox ? "What-if" : "Sandbox";
   if (byId("scopeStatus")) byId("scopeStatus").innerHTML = `<span class="status-dot"></span><span>${escapeHTML(world)} · ${escapeHTML(branch)}</span>`;
   if (byId("worldTitle")) byId("worldTitle").textContent = world;
-  if (byId("worldDescription")) byId("worldDescription").textContent = state.activeWorld?.description || "Shared World Bible: canonical entities, variants, relationships, timeline, and lore.";
+  if (byId("worldDescription")) byId("worldDescription").textContent = state.activeWorld?.description || "Shared Library: canonical entities, variants, relationships, timeline, and lore.";
   updateContextStackUI();
 }
 
@@ -3253,7 +3253,7 @@ async function loadWorkspaceBootstrap() {
 
 async function selectScope(projectId, worldId = null, branchId = null, options = {}) {
   if (!projectId) return;
-  loading(true, "Opening workspace…", "Resolving project workspace and shared World Bible");
+  loading(true, "Opening workspace…", "Resolving project workspace and shared Library");
   try {
     const [project, projectList, bootstrap] = await Promise.all([
       api(`/api/projects/${encodeURIComponent(projectId)}`), api("/api/projects"), api("/api/workspace/bootstrap"),
@@ -3420,21 +3420,21 @@ function applySavedWorldView(viewId) {
 }
 
 function openWorldFolderForm(parentId = null) {
-  openForm({ title: "New World Bible folder", eyebrow: "Organization only", description: "Folders organize sheets but never make them project-owned.", fields: [{ name: "name", label: "Folder name", required: true }], onSubmit: async (values) => {
+  openForm({ title: "New Library folder", eyebrow: "Organization only", description: "Folders organize sheets but never make them project-owned.", fields: [{ name: "name", label: "Folder name", required: true }], onSubmit: async (values) => {
     await api("/api/folders", { method: "POST", body: { project_id: state.bootstrap.world_bible.backing_project_id, parent_id: parentId, name: values.name, kind: "world_bible" } });
     await loadProjectData();
   }});
 }
 
 function openCollectionForm() {
-  openForm({ title: "New collection", eyebrow: "World Bible", description: "A collection groups references without moving their folders.", fields: [
+  openForm({ title: "New collection", eyebrow: "Library", description: "A collection groups references without moving their folders.", fields: [
     { name: "name", label: "Name", required: true }, { name: "icon", label: "Icon", value: "◇" }, { name: "description", label: "Description", type: "textarea", full: true },
   ], onSubmit: async (values) => { await api("/api/collections", { method: "POST", body: { ...values, scope_type: "world_bible" } }); await loadProjectData(); }});
 }
 
 function openSavedViewForm() {
   const resourceType = ["character", "location", "item", "organization", "lore"].includes(state.activeWorldTab) ? state.activeWorldTab : "all";
-  openForm({ title: "Save World Bible view", eyebrow: "Reusable filter", fields: [
+  openForm({ title: "Save Library view", eyebrow: "Reusable filter", fields: [
     { name: "name", label: "View name", required: true },
     { name: "resource_type", label: "Entity type", type: "select", value: resourceType, options: ["all","character","location","item","organization","lore"].map((x) => ({ value:x,label:x })) },
   ], onSubmit: async (values) => { await api("/api/saved-views", { method:"POST", body:{ ...values, scope_type:"world_bible", query:{} } }); await loadProjectData(); }});
@@ -3487,7 +3487,7 @@ function renderWorldGrid() {
 
 async function addResourceToCollection(resourceType, resourceId) {
   if (!state.worldCollections.length) return openCollectionForm();
-  openForm({ title:"Add to collection", eyebrow:"World Bible", fields:[{ name:"collection_id", label:"Collection", type:"select", options:state.worldCollections.map((c)=>({value:c.id,label:c.name})), full:true }], onSubmit:async(values)=>{ await api(`/api/collections/${values.collection_id}/links`,{method:"POST",body:{resource_type:resourceType,resource_id:resourceId}}); await loadProjectData(); }});
+  openForm({ title:"Add to collection", eyebrow:"Library", fields:[{ name:"collection_id", label:"Collection", type:"select", options:state.worldCollections.map((c)=>({value:c.id,label:c.name})), full:true }], onSubmit:async(values)=>{ await api(`/api/collections/${values.collection_id}/links`,{method:"POST",body:{resource_type:resourceType,resource_id:resourceId}}); await loadProjectData(); }});
 }
 
 async function favoriteResource(resourceType, resourceId, label = "") {
@@ -3573,7 +3573,7 @@ async function openActivityCenter() {
 
 function openDocumentForm(folderId = null, type = "scene") {
   const docTypes = ["scene","chapter","note","research","outline"];
-  openForm({ title:"New manuscript item", eyebrow:"Project workspace", description:"Project files belong to what you are making; World Bible sheets stay shared.", fields:[
+  openForm({ title:"New manuscript item", eyebrow:"Project workspace", description:"Project files belong to what you are making; Library sheets stay shared.", fields:[
     {name:"title",label:"Title",required:true,full:true},
     {name:"document_type",label:"Type",type:"select",options:docTypes.map((x)=>({value:x,label:x[0].toUpperCase()+x.slice(1)})),value:docTypes.includes(type)?type:"scene"},
     {name:"status",label:"Writing status",type:"select",options:["planned","writing","revising","final"].map((x)=>({value:x,label:x[0].toUpperCase()+x.slice(1)})),value:"planned"},
@@ -3778,13 +3778,13 @@ async function exportProjectBundle() {
   try{const data=await api(`/api/export/project/${encodeURIComponent(state.activeProject.id)}`);downloadJSONFile(data,`${(state.activeProject.slug||state.activeProject.name||"project").replace(/[^a-z0-9_-]+/gi,"-")}.arline-project.json`);toast("Project bundle exported");}catch(error){toast(error.message,5000);}
 }
 async function exportWorldBibleBundle() {
-  try{const q=new URLSearchParams({...(state.activeWorld?.id?{world_id:state.activeWorld.id}:{}),...(state.activeBranch?.kind!=="main"&&state.activeBranch?.id?{branch_id:state.activeBranch.id}:{})});const data=await api(`/api/export/world-bible?${q}`);downloadJSONFile(data,`${(state.activeWorld?.name||"world-bible").replace(/[^a-z0-9_-]+/gi,"-")}.arline-world.json`);toast("World Bible bundle exported");}catch(error){toast(error.message,5000);}
+  try{const q=new URLSearchParams({...(state.activeWorld?.id?{world_id:state.activeWorld.id}:{}),...(state.activeBranch?.kind!=="main"&&state.activeBranch?.id?{branch_id:state.activeBranch.id}:{})});const data=await api(`/api/export/world-bible?${q}`);downloadJSONFile(data,`${(state.activeWorld?.name||"world-bible").replace(/[^a-z0-9_-]+/gi,"-")}.arline-world.json`);toast("Library bundle exported");}catch(error){toast(error.message,5000);}
 }
 
 function openManuscriptImport() {
   if(!state.activeProject)return toast("Open a project first");
   const folders=flattenFolders(state.projectTree?.folders||[]);
-  openForm({title:"Import manuscript text",eyebrow:"Project · Import Center",description:"Markdown # headings become chapters and ##/### headings become scenes. Import never creates World Bible canon automatically.",fields:[
+  openForm({title:"Import manuscript text",eyebrow:"Project · Import Center",description:"Markdown # headings become chapters and ##/### headings become scenes. Import never creates Library canon automatically.",fields:[
     {name:"title",label:"Fallback title",value:"Imported manuscript",required:true},
     {name:"folder_id",label:"Project folder",type:"select",options:[{value:"",label:"No folder"},...folders.map((f)=>({value:f.id,label:f.path}))],value:""},
     {name:"split_headings",label:"Split Markdown headings",type:"checkbox",value:true},
@@ -3802,7 +3802,7 @@ function openManuscriptImport() {
 function projectActions(event) {
   contextMenu(event.clientX,event.clientY,[
     {label:"AI Context Stack",action:openContextStackEditor},{label:"Project context manifest",action:openProjectContextSheet},{label:"Story outline / scene cards",action:openStoryOutline},
-    {label:"Import manuscript…",action:openManuscriptImport},{label:"Export project bundle",action:exportProjectBundle},{label:"Export current World Bible",action:exportWorldBibleBundle},
+    {label:"Import manuscript…",action:openManuscriptImport},{label:"Export project bundle",action:exportProjectBundle},{label:"Export current Library",action:exportWorldBibleBundle},
     {label:"New project",action:openProjectForm},{label:"New world / AU",action:()=>openQuickCreate("","world")},{label:"Edit project",action:editProject},
     {label:"Continuity & issues",action:openActivityCenter},{label:"New context recipe",action:openContextRecipeForm},{label:"Save run profile",action:openRunProfileForm},
     {label:"Delete project",danger:true,hidden:!state.activeProject,action:()=>deleteProject(state.activeProject)},
@@ -3827,7 +3827,7 @@ async function deleteSession(id) {
 }
 
 async function deleteProject(project) {
-  if (!project || !confirm(`Move project “${project.name}” to Trash?\n\nWorld Bible sheets are shared and will not be deleted.`)) return;
+  if (!project || !confirm(`Move project “${project.name}” to Trash?\n\nLibrary sheets are shared and will not be deleted.`)) return;
   try {
     await api("/api/lifecycle/trash", { method:"POST", body:{resource_type:"project",resource_id:project.id} });
     lastUndo = { type:"restore", resourceType:"project", resourceId:project.id, label:project.name };
@@ -3839,7 +3839,7 @@ async function deleteProject(project) {
 
 async function deleteWorld(world) {
   if (!world) return;
-  if (world.id === state.bootstrap?.world_bible?.default_world_id) return toast("The shared World Bible Main world is protected");
+  if (world.id === state.bootstrap?.world_bible?.default_world_id) return toast("The shared Library Main world is protected");
   if (!confirm(`Move world “${world.name}” to Trash?\n\nProject manuscript files and shared entity families remain.`)) return;
   try {
     await api("/api/lifecycle/trash", { method:"POST", body:{resource_type:"world",resource_id:world.id} });

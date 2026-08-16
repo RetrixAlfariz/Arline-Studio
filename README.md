@@ -4,7 +4,7 @@ Arline Studio is a Project that mainly focused on making story
 
 ## v1.1 mental model
 
-- **World Bible** — what is true: worlds, entity sheets, variants, relationships, canon facts, lore, timeline.
+- **Library** — what is true: worlds, entity sheets, variants, relationships, canon facts, lore, timeline.
 - **Project** — what you are making: a focused story workspace, folders, manuscript, notes, research, assets, and references.
 - **Manuscript** — what you have written: scenes, chapters, notes, research, and outline views.
 - **Chat** — what you are exploring: conversations, forks, scratch/what-if exploration.
@@ -44,11 +44,11 @@ Use **Quick Create** instead of filling schema-heavy forms. For example:
 Taman Bunga di belakang kampus
 ```
 
-Arline can infer a Location sheet, suggest possible duplicate identities, and place the sheet in a World Bible folder. Advanced family/variant/JSON editing is still available from the Inspector.
+Arline can infer a Location sheet, suggest possible duplicate identities, and place the sheet in a Library folder. Advanced family/variant/JSON editing is still available from the Inspector.
 
-### Organize the World Bible
+### Organize the Library
 
-World Bible folders are organizational only. A sheet remains shared knowledge and is never made Project-owned by putting it in a folder.
+Library folders are organizational only. A sheet remains shared knowledge and is never made Project-owned by putting it in a folder.
 
 Use:
 
@@ -69,7 +69,7 @@ Editing autosaves recovery state without flooding revision history. Use **Checkp
 
 ### Use Context Stack deliberately
 
-The Context Stack tracks the active Project, World/branch, Scene, Chat fork, Run Profile, explicit references, pins, and overrides. `@references` can use Mention / Context / Deep depth without changing the World Bible itself.
+The Context Stack tracks the active Project, World/branch, Scene, Chat fork, Run Profile, explicit references, pins, and overrides. `@references` can use Mention / Context / Deep depth without changing the Library itself.
 
 ### Fork without polluting canon
 
@@ -85,7 +85,7 @@ Normal destructive actions use **Trash**, not immediate permanent deletion. Acti
 
 Before a database schema upgrade, v1.1 creates a consistent SQLite backup under the runtime database directory's `backups/` folder. Legacy Manuscript rows are migrated from the old broad Draft vocabulary to the v1.1 Scene/writing-state model.
 
-Project deletion never owns or deletes shared World Bible sheets. Project bundles reference World Bible resources rather than silently embedding ownership copies.
+Project deletion never owns or deletes shared Library sheets. Project bundles reference Library resources rather than silently embedding ownership copies.
 
 ## Useful shortcuts
 

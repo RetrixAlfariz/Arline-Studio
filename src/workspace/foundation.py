@@ -33,7 +33,7 @@ def _loads(value: str | None, fallback: Any) -> Any:
 
 
 class FoundationStore:
-    """v1.1 foundation services that sit across World Bible, Project and Chat.
+    """v1.1 foundation services that sit across Library, Project and Chat.
 
     These tables deliberately hold cross-cutting UX/application concepts rather
     than embedding them into every domain table.  A resource can therefore be
