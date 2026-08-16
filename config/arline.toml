@@ -1,0 +1,112 @@
+[lmstudio]
+base_url = "http://127.0.0.1:1234"
+model = "qwen3.5-4b-uncensored-hauhaucs-aggressive"
+api_key = ""
+timeout_seconds = 600.0
+auto_load = true
+
+[model_load]
+gpu_ratio = 1.0
+context_length = 32768
+flash_attention = true
+
+[generation]
+temperature = 0.8
+top_p = 0.95
+top_k = 40
+min_p = 0.0
+repeat_penalty = 1.05
+reasoning = "off"
+
+# Visible prose target. This is the budget Arline tries to preserve for the story.
+visible_output_tokens = 4096
+
+# Reasoning shares LM Studio's max_output_tokens budget with visible prose.
+# When reasoning != off, Arline adds this reserve to the API output ceiling.
+reasoning_reserve_tokens = 4096
+
+# single | beats
+generation_mode = "single"
+beat_count = 4
+beat_tokens = 2048
+total_story_target_tokens = 8192
+
+seed = -1
+
+[generation.extra]
+
+[writer]
+# smart_hybrid | wcf | raw | wcf_raw | aif_core
+input_mode = "smart_hybrid"
+system_prompt_file = "writer_system.txt"
+story_filename = "story.txt"
+save_request_packet = true
+post_validate = true
+
+[context_budget]
+safety_margin = 1536
+minimum_writer_context_tokens = 2048
+system_prompt_token_estimate = 1400
+
+[reasoning_budget]
+max_depth = 4
+max_nodes = 500
+min_confidence = 0.35
+min_relevance = 0.25
+
+[artifacts]
+output_root = "output"
+saved_root = "output\\saved"
+
+[ui]
+host = "127.0.0.1"
+port = 7860
+show_reasoning = true
+
+[reasoning_runtime]
+# LM Studio exposes reasoning options per model. Arline validates the selected
+# option against GET /api/v1/models, so a model that only supports off/on will
+# only expose those two choices in the UI.
+enforce_model_capabilities = true
+
+# Extra system guidance appended only when native reasoning is enabled.
+guard_prompt_file = "reasoning_guard.txt"
+
+# Diagnostic thresholds. These do not alter the generated text; they surface
+# when hidden reasoning starts dominating the visible story.
+dominance_ratio_warn = 2.0
+reasoning_share_warn = 0.65
+story_target_ratio_warn = 0.35
+
+[projection]
+# off | conservative | balanced | vivid
+# Projection is an approximate mental model used for visualization. It never
+# becomes canonical state and exact UNKNOWN values remain unknown.
+mode = "balanced"
+min_confidence = 0.5
+max_items = 12
+
+[history]
+# Persistent local chat/session history. SQLite is part of Python's stdlib.
+database_path = "data\\arline_history.db"
+
+# Feedback exports (SFT/preference/eval/master JSONL) are written here.
+dataset_root = "data\\datasets"
+recent_limit = 100
+
+# Smart Hybrid can use a bounded recent-session continuity reference.
+# It is writer-only context and never becomes canonical AIF/WCF automatically.
+continuity_turns = 2
+continuity_chars = 12000
+smart_hybrid_continuity = true
+
+[workspace]
+# Workspace, projects, worlds, entity families/variants, tags, folders, and
+# persistent chat history share one local SQLite database by default.
+database_path = "data\\arline_history.db"
+default_project_id = ""
+context_enabled = true
+mention_limit = 20
+pinned_context_limit = 24
+autosave_drafts = true
+language_mode = "follow_prompt"

@@ -1,0 +1,9 @@
+output/
+.venv/
+.env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local persistent history / dataset exports
+data/

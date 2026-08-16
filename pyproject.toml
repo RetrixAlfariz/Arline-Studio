@@ -1,0 +1,17 @@
+[project]
+name = "arline-studio"
+version = "0.6.4"
+description = "Arline story workspace with projects, worlds, entity variants, canon workflow, WCF, LM Studio writing, and dataset feedback"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.116,<1",
+  "uvicorn>=0.35,<1",
+  "httpx>=0.28,<1",
+  "lmstudio>=1.5,<2",
+  "tomlkit>=0.13,<1",
+]
+
+[project.scripts]
+arline = "main:main"
+arline-ui = "app:main"
