@@ -632,7 +632,7 @@ class WorkspaceStore:
 
     @staticmethod
     def _seed_world_bible(con: sqlite3.Connection) -> None:
-        """Create the internal backing scope for global World Bible objects.
+        """Create the internal backing scope for global Library objects.
 
         The backing project is deliberately archived and omitted from normal
         project lists. Projects reference worlds; they do not own the Bible.
@@ -645,7 +645,7 @@ class WorkspaceStore:
             "VALUES(?,?,?,?,0,1,?,?,?,?)",
             (
                 WORLD_BIBLE_PROJECT_ID,
-                "World Bible",
+                "Library",
                 "__world-bible__",
                 "Internal backing scope for global Arline canon.",
                 WORLD_BIBLE_WORLD_ID,
@@ -1024,7 +1024,7 @@ class WorkspaceStore:
 
     def delete_project(self, project_id: str) -> None:
         if project_id == WORLD_BIBLE_PROJECT_ID:
-            raise ValueError("The World Bible backing scope is protected")
+            raise ValueError("The Library backing scope is protected")
         with self._lock, self._connection() as con:
             exists = con.execute("SELECT id FROM projects WHERE id=?", (project_id,)).fetchone()
             if exists is None:
@@ -1339,7 +1339,7 @@ class WorkspaceStore:
 
     def delete_world(self, world_id: str) -> None:
         if world_id == WORLD_BIBLE_WORLD_ID:
-            raise ValueError("The shared World Bible main world is protected")
+            raise ValueError("The shared Library main world is protected")
         with self._lock, self._connection() as con:
             row = con.execute(
                 "SELECT id,project_id FROM worlds WHERE id=?", (world_id,)
@@ -1358,7 +1358,7 @@ class WorkspaceStore:
                 "SELECT id FROM world_branches WHERE world_id=?", (world_id,)
             ).fetchall()]
 
-            # Project files are workspace artifacts, not owned by World Bible
+            # Project files are workspace artifacts, not owned by Library
             # canon. Detach their optional semantic scope before deleting a
             # world so a canon cleanup never destroys chapters/notes/folders.
             branch_placeholders = ",".join("?" for _ in branches)
@@ -2080,18 +2080,18 @@ class WorkspaceStore:
         name = name.strip()
         if not name:
             raise ValueError("Entity name cannot be blank")
-        # Sheets belong to the World Bible, not to a story project. The
+        # Sheets belong to the Library, not to a story project. The
         # project_id argument is retained for v1 API compatibility but is
         # intentionally ignored for new sheets.
         owner_project_id = WORLD_BIBLE_PROJECT_ID
-        # World Bible folders are organizational only; they do not make a sheet
+        # Library folders are organizational only; they do not make a sheet
         # project-owned.  v1.1 keeps the global ownership boundary while allowing
         # a family to live in the Bible folder tree.
         if folder_id:
             with self._connection() as check_con:
                 folder = check_con.execute("SELECT project_id FROM workspace_folders WHERE id=?", (folder_id,)).fetchone()
             if folder is None or folder["project_id"] != WORLD_BIBLE_PROJECT_ID:
-                raise ValueError("World Bible entity folders must belong to the World Bible")
+                raise ValueError("Library entity folders must belong to the Library")
         with self._lock, self._connection() as con:
             slug = self._unique_slug(
                 con, "entity_families", slugify(name),
@@ -2311,7 +2311,7 @@ class WorkspaceStore:
             where.append("(v.branch_id IS NULL OR v.branch_id=?)")
             params.append(branch_id)
         if project_id:
-            # World Bible entities are global. Project filtering remains compatible
+            # Library entities are global. Project filtering remains compatible
             # with legacy project-owned families while always exposing the shared Bible.
             where.append("(f.project_id=? OR f.project_id=?)")
             params.extend([project_id, WORLD_BIBLE_PROJECT_ID])

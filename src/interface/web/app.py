@@ -974,7 +974,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             "format": "arline-project-bundle",
             "version": 1,
             "schema_version": FoundationStore.SCHEMA_VERSION,
-            "boundary": "Project files and project-local context only; World Bible sheets remain references.",
+            "boundary": "Project files and project-local context only; Library sheets remain references.",
             "project": project,
             "folders": workspace.list_folders(project_id),
             "documents": workspace.list_documents(project_id),
@@ -1563,7 +1563,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             if payload.name:
                 data["name"] = payload.name
             # Identity resolver: Quick Create should prefer linking an existing
-            # World Bible object over silently producing a near-duplicate.
+            # Library object over silently producing a near-duplicate.
             candidate_name = str(data.get("name") or payload.text).strip()
             matches: list[dict[str, Any]] = []
             if data.get("kind") == "entity" and candidate_name:

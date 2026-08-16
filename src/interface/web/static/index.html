@@ -27,7 +27,7 @@
         <button data-view="home" class="workspace-nav-item active"><span>⌂</span><b>Home</b></button>
         <button data-view="chat" class="workspace-nav-item"><span>◉</span><b>Chat</b></button>
         <button data-view="draft" class="workspace-nav-item"><span>✎</span><b>Manuscript</b></button>
-        <button data-view="world" class="workspace-nav-item"><span>◇</span><b>World Bible</b></button>
+        <button data-view="world" class="workspace-nav-item"><span>◇</span><b>Library</b></button>
         <button data-view="data" class="workspace-nav-item"><span>◫</span><b>Feedback Lab</b></button>
       </nav>
 
@@ -50,8 +50,8 @@
       <div id="sidebarScroll" class="sidebar-scroll">
         <section class="sidebar-section">
           <div class="section-title-row">
-            <span class="section-label">World Bible</span>
-            <button id="newLibraryBtn" class="mini-icon-btn" title="Quick create in World Bible">＋</button>
+            <span class="section-label">Library</span>
+            <button id="newLibraryBtn" class="mini-icon-btn" title="Quick create in Library">＋</button>
           </div>
           <div class="library-links">
             <button data-library="character"><span>♙</span><b>Characters</b><em id="characterCount">0</em></button>
@@ -236,7 +236,7 @@
         <section id="worldView" class="workspace-view" data-view-panel="world">
           <div class="world-layout">
             <header class="world-header">
-              <div><span class="eyebrow">World Bible</span><h1 id="worldTitle">Main</h1><p id="worldDescription">Canonical entities, variants, relationships, timeline, and lore.</p></div>
+              <div><span class="eyebrow">Library</span><h1 id="worldTitle">Main</h1><p id="worldDescription">Canonical entities, variants, relationships, timeline, and lore.</p></div>
               <div class="world-actions">
                 <button id="continuityBtn" class="secondary-btn">Continuity</button>
                 <button id="compareBranchBtn" class="secondary-btn">Compare branches</button>
@@ -259,7 +259,7 @@
             </nav>
             <div class="world-content world-library-shell">
               <aside class="world-library-rail">
-                <div class="section-title-row"><span class="section-label">Library</span><button id="newWorldFolderBtn" class="mini-icon-btn" title="New World Bible folder">＋</button></div>
+                <div class="section-title-row"><span class="section-label">Library</span><button id="newWorldFolderBtn" class="mini-icon-btn" title="New Library folder">＋</button></div>
                 <button id="worldAllFolderBtn" class="library-tree-root active" type="button">◇ All entries</button>
                 <div id="worldFolderTree" class="world-folder-tree"></div>
                 <div class="section-title-row world-library-subhead"><span class="section-label">Collections</span><button id="newCollectionBtn" class="mini-icon-btn" title="New collection">＋</button></div>
@@ -269,7 +269,7 @@
               </aside>
               <section class="world-library-main">
                 <div class="world-filter-row">
-                  <label class="search-field"><span>⌕</span><input id="worldSearch" placeholder="Search the World Bible…" /></label>
+                  <label class="search-field"><span>⌕</span><input id="worldSearch" placeholder="Search the Library…" /></label>
                   <div id="worldTagFilters" class="inline-tags"></div>
                 </div>
                 <div id="worldGrid" class="world-grid"></div>
@@ -364,7 +364,7 @@
     <dialog id="quickCreateDialog" class="quick-create-dialog">
       <form method="dialog" id="quickCreateForm">
         <div class="dialog-head"><div><span class="eyebrow">Natural creation</span><h2>Create something</h2><p>Describe it normally. Arline handles the schema underneath.</p></div><button value="cancel" class="icon-btn">×</button></div>
-        <textarea id="quickCreateInput" rows="5" placeholder="Apartemen Puncak Dharmahusada lantai 3 unit A0325"></textarea>
+        <textarea id="quickCreateInput" rows="5" placeholder="Taman Bunga di belakang kampus"></textarea>
         <div id="quickCreatePreview" class="quick-create-preview"><span class="preview-icon">◇</span><div><b>Start typing…</b><small>Entity, world, project file, or project will be inferred.</small></div></div>
         <div class="quick-create-options"><label>Force type<select id="quickCreateKind"><option value="">Auto detect</option><option value="entity">Entity / sheet</option><option value="world">World</option><option value="project">Project</option><option value="folder">Project folder</option><option value="document">Project document</option></select></label><button id="quickCreateAdvancedBtn" type="button" class="ghost-btn">Advanced…</button></div>
         <div class="dialog-actions"><button value="cancel" class="secondary-btn">Cancel</button><button id="quickCreateSubmitBtn" value="default" class="primary-btn">Create</button></div>
