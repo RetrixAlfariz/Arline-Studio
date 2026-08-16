@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 import json
+import re
 import sqlite3
 from pathlib import Path
 from threading import RLock
@@ -18,6 +20,7 @@ from src.context import TraceResolver
 from src.eval import AblationRunner
 from src.history import HistoryStore, VALID_FEEDBACK
 from src.inference import LMStudioError, LMStudioModelManager
+from src.pipeline import ArlineAnalyticalPipeline
 from src.runtime_config import DEFAULT_CONFIG_PATH, RuntimeConfig, VALID_INPUT_MODES, VALID_REASONING, VALID_PROJECTION_MODES
 from src.service import ArlineService, ArtifactStore, make_run_id
 from src.workspace import (
@@ -25,10 +28,17 @@ from src.workspace import (
     CANON_STATUSES,
     DOCUMENT_TYPES,
     ENTITY_TYPES,
+    WORLD_BIBLE_PROJECT_ID,
+    WORLD_BIBLE_WORLD_ID,
+    WORLD_BIBLE_BRANCH_ID,
     WorkspaceContextResolver,
     WorkspaceStore,
+    FoundationStore,
+    parse_quick_create,
 )
 
+
+STUDIO_VERSION = "1.1.0"
 
 MODE_LABELS = {
     "smart_hybrid": "Smart Hybrid",
@@ -65,6 +75,7 @@ class ReferencePayload(BaseModel):
     type: str
     id: str
     label: str = ""
+    mode: str = "context"
 
 
 class PromptPayload(RuntimePayload):
@@ -76,6 +87,8 @@ class PromptPayload(RuntimePayload):
     branch_id: str | None = None
     folder_id: str | None = None
     references: list[ReferencePayload] = Field(default_factory=list)
+    context_recipe_id: str | None = None
+    scratch_mode: bool = False
 
 
 class SavePayload(BaseModel):
@@ -102,6 +115,8 @@ class SessionPatchPayload(BaseModel):
     session_kind: str | None = None
     tags: list[str] | None = None
     workspace_refs: list[dict[str, Any]] | None = None
+    scratch_mode: bool | None = None
+    world_fork_id: str | None = None
 
 
 class FeedbackPayload(BaseModel):
@@ -127,7 +142,7 @@ class ProjectPatchPayload(BaseModel):
 
 
 class WorldPayload(BaseModel):
-    project_id: str
+    project_id: str | None = None
     name: str
     description: str = ""
     parent_world_id: str | None = None
@@ -184,7 +199,7 @@ class FolderPatchPayload(BaseModel):
 
 
 class EntityFamilyPayload(BaseModel):
-    project_id: str
+    project_id: str | None = None
     name: str
     folder_id: str | None = None
     entity_type: str = "character"
@@ -252,12 +267,12 @@ class RelationshipPatchPayload(BaseModel):
 class DocumentPayload(BaseModel):
     project_id: str
     title: str
-    document_type: str = "draft"
+    document_type: str = "scene"
     content: str = ""
     world_id: str | None = None
     branch_id: str | None = None
     folder_id: str | None = None
-    status: str = "draft"
+    status: str = "planned"
 
 
 class DocumentPatchPayload(BaseModel):
@@ -369,6 +384,211 @@ class ConflictResolutionPayload(BaseModel):
     resolution_type: str
     chosen_value: Any = None
     note: str = ""
+
+
+class QuickCreatePayload(BaseModel):
+    text: str
+    forced_kind: str | None = None
+    project_id: str | None = None
+    world_id: str | None = None
+    branch_id: str | None = None
+    entity_type: str | None = None
+    name: str | None = None
+    attributes: dict[str, Any] | None = None
+    shared_core: dict[str, Any] | None = None
+    description: str | None = None
+    document_type: str | None = None
+    folder_id: str | None = None
+
+
+class LifecyclePayload(BaseModel):
+    resource_type: str
+    resource_id: str
+    previous_state: dict[str, Any] = Field(default_factory=dict)
+
+
+class AliasPayload(BaseModel):
+    resource_type: str
+    resource_id: str
+    alias: str
+
+
+class CollectionPayload(BaseModel):
+    name: str
+    description: str = ""
+    icon: str = "◇"
+    scope_type: str = "world_bible"
+    scope_id: str | None = None
+
+
+class CollectionLinkPayload(BaseModel):
+    resource_type: str
+    resource_id: str
+    sort_order: int = 0
+
+
+class SavedViewPayload(BaseModel):
+    name: str
+    scope_type: str = "world_bible"
+    scope_id: str | None = None
+    resource_type: str = "all"
+    query: dict[str, Any] = Field(default_factory=dict)
+
+
+class RunProfilePayload(BaseModel):
+    name: str
+    description: str = ""
+    project_id: str | None = None
+    profile: dict[str, Any] = Field(default_factory=dict)
+    id: str | None = None
+
+
+class FavoritePayload(BaseModel):
+    project_id: str | None = None
+    resource_type: str
+    resource_id: str
+    label: str = ""
+
+
+class IssuePayload(BaseModel):
+    issue_type: str
+    title: str
+    project_id: str | None = None
+    world_id: str | None = None
+    branch_id: str | None = None
+    severity: str = "warning"
+    description: str = ""
+    resource_type: str | None = None
+    resource_id: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class ContextStackPayload(BaseModel):
+    project_id: str | None = None
+    world_id: str | None = None
+    branch_id: str | None = None
+    scene_document_id: str | None = None
+    session_id: str | None = None
+    recipe_id: str | None = None
+    run_profile_id: str | None = None
+    references: list[dict[str, Any]] = Field(default_factory=list)
+    overrides: dict[str, Any] = Field(default_factory=dict)
+
+class ManuscriptImportPayload(BaseModel):
+    project_id: str
+    title: str = "Imported manuscript"
+    text: str
+    folder_id: str | None = None
+    split_headings: bool = True
+    default_type: str = "scene"
+
+
+
+class PreferencePayload(BaseModel):
+    scope_type: str = "app"
+    scope_id: str = "default"
+    key: str
+    value: Any
+
+
+class ProjectWorldLinkPayload(BaseModel):
+    project_id: str
+    world_id: str
+    role: str = "reference"
+
+
+class ManifestRefPayload(BaseModel):
+    resource_type: str
+    resource_id: str
+    label: str = ""
+    priority: int = 1
+
+
+class ProjectOverlayPayload(BaseModel):
+    owner_type: str
+    owner_id: str
+    path: str
+    value: Any
+    world_id: str | None = None
+    branch_id: str | None = None
+
+
+class ActiveScenePayload(BaseModel):
+    document_id: str | None = None
+    world_id: str | None = None
+    branch_id: str | None = None
+    pov_variant_id: str | None = None
+    location_variant_id: str | None = None
+    participants: list[str] = Field(default_factory=list)
+    narrative_time: str = ""
+    notes: str = ""
+
+
+class SceneCardPayload(BaseModel):
+    world_id: str | None = None
+    branch_id: str | None = None
+    pov_variant_id: str | None = None
+    location_variant_id: str | None = None
+    participants: list[str] = Field(default_factory=list)
+    narrative_time: str = ""
+    target_outcome: str = ""
+    notes: str = ""
+    status: str = "planned"
+    sort_order: float = 0.0
+
+
+class StagedChangePayload(BaseModel):
+    owner_type: str
+    owner_id: str
+    path: str
+    proposed_value: Any
+    old_value: Any = None
+    confidence: float = Field(0.5, ge=0.0, le=1.0)
+    world_id: str | None = None
+    branch_id: str | None = None
+    session_id: str | None = None
+    turn_id: str | None = None
+    source_text: str = ""
+
+
+class StagedResolvePayload(BaseModel):
+    accept: bool
+
+
+class TimelineEventPayload(BaseModel):
+    world_id: str
+    summary: str
+    branch_id: str | None = None
+    owner_type: str | None = None
+    owner_id: str | None = None
+    time_label: str = ""
+    order_key: float = 0.0
+    event_type: str = "event"
+    state_patch: dict[str, Any] = Field(default_factory=dict)
+    source_type: str = "manual"
+    source_id: str | None = None
+    status: str = "canon"
+
+
+class ContextRecipePayload(BaseModel):
+    name: str
+    description: str = ""
+    recipe: dict[str, Any] = Field(default_factory=dict)
+
+
+class BranchMergePayload(BaseModel):
+    target_branch_id: str
+    changes: list[dict[str, Any]] = Field(default_factory=list)
+    note: str = "selective branch merge"
+
+
+class StateProposalPayload(BaseModel):
+    text: str
+    project_id: str | None = None
+    world_id: str | None = None
+    branch_id: str | None = None
+    session_id: str | None = None
+    turn_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -515,6 +735,7 @@ def _trace_choices(bundle) -> list[dict[str, str]]:
 
 def _public_config(cfg: RuntimeConfig) -> dict[str, Any]:
     return {
+        "studio_version": STUDIO_VERSION,
         "server_url": cfg.lmstudio.base_url,
         "api_key": cfg.lmstudio.api_key,
         "model": cfg.lmstudio.model,
@@ -561,6 +782,18 @@ def _public_config(cfg: RuntimeConfig) -> dict[str, Any]:
     }
 
 
+def _folder_tree_from_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_parent: dict[str | None, list[dict[str, Any]]] = {}
+    for raw in rows:
+        row = dict(raw)
+        by_parent.setdefault(row.get("parent_id"), []).append(row)
+    for values in by_parent.values():
+        values.sort(key=lambda item: (item.get("sort_order", 0), str(item.get("name", "")).casefold()))
+    def build(parent_id: str | None) -> list[dict[str, Any]]:
+        return [{**item, "children": build(item.get("id"))} for item in by_parent.get(parent_id, [])]
+    return build(None)
+
+
 def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     config_path = Path(config_path)
     base_dir = Path(__file__).resolve().parent
@@ -570,11 +803,51 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     initial_cfg = RuntimeConfig.load(config_path)
     history = HistoryStore(initial_cfg.history.database_path)
     workspace = WorkspaceStore(initial_cfg.workspace.database_path)
+    foundation = FoundationStore(initial_cfg.workspace.database_path)
+    if workspace.last_migration_backup is not None:
+        foundation.log_activity(
+            None, "schema_backup", "database", None,
+            label=f"Backup before schema v{WORKSPACE_SCHEMA_VERSION}",
+            detail={"path": str(workspace.last_migration_backup), "schema_version": WORKSPACE_SCHEMA_VERSION},
+        )
     workspace_context = WorkspaceContextResolver(
         workspace, max_items=initial_cfg.workspace.pinned_context_limit
     )
 
-    app = FastAPI(title="Arline Studio", version="0.6.4")
+    def effective_folders(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Hide archived/trashed folders *and* descendants of hidden folders.
+
+        Lifecycle belongs to the folder, not every child object. Treating the
+        whole subtree as hidden keeps Trash reversible without rewriting every
+        document/entity row or producing orphaned children in search/results.
+        """
+        by_id = {row["id"]: row for row in rows}
+        memo: dict[str, bool] = {}
+
+        def visible(folder_id: str) -> bool:
+            if folder_id in memo:
+                return memo[folder_id]
+            row = by_id.get(folder_id)
+            if row is None or foundation.is_hidden("folder", folder_id):
+                memo[folder_id] = False
+                return False
+            parent_id = row.get("parent_id")
+            result = True if not parent_id else visible(parent_id)
+            memo[folder_id] = result
+            return result
+
+        return [row for row in rows if visible(row["id"])]
+
+    def resource_folder_visible(resource: dict[str, Any], visible_folder_ids: set[str]) -> bool:
+        folder_id = resource.get("folder_id")
+        return not folder_id or folder_id in visible_folder_ids
+
+    def visible_folder_ids(project_id: str | None) -> set[str]:
+        if not project_id:
+            return set()
+        return {row["id"] for row in effective_folders(workspace.list_folders(project_id))}
+
+    app = FastAPI(title="Arline Studio", version=STUDIO_VERSION)
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
     @app.get("/")
@@ -628,12 +901,116 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         return result
 
     # ------------------------------------------------------------------
+    # Portable import/export foundation
+    # ------------------------------------------------------------------
+
+    def _split_manuscript_text(text: str, title: str) -> list[dict[str, str]]:
+        text = text.replace("\r\n", "\n").strip()
+        if not text:
+            return []
+        heading = re.compile(r"^(#{1,3})\s+(.+?)\s*$", re.MULTILINE)
+        matches = list(heading.finditer(text))
+        if not matches:
+            return [{"title": title.strip() or "Imported manuscript", "content": text, "document_type": "scene"}]
+        sections: list[dict[str, str]] = []
+        prefix = text[: matches[0].start()].strip()
+        if prefix:
+            sections.append({"title": title.strip() or "Imported notes", "content": prefix, "document_type": "note"})
+        for index, match in enumerate(matches):
+            start = match.end()
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+            level = len(match.group(1))
+            sections.append({
+                "title": match.group(2).strip(),
+                "content": text[start:end].strip(),
+                "document_type": "chapter" if level == 1 else "scene",
+            })
+        return sections
+
+    @app.post("/api/import/manuscript/preview")
+    def preview_manuscript_import(payload: ManuscriptImportPayload):
+        sections = _split_manuscript_text(payload.text, payload.title) if payload.split_headings else [{"title": payload.title, "content": payload.text.strip(), "document_type": payload.default_type}]
+        return {
+            "destination": "project_manuscript",
+            "sections": [{"title": x["title"], "document_type": x["document_type"], "chars": len(x["content"]), "words": len(x["content"].split())} for x in sections],
+            "count": len(sections),
+        }
+
+    @app.post("/api/import/manuscript")
+    def import_manuscript(payload: ManuscriptImportPayload):
+        try:
+            workspace.get_project(payload.project_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Project not found") from exc
+        sections = _split_manuscript_text(payload.text, payload.title) if payload.split_headings else [{"title": payload.title, "content": payload.text.strip(), "document_type": payload.default_type}]
+        if not sections:
+            raise HTTPException(400, "Import text is empty")
+        job = foundation.create_job("manuscript_import", project_id=payload.project_id, payload={"count": len(sections)}, message="Importing manuscript")
+        created = []
+        try:
+            for index, section in enumerate(sections):
+                doc_type = section.get("document_type") or payload.default_type
+                if doc_type not in DOCUMENT_TYPES:
+                    doc_type = "scene"
+                created.append(workspace.create_document(
+                    payload.project_id, section["title"], document_type=doc_type,
+                    content=section["content"], folder_id=payload.folder_id, status="writing",
+                ))
+                foundation.update_job(job["id"], status="running", progress=(index + 1) / max(1, len(sections)), message=f"Imported {index + 1}/{len(sections)}")
+            foundation.update_job(job["id"], status="done", progress=1, message="Import complete", result={"document_ids": [x["id"] for x in created]})
+            foundation.log_activity(payload.project_id, "manuscript_import", "project", payload.project_id, label=f"Imported {len(created)} manuscript items")
+            return {"job": foundation.get_job(job["id"]), "documents": created}
+        except Exception as exc:
+            foundation.update_job(job["id"], status="failed", message=str(exc))
+            raise
+
+    @app.get("/api/export/project/{project_id}")
+    def export_project_bundle(project_id: str):
+        try:
+            project = workspace.get_project(project_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Project not found") from exc
+        return {
+            "format": "arline-project-bundle",
+            "version": 1,
+            "schema_version": FoundationStore.SCHEMA_VERSION,
+            "boundary": "Project files and project-local context only; World Bible sheets remain references.",
+            "project": project,
+            "folders": workspace.list_folders(project_id),
+            "documents": workspace.list_documents(project_id),
+            "tags": workspace.list_tags(project_id),
+            "manifest_refs": workspace.list_project_manifest_refs(project_id),
+            "overlays": workspace.list_project_overlays(project_id),
+            "active_scene": workspace.get_active_scene(project_id),
+            "scene_cards": workspace.list_scene_cards(project_id),
+            "run_profiles": foundation.list_run_profiles(project_id),
+        }
+
+    @app.get("/api/export/world-bible")
+    def export_world_bible_bundle(world_id: str | None = Query(None), branch_id: str | None = Query(None)):
+        families = foundation.filter_visible("entity_family", workspace.list_entity_families(None))
+        return {
+            "format": "arline-world-bible-bundle",
+            "version": 1,
+            "schema_version": FoundationStore.SCHEMA_VERSION,
+            "worlds": foundation.filter_visible("world", [workspace.get_world(world_id)] if world_id else workspace.list_worlds()),
+            "families": families,
+            "variants": foundation.filter_visible("entity_variant", workspace.list_variants(world_id=world_id, branch_id=branch_id)),
+            "relationships": foundation.filter_visible("relationship", workspace.list_relationships(world_id=world_id, branch_id=branch_id)) if world_id else [],
+            "facts": foundation.filter_visible("fact", workspace.list_facts(world_id=world_id, branch_id=branch_id)) if world_id else [],
+            "timeline": foundation.filter_visible("timeline", workspace.list_timeline_events(world_id, branch_id=branch_id)) if world_id else [],
+            "folders": foundation.filter_visible("folder", workspace.list_folders(WORLD_BIBLE_PROJECT_ID)),
+            "collections": foundation.list_collections(scope_type="world_bible"),
+            "saved_views": foundation.list_saved_views(scope_type="world_bible"),
+        }
+
+    # ------------------------------------------------------------------
     # Project / world / library workspace API
     # ------------------------------------------------------------------
 
     @app.get("/api/workspace/bootstrap")
     def workspace_bootstrap(create_default: bool = Query(True)):
-        projects = workspace.list_projects()
+        projects = foundation.filter_visible("project", workspace.list_projects())
         if not projects and create_default:
             workspace.create_project(
                 "My Stories",
@@ -645,7 +1022,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                     "language": "follow_prompt",
                 },
             )
-            projects = workspace.list_projects()
+            projects = foundation.filter_visible("project", workspace.list_projects())
         active_project = None
         active_world = None
         active_branch = None
@@ -653,30 +1030,43 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             preferred = initial_cfg.workspace.default_project_id
             active_project = next((x for x in projects if x["id"] == preferred), projects[0])
             details = workspace.get_project(active_project["id"])
-            worlds = details.get("worlds", [])
+            worlds = foundation.filter_visible("world", details.get("worlds", []))
             if worlds:
                 active_world = next(
                     (x for x in worlds if x["id"] == active_project.get("default_world_id")),
                     worlds[0],
                 )
-                branches = workspace.list_branches(active_world["id"])
+                branches = foundation.filter_visible("branch", workspace.list_branches(active_world["id"]))
                 active_branch = next((x for x in branches if x["kind"] == "main"), branches[0] if branches else None)
+        stack = foundation.get_context_stack()
         return {
             "projects": projects,
+            "worlds": foundation.filter_visible("world", workspace.list_worlds()),
             "active": {
                 "project": active_project,
                 "world": active_world,
                 "branch": active_branch,
             },
+            "context_stack": stack,
+            "run_profiles": foundation.list_run_profiles(active_project["id"] if active_project else None),
+            "favorites": foundation.list_favorites(active_project["id"] if active_project else None),
             "canon_statuses": sorted(CANON_STATUSES),
             "entity_types": sorted(ENTITY_TYPES),
-            "document_types": sorted(DOCUMENT_TYPES),
+            # `draft` remains accepted by the backend for v1.0 clients, but it
+            # is no longer a user-facing Manuscript object type in v1.1.
+            "document_types": sorted(item for item in DOCUMENT_TYPES if item != "draft"),
             "branch_kinds": sorted(BRANCH_KINDS),
+            "world_bible": {
+                "backing_project_id": WORLD_BIBLE_PROJECT_ID,
+                "default_world_id": WORLD_BIBLE_WORLD_ID,
+                "default_branch_id": WORLD_BIBLE_BRANCH_ID,
+            },
         }
 
     @app.get("/api/projects")
     def list_projects(search: str = Query(""), include_archived: bool = Query(False)):
-        return {"projects": workspace.list_projects(search=search, include_archived=include_archived)}
+        projects = workspace.list_projects(search=search, include_archived=include_archived)
+        return {"projects": foundation.filter_visible("project", projects, include_archived=include_archived)}
 
     @app.post("/api/projects")
     def create_project(payload: ProjectPayload):
@@ -689,6 +1079,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     def get_project(project_id: str):
         try:
             result = workspace.get_project(project_id)
+            result["worlds"] = foundation.filter_visible("world", result.get("worlds", []))
             result["folders"] = workspace.folder_tree(project_id)
             result["tags"] = workspace.list_tags(project_id)
             return result
@@ -708,6 +1099,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     def delete_project(project_id: str):
         try:
             workspace.delete_project(project_id)
+            history.delete_sessions_by_scope(project_id=project_id)
         except KeyError as exc:
             raise HTTPException(404, "Project not found") from exc
         return {"ok": True}
@@ -715,20 +1107,683 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     @app.get("/api/projects/{project_id}/tree")
     def project_tree(project_id: str, world_id: str | None = Query(None), branch_id: str | None = Query(None)):
         try:
+            raw_folders = workspace.list_folders(project_id)
+            folders = effective_folders(raw_folders)
+            visible_folder_ids = {folder["id"] for folder in folders}
+            documents = [
+                doc for doc in foundation.filter_visible("document", workspace.list_documents(project_id))
+                if resource_folder_visible(doc, visible_folder_ids)
+            ]
             return {
                 "project": workspace.get_project(project_id),
                 "worlds": workspace.list_worlds(project_id),
-                "folders": workspace.folder_tree(project_id, world_id=world_id, branch_id=branch_id),
-                "documents": workspace.list_documents(project_id, world_id=world_id, branch_id=branch_id),
-                "families": workspace.list_entity_families(project_id),
+                # Project filesystem is independent from the selected World
+                # Bible scope. Documents may *reference* a world/branch as
+                # metadata, but switching canon must not hide project files.
+                "folders": folders,
+                "folder_tree": _folder_tree_from_rows(folders),
+                "documents": documents,
                 "tags": workspace.list_tags(project_id),
                 "templates": workspace.list_templates(project_id=project_id),
+                "manifest_refs": workspace.list_project_manifest_refs(project_id),
+                "active_scene": workspace.get_active_scene(project_id),
+                "scene_cards": workspace.list_scene_cards(project_id),
+                "overlays": workspace.list_project_overlays(project_id, world_id=world_id, branch_id=branch_id),
                 "conflicts": workspace.list_conflicts(
                     project_id=project_id, world_id=world_id, branch_id=branch_id, status="open"
                 ),
+                "issues": foundation.list_issues(project_id=project_id, world_id=world_id, branch_id=branch_id),
+                "activity": foundation.list_activity(project_id, limit=30),
+                "favorites": foundation.list_favorites(project_id),
+                "run_profiles": foundation.list_run_profiles(project_id),
             }
         except KeyError as exc:
             raise HTTPException(404, "Project not found") from exc
+
+    @app.get("/api/world-bible")
+    def world_bible(
+        world_id: str | None = Query(None), branch_id: str | None = Query(None),
+        search: str = Query(""), project_id: str | None = Query(None),
+    ):
+        raw_bible_folders = workspace.list_folders(WORLD_BIBLE_PROJECT_ID)
+        bible_folders = effective_folders(raw_bible_folders)
+        visible_bible_folder_ids = {folder["id"] for folder in bible_folders}
+        families = [
+            family for family in foundation.filter_visible("entity_family", workspace.list_entity_families(None, search=search))
+            if resource_folder_visible(family, visible_bible_folder_ids)
+        ]
+        visible_family_ids = {family["id"] for family in families}
+        variants = [
+            variant for variant in foundation.filter_visible("entity_variant", workspace.list_variants(world_id=world_id, branch_id=branch_id))
+            if variant.get("family_id") in visible_family_ids
+        ]
+        relationships = foundation.filter_visible("relationship", workspace.list_relationships(world_id=world_id, branch_id=branch_id)) if world_id else []
+        return {
+            "worlds": foundation.filter_visible("world", workspace.list_worlds()),
+            "families": families,
+            "variants": variants,
+            "relationships": relationships,
+            "timeline": foundation.filter_visible("timeline", workspace.list_timeline_events(world_id, branch_id=branch_id)) if world_id else [],
+            "recipes": workspace.list_context_recipes(project_id),
+            "folders": bible_folders,
+            "folder_tree": _folder_tree_from_rows(bible_folders),
+            "collections": foundation.list_collections(scope_type="world_bible"),
+            "saved_views": foundation.list_saved_views(scope_type="world_bible"),
+        }
+
+    # ------------------------------------------------------------------
+    # v1.1 application foundation: lifecycle, identity, views, context stack
+    # ------------------------------------------------------------------
+
+    def _resource_payload(resource_type: str, resource_id: str) -> dict[str, Any]:
+        getters = {
+            "project": workspace.get_project,
+            "world": workspace.get_world,
+            "branch": workspace.get_branch,
+            "folder": workspace.get_folder,
+            "document": workspace.get_document,
+            "entity_family": workspace.get_entity_family,
+            "entity_variant": workspace.get_variant,
+            "relationship": workspace.get_relationship,
+            "fact": workspace.get_fact,
+            "tag": workspace.get_tag,
+            "snapshot": workspace.get_snapshot,
+            "timeline": workspace.get_timeline_event,
+        }
+        if resource_type == "session":
+            return history.get_session_meta(resource_id)
+        getter = getters.get(resource_type)
+        if not getter:
+            raise KeyError(resource_id)
+        return getter(resource_id)
+
+    def _permanent_delete(resource_type: str, resource_id: str) -> None:
+        deleters = {
+            "project": workspace.delete_project,
+            "world": workspace.delete_world,
+            "branch": workspace.delete_branch,
+            "folder": workspace.delete_folder,
+            "document": workspace.delete_document,
+            "entity_family": workspace.delete_entity_family,
+            "entity_variant": workspace.delete_variant,
+            "relationship": workspace.delete_relationship,
+            "fact": workspace.delete_fact,
+            "tag": workspace.delete_tag,
+            "snapshot": workspace.delete_snapshot,
+        }
+        if resource_type == "session":
+            history.delete_session(resource_id)
+            foundation.forget_resource(resource_type, resource_id)
+            return
+        delete = deleters.get(resource_type)
+        if not delete:
+            raise ValueError(f"Permanent delete is not supported for {resource_type}")
+        delete(resource_id)
+        foundation.forget_resource(resource_type, resource_id)
+
+    @app.post("/api/lifecycle/trash")
+    def trash_resource(payload: LifecyclePayload):
+        try:
+            resource = _resource_payload(payload.resource_type, payload.resource_id)
+            project_id = resource.get("project_id") if isinstance(resource, dict) else None
+            result = foundation.trash(payload.resource_type, payload.resource_id, previous_state=payload.previous_state or resource)
+            foundation.log_activity(project_id, "trash", payload.resource_type, payload.resource_id, label=resource.get("name") or resource.get("title") or resource.get("display_name") or "")
+            return result
+        except KeyError as exc:
+            raise HTTPException(404, "Resource not found") from exc
+
+    @app.post("/api/lifecycle/archive")
+    def archive_resource(payload: LifecyclePayload, archived: bool = Query(True)):
+        try:
+            _resource_payload(payload.resource_type, payload.resource_id)
+            return foundation.archive(payload.resource_type, payload.resource_id, archived=archived)
+        except KeyError as exc:
+            raise HTTPException(404, "Resource not found") from exc
+
+    @app.post("/api/lifecycle/restore")
+    def restore_resource(payload: LifecyclePayload):
+        try:
+            _resource_payload(payload.resource_type, payload.resource_id)
+            return foundation.restore(payload.resource_type, payload.resource_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Resource not found") from exc
+
+    @app.get("/api/trash")
+    def list_trash():
+        items = []
+        for item in foundation.list_trash():
+            try:
+                resource = _resource_payload(item["resource_type"], item["resource_id"])
+            except KeyError:
+                continue
+            items.append({**item, "resource": resource})
+        return {"items": items}
+
+    @app.delete("/api/trash/{resource_type}/{resource_id}")
+    def permanent_delete(resource_type: str, resource_id: str):
+        try:
+            lifecycle = foundation.lifecycle(resource_type, resource_id)
+            if not lifecycle.get("trashed_at"):
+                raise HTTPException(409, "Move the resource to Trash before deleting permanently")
+            _permanent_delete(resource_type, resource_id)
+            return {"ok": True}
+        except KeyError as exc:
+            raise HTTPException(404, "Resource not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.get("/api/resources/{resource_type}/{resource_id}")
+    def inspect_resource(resource_type: str, resource_id: str):
+        try:
+            resource = _resource_payload(resource_type, resource_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Resource not found") from exc
+        tags = []
+        backlinks = {}
+        try:
+            tags = workspace.tags_for(resource_type, resource_id)
+        except Exception:
+            pass
+        try:
+            backlinks = workspace.backlinks(resource_type, resource_id)
+        except Exception:
+            pass
+        collections = [
+            {"id": coll["id"], "name": coll["name"]}
+            for coll in foundation.list_collections(scope_type="world_bible")
+            if any(link["resource_type"] == resource_type and link["resource_id"] == resource_id for link in coll.get("links", []))
+        ]
+        return {
+            "resource": resource,
+            "resource_type": resource_type,
+            "aliases": foundation.list_aliases(resource_type, resource_id),
+            "tags": tags,
+            "collections": collections,
+            "backlinks": backlinks,
+            "lifecycle": foundation.lifecycle(resource_type, resource_id),
+        }
+
+    @app.post("/api/aliases")
+    def add_alias(payload: AliasPayload):
+        try:
+            _resource_payload(payload.resource_type, payload.resource_id)
+            return foundation.add_alias(payload.resource_type, payload.resource_id, payload.alias)
+        except KeyError as exc:
+            raise HTTPException(404, "Resource not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.get("/api/aliases")
+    def list_aliases(resource_type: str = Query(...), resource_id: str = Query(...)):
+        return {"aliases": foundation.list_aliases(resource_type, resource_id)}
+
+    @app.delete("/api/aliases/{alias_id}")
+    def delete_alias(alias_id: str):
+        try:
+            foundation.delete_alias(alias_id)
+            return {"ok": True}
+        except KeyError as exc:
+            raise HTTPException(404, "Alias not found") from exc
+
+    @app.get("/api/collections")
+    def list_collections(scope_type: str = Query("world_bible"), scope_id: str | None = Query(None)):
+        return {"collections": foundation.list_collections(scope_type=scope_type, scope_id=scope_id)}
+
+    @app.post("/api/collections")
+    def create_collection(payload: CollectionPayload):
+        return foundation.create_collection(payload.name, scope_type=payload.scope_type, scope_id=payload.scope_id, description=payload.description, icon=payload.icon)
+
+    @app.post("/api/collections/{collection_id}/links")
+    def collection_add(collection_id: str, payload: CollectionLinkPayload):
+        try:
+            foundation.get_collection(collection_id)
+            _resource_payload(payload.resource_type, payload.resource_id)
+            foundation.add_to_collection(collection_id, payload.resource_type, payload.resource_id, payload.sort_order)
+            return foundation.get_collection(collection_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Collection or resource not found") from exc
+
+    @app.delete("/api/collections/{collection_id}/links/{resource_type}/{resource_id}")
+    def collection_remove(collection_id: str, resource_type: str, resource_id: str):
+        foundation.remove_from_collection(collection_id, resource_type, resource_id)
+        return {"ok": True}
+
+    @app.delete("/api/collections/{collection_id}")
+    def collection_delete(collection_id: str):
+        try:
+            foundation.delete_collection(collection_id)
+            return {"ok": True}
+        except KeyError as exc:
+            raise HTTPException(404, "Collection not found") from exc
+
+    @app.get("/api/saved-views")
+    def saved_views(scope_type: str = Query("world_bible"), scope_id: str | None = Query(None)):
+        return {"views": foundation.list_saved_views(scope_type=scope_type, scope_id=scope_id)}
+
+    @app.post("/api/saved-views")
+    def save_view(payload: SavedViewPayload):
+        return foundation.save_view(payload.name, scope_type=payload.scope_type, scope_id=payload.scope_id, resource_type=payload.resource_type, query=payload.query)
+
+    @app.delete("/api/saved-views/{view_id}")
+    def delete_view(view_id: str):
+        try:
+            foundation.delete_view(view_id)
+            return {"ok": True}
+        except KeyError as exc:
+            raise HTTPException(404, "View not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.get("/api/run-profiles")
+    def run_profiles(project_id: str | None = Query(None)):
+        return {"profiles": foundation.list_run_profiles(project_id)}
+
+    @app.post("/api/run-profiles")
+    def save_run_profile(payload: RunProfilePayload):
+        try:
+            return foundation.save_run_profile(payload.name, payload.profile, project_id=payload.project_id, description=payload.description, profile_id=payload.id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.delete("/api/run-profiles/{profile_id}")
+    def delete_run_profile(profile_id: str):
+        try:
+            foundation.delete_run_profile(profile_id)
+            return {"ok": True}
+        except KeyError as exc:
+            raise HTTPException(404, "Profile not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.get("/api/context-stack")
+    def get_context_stack():
+        return foundation.get_context_stack()
+
+    @app.put("/api/context-stack")
+    def set_context_stack(payload: ContextStackPayload):
+        return foundation.set_context_stack(**payload.model_dump())
+
+    @app.get("/api/favorites")
+    def favorites(project_id: str | None = Query(None)):
+        return {"favorites": foundation.list_favorites(project_id)}
+
+    @app.post("/api/favorites")
+    def favorite(payload: FavoritePayload):
+        return foundation.favorite(payload.project_id, payload.resource_type, payload.resource_id, payload.label)
+
+    @app.delete("/api/favorites")
+    def unfavorite(project_id: str | None = Query(None), resource_type: str = Query(...), resource_id: str = Query(...)):
+        foundation.unfavorite(project_id, resource_type, resource_id)
+        return {"ok": True}
+
+    @app.get("/api/activity")
+    def activity(project_id: str | None = Query(None), limit: int = Query(50)):
+        return {"activity": foundation.list_activity(project_id, limit=max(1, min(limit, 200)))}
+
+    @app.get("/api/issues")
+    def issues(project_id: str | None = Query(None), world_id: str | None = Query(None), branch_id: str | None = Query(None), status: str | None = Query("open")):
+        return {"issues": foundation.list_issues(project_id=project_id, world_id=world_id, branch_id=branch_id, status=status)}
+
+    @app.post("/api/issues")
+    def create_issue(payload: IssuePayload):
+        return foundation.create_issue(**payload.model_dump())
+
+    @app.post("/api/issues/{issue_id}/resolve")
+    def resolve_issue(issue_id: str, status: str = Query("resolved")):
+        try:
+            return foundation.resolve_issue(issue_id, status=status)
+        except KeyError as exc:
+            raise HTTPException(404, "Issue not found") from exc
+
+    @app.get("/api/jobs")
+    def jobs(project_id: str | None = Query(None)):
+        return {"jobs": foundation.list_jobs(project_id)}
+
+    @app.get("/api/preferences")
+    def preferences(scope_type: str = Query("app"), scope_id: str = Query("default")):
+        return foundation.get_preferences(scope_type, scope_id)
+
+    @app.put("/api/preferences")
+    def set_preference(payload: PreferencePayload):
+        foundation.set_preference(payload.scope_type, payload.scope_id, payload.key, payload.value)
+        return {"ok": True}
+
+    @app.get("/api/search")
+    def global_search(q: str = Query(""), project_id: str | None = Query(None), world_id: str | None = Query(None), branch_id: str | None = Query(None), limit: int = Query(60)):
+        query = q.strip()
+        if not query:
+            return {"results": []}
+        results = workspace.command_search(query, project_id=project_id)
+        project_folder_ids = visible_folder_ids(project_id)
+        bible_folder_ids = visible_folder_ids(WORLD_BIBLE_PROJECT_ID)
+        alias_hits = foundation.alias_matches(query, limit=limit)
+        known = {(item.get("type"), item.get("id")) for item in results}
+        for alias in alias_hits:
+            key = (alias["resource_type"], alias["resource_id"])
+            if key in known or foundation.is_hidden(*key):
+                continue
+            try:
+                resource = _resource_payload(*key)
+            except KeyError:
+                continue
+            folder_scope = bible_folder_ids if alias["resource_type"] in {"entity_family", "entity_variant"} else project_folder_ids
+            if resource.get("folder_id") and not resource_folder_visible(resource, folder_scope):
+                continue
+            label = resource.get("name") or resource.get("display_name") or resource.get("title") or alias["alias"]
+            results.insert(0, {"type": alias["resource_type"], "id": alias["resource_id"], "label": label, "description": f"Alias: {alias['alias']}"})
+            known.add(key)
+        sessions = history.list_sessions(search=query, limit=min(limit, 25), project_id=project_id)
+        for session in sessions:
+            results.append({"type": "session", "id": session["id"], "label": session["title"], "description": session.get("prompt_preview") or "Chat"})
+        visible = []
+        for item in results:
+            typ = item.get("type")
+            rid = item.get("id")
+            lifecycle_type = {"entity": "entity_family"}.get(typ, typ)
+            if rid and lifecycle_type != "command" and foundation.is_hidden(lifecycle_type, rid):
+                continue
+            if typ == "entity_variant" and item.get("family_id") and foundation.is_hidden("entity_family", item["family_id"]):
+                continue
+            folder_id = item.get("folder_id")
+            if folder_id:
+                scope_ids = bible_folder_ids if typ in {"entity", "entity_family", "entity_variant"} else project_folder_ids
+                if folder_id not in scope_ids:
+                    continue
+            visible.append(item)
+            if len(visible) >= limit:
+                break
+        return {"results": visible}
+
+    @app.get("/api/home")
+    def home(project_id: str | None = Query(None), world_id: str | None = Query(None), branch_id: str | None = Query(None)):
+        project_folders = effective_folders(workspace.list_folders(project_id)) if project_id else []
+        visible_project_folder_ids = {folder["id"] for folder in project_folders}
+        documents = [
+            doc for doc in foundation.filter_visible("document", workspace.list_documents(project_id) if project_id else [])
+            if resource_folder_visible(doc, visible_project_folder_ids)
+        ]
+        sessions = [session for session in history.list_sessions(project_id=project_id, limit=8) if not foundation.is_hidden("session", session["id"])]
+        return {
+            "active_scene": workspace.get_active_scene(project_id) if project_id else None,
+            "recent_documents": sorted(documents, key=lambda x: x.get("updated_at", ""), reverse=True)[:8],
+            "recent_chats": sessions[:8],
+            "issues": foundation.list_issues(project_id=project_id, world_id=world_id, branch_id=branch_id, limit=8),
+            "activity": foundation.list_activity(project_id, limit=10),
+            "feedback": history.dataset_stats(),
+            "favorites": foundation.list_favorites(project_id),
+        }
+
+    @app.post("/api/projects/world-link")
+    def link_project_world(payload: ProjectWorldLinkPayload):
+        try:
+            result = workspace.link_project_world(payload.project_id, payload.world_id, role=payload.role)
+            if payload.role == "primary":
+                workspace.update_project(payload.project_id, default_world_id=payload.world_id)
+            return result
+        except KeyError as exc:
+            raise HTTPException(404, "Project or world not found") from exc
+
+    @app.post("/api/state-proposals")
+    def state_proposals(payload: StateProposalPayload):
+        """Run Arline's deterministic structural/state pipeline without touching canon."""
+        text = payload.text.strip()
+        if not text:
+            raise HTTPException(400, "Text is empty")
+        try:
+            result = ArlineAnalyticalPipeline.default().run(text)
+        except Exception as exc:
+            raise HTTPException(500, f"State proposal analysis failed: {exc}") from exc
+        extracted = result.extracted_state or {}
+        events = result.events or {}
+        return {
+            "source": {
+                "project_id": payload.project_id,
+                "world_id": payload.world_id,
+                "branch_id": payload.branch_id,
+                "session_id": payload.session_id,
+                "turn_id": payload.turn_id,
+            },
+            "entities": extracted.get("entities", []),
+            "relations": extracted.get("relations", []),
+            "claims": extracted.get("claims", []),
+            "reference_resolutions": extracted.get("reference_resolutions", []),
+            "patches": events.get("state_patches", []),
+            "events": events.get("events", []),
+            "conflicts": events.get("conflicts", []),
+            "uncertainties": (result.analysis or {}).get("uncertainties", []),
+        }
+
+    @app.post("/api/quick-create/preview")
+    def quick_create_preview(payload: QuickCreatePayload):
+        try:
+            preview = parse_quick_create(payload.text, forced_kind=payload.forced_kind)
+            data = preview.to_dict()
+            if payload.entity_type:
+                data["entity_type"] = payload.entity_type
+            if payload.name:
+                data["name"] = payload.name
+            # Identity resolver: Quick Create should prefer linking an existing
+            # World Bible object over silently producing a near-duplicate.
+            candidate_name = str(data.get("name") or payload.text).strip()
+            matches: list[dict[str, Any]] = []
+            if data.get("kind") == "entity" and candidate_name:
+                candidate_type = data.get("entity_type")
+                families = foundation.filter_visible("entity_family", workspace.list_entity_families(None))
+                by_id = {family["id"]: family for family in families}
+                by_match: dict[str, dict[str, Any]] = {}
+                for family in families:
+                    if candidate_type and family.get("entity_type") != candidate_type:
+                        continue
+                    score = SequenceMatcher(None, candidate_name.casefold(), str(family.get("name") or "").casefold()).ratio()
+                    if score >= 0.68:
+                        by_match[family["id"]] = {
+                            "type": "entity_family", "id": family["id"], "label": family["name"],
+                            "entity_type": family.get("entity_type"), "score": round(score, 3), "alias": None,
+                        }
+                for alias in foundation.alias_matches(candidate_name, limit=20):
+                    if alias.get("resource_type") != "entity_family":
+                        continue
+                    family = by_id.get(alias.get("resource_id"))
+                    if not family or (candidate_type and family.get("entity_type") != candidate_type):
+                        continue
+                    score = SequenceMatcher(None, candidate_name.casefold(), alias["alias"].casefold()).ratio()
+                    current = by_match.get(family["id"])
+                    if current is None or score > current["score"]:
+                        by_match[family["id"]] = {
+                            "type": "entity_family", "id": family["id"], "label": family["name"],
+                            "entity_type": family.get("entity_type"), "score": round(score, 3), "alias": alias["alias"],
+                        }
+                matches = sorted(by_match.values(), key=lambda item: item["score"], reverse=True)
+            data["possible_matches"] = matches[:5]
+            return data
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.post("/api/quick-create")
+    def quick_create(payload: QuickCreatePayload):
+        try:
+            preview = parse_quick_create(payload.text, forced_kind=payload.forced_kind).to_dict()
+            kind = preview["kind"]
+            name = (payload.name or preview["name"]).strip()
+            description = payload.description if payload.description is not None else preview.get("description", "")
+            if kind == "project":
+                return {"kind": kind, "resource": workspace.create_project(name, description=description)}
+            if kind == "world":
+                result = workspace.create_world(
+                    payload.project_id, name, description=description, canon_status="draft",
+                    inheritance_mode="none", clone_parent=False,
+                )
+                return {"kind": kind, "resource": result}
+            if kind == "folder":
+                if not payload.project_id:
+                    raise ValueError("A project is required to create a folder")
+                return {"kind": kind, "resource": workspace.create_folder(payload.project_id, name)}
+            if kind == "document":
+                if not payload.project_id:
+                    raise ValueError("A project is required to create a document")
+                result = workspace.create_document(
+                    payload.project_id, name,
+                    document_type=payload.document_type or preview.get("document_type") or "scene",
+                    content="", world_id=payload.world_id,
+                    branch_id=payload.branch_id if payload.branch_id != WORLD_BIBLE_BRANCH_ID else None,
+                    folder_id=payload.folder_id,
+                )
+                return {"kind": kind, "resource": result}
+
+            entity_type = payload.entity_type or preview.get("entity_type") or "lore"
+            shared_core = payload.shared_core if payload.shared_core is not None else preview.get("shared_core", {})
+            attributes = payload.attributes if payload.attributes is not None else preview.get("attributes", {})
+            world_id = payload.world_id or WORLD_BIBLE_WORLD_ID
+            branch_id = payload.branch_id
+            if branch_id == WORLD_BIBLE_BRANCH_ID:
+                branch_id = None
+            family = workspace.create_entity_family(
+                None, name, entity_type=entity_type, description=description,
+                shared_core=shared_core, folder_id=payload.folder_id, create_variant_in_world=world_id, branch_id=branch_id,
+            )
+            variant = next(
+                (item for item in family.get("variants", []) if item.get("world_id") == world_id and (item.get("branch_id") or None) == branch_id),
+                family.get("variants", [None])[0] if family.get("variants") else None,
+            )
+            if variant and attributes:
+                variant = workspace.update_variant(
+                    variant["id"], attributes=attributes, summary=description, note="quick create",
+                )
+            if payload.project_id:
+                workspace.set_project_manifest_ref(
+                    payload.project_id, "entity_family", family["id"],
+                    label=family["name"], priority=1,
+                )
+            return {"kind": "entity", "resource": family, "variant": variant, "preview": preview}
+        except (KeyError, ValueError, sqlite3.IntegrityError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.get("/api/projects/{project_id}/manifest")
+    def project_manifest(project_id: str):
+        try:
+            return {
+                "project": workspace.get_project(project_id),
+                "refs": workspace.list_project_manifest_refs(project_id),
+                "active_scene": workspace.get_active_scene(project_id),
+                "overlays": workspace.list_project_overlays(project_id),
+            }
+        except KeyError as exc:
+            raise HTTPException(404, "Project not found") from exc
+
+    @app.post("/api/projects/{project_id}/manifest/refs")
+    def add_manifest_ref(project_id: str, payload: ManifestRefPayload):
+        try:
+            return workspace.set_project_manifest_ref(project_id, **payload.model_dump())
+        except KeyError as exc:
+            raise HTTPException(404, "Project not found") from exc
+
+    @app.delete("/api/projects/{project_id}/manifest/refs")
+    def remove_manifest_ref(project_id: str, resource_type: str = Query(...), resource_id: str = Query(...)):
+        workspace.remove_project_manifest_ref(project_id, resource_type, resource_id)
+        return {"ok": True}
+
+    @app.post("/api/projects/{project_id}/overlays")
+    def upsert_overlay(project_id: str, payload: ProjectOverlayPayload):
+        try:
+            return workspace.upsert_project_overlay(project_id, **payload.model_dump())
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.delete("/api/overlays/{overlay_id}")
+    def delete_overlay(overlay_id: str):
+        try:
+            workspace.delete_project_overlay(overlay_id)
+            return {"ok": True}
+        except KeyError as exc:
+            raise HTTPException(404, "Overlay not found") from exc
+
+    @app.get("/api/projects/{project_id}/active-scene")
+    def get_active_scene(project_id: str):
+        return {"active_scene": workspace.get_active_scene(project_id)}
+
+    @app.put("/api/projects/{project_id}/active-scene")
+    def set_active_scene(project_id: str, payload: ActiveScenePayload):
+        try:
+            return workspace.set_active_scene(project_id, **payload.model_dump())
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.get("/api/projects/{project_id}/continuity")
+    def continuity(project_id: str, world_id: str | None = Query(None), branch_id: str | None = Query(None)):
+        try:
+            return workspace.continuity_report(project_id, world_id=world_id, branch_id=branch_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Project not found") from exc
+
+    @app.get("/api/projects/{project_id}/scene-cards")
+    def list_scene_cards(project_id: str):
+        try:
+            workspace.get_project(project_id)
+            return {"scene_cards": workspace.list_scene_cards(project_id)}
+        except KeyError as exc:
+            raise HTTPException(404, "Project not found") from exc
+
+    @app.put("/api/projects/{project_id}/scene-cards/{document_id}")
+    def set_scene_card(project_id: str, document_id: str, payload: SceneCardPayload):
+        try:
+            return workspace.set_scene_card(project_id, document_id, **payload.model_dump())
+        except KeyError as exc:
+            raise HTTPException(404, "Project or document not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.delete("/api/projects/{project_id}/scene-cards/{document_id}")
+    def delete_scene_card(project_id: str, document_id: str):
+        workspace.delete_scene_card(project_id, document_id)
+        return {"ok": True}
+
+    @app.post("/api/projects/{project_id}/staged-changes")
+    def stage_change(project_id: str, payload: StagedChangePayload):
+        try:
+            return workspace.stage_change(project_id=project_id, **payload.model_dump())
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.get("/api/projects/{project_id}/staged-changes")
+    def list_staged(project_id: str, status: str = Query("pending"), world_id: str | None = Query(None), branch_id: str | None = Query(None)):
+        return {"changes": workspace.list_staged_changes(project_id, status=status, world_id=world_id, branch_id=branch_id)}
+
+    @app.post("/api/staged-changes/{change_id}/resolve")
+    def resolve_staged(change_id: str, payload: StagedResolvePayload):
+        try:
+            return workspace.resolve_staged_change(change_id, accept=payload.accept)
+        except KeyError as exc:
+            raise HTTPException(404, "Staged change not found") from exc
+
+    @app.post("/api/timeline")
+    def add_timeline(payload: TimelineEventPayload):
+        try:
+            return workspace.add_timeline_event(**payload.model_dump())
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.get("/api/timeline")
+    def list_timeline(world_id: str = Query(...), branch_id: str | None = Query(None), owner_type: str | None = Query(None), owner_id: str | None = Query(None)):
+        return {"events": workspace.list_timeline_events(world_id, branch_id=branch_id, owner_type=owner_type, owner_id=owner_id)}
+
+    @app.get("/api/timeline/state")
+    def timeline_state(world_id: str = Query(...), owner_type: str = Query(...), owner_id: str = Query(...), branch_id: str | None = Query(None), at_order: float | None = Query(None)):
+        return workspace.timeline_state(world_id, owner_type=owner_type, owner_id=owner_id, branch_id=branch_id, at_order=at_order)
+
+    @app.get("/api/context/recipes")
+    def context_recipes(project_id: str | None = Query(None)):
+        return {"recipes": workspace.list_context_recipes(project_id)}
+
+    @app.post("/api/projects/{project_id}/context-recipes")
+    def save_context_recipe(project_id: str, payload: ContextRecipePayload):
+        try:
+            return workspace.save_context_recipe(project_id, **payload.model_dump())
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.get("/api/backlinks/{resource_type}/{resource_id}")
+    def backlinks(resource_type: str, resource_id: str):
+        return workspace.backlinks(resource_type, resource_id)
 
     @app.post("/api/worlds")
     def create_world(payload: WorldPayload):
@@ -743,6 +1798,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     def get_world(world_id: str):
         try:
             result = workspace.get_world(world_id)
+            result["branches"] = foundation.filter_visible("branch", result.get("branches", []))
             result["snapshots"] = workspace.list_snapshots(world_id)
             return result
         except KeyError as exc:
@@ -756,6 +1812,17 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             raise HTTPException(404, "World not found") from exc
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+
+    @app.delete("/api/worlds/{world_id}")
+    def delete_world(world_id: str):
+        try:
+            workspace.delete_world(world_id)
+            history.delete_sessions_by_scope(world_id=world_id)
+        except KeyError as exc:
+            raise HTTPException(404, "World not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"ok": True}
 
     @app.post("/api/worlds/{world_id}/fork")
     def fork_world(world_id: str, payload: WorldPayload):
@@ -804,6 +1871,37 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
 
+    @app.get("/api/branches/compare/{left_branch_id}/{right_branch_id}")
+    def compare_branches(left_branch_id: str, right_branch_id: str):
+        try:
+            return workspace.compare_branches(left_branch_id, right_branch_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Branch not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.post("/api/branches/{source_branch_id}/merge")
+    def merge_branch(source_branch_id: str, payload: BranchMergePayload):
+        try:
+            return workspace.merge_branch_changes(
+                source_branch_id, payload.target_branch_id, payload.changes, note=payload.note
+            )
+        except KeyError as exc:
+            raise HTTPException(404, "Branch resource not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.delete("/api/branches/{branch_id}")
+    def delete_branch(branch_id: str):
+        try:
+            workspace.delete_branch(branch_id)
+            history.delete_sessions_by_scope(branch_id=branch_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Branch not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"ok": True}
+
     @app.post("/api/folders")
     def create_folder(payload: FolderPayload):
         try:
@@ -821,7 +1919,9 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     @app.delete("/api/folders/{folder_id}")
     def delete_folder(folder_id: str):
         try:
-            workspace.delete_folder(folder_id)
+            deleted_folder_ids = workspace.delete_folder(folder_id)
+            for deleted_folder_id in deleted_folder_ids:
+                history.clear_folder_reference(deleted_folder_id)
         except KeyError as exc:
             raise HTTPException(404, "Folder not found") from exc
         return {"ok": True}
@@ -879,7 +1979,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
 
     @app.get("/api/entities/families")
     def list_entity_families(
-        project_id: str = Query(...), entity_type: str | None = Query(None), search: str = Query("")
+        project_id: str | None = Query(None), entity_type: str | None = Query(None), search: str = Query("")
     ):
         return {"families": workspace.list_entity_families(project_id, entity_type=entity_type, search=search)}
 
@@ -900,6 +2000,14 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             raise HTTPException(404, "Entity family not found") from exc
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+
+    @app.delete("/api/entities/families/{family_id}")
+    def delete_entity_family(family_id: str):
+        try:
+            workspace.delete_entity_family(family_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Entity family not found") from exc
+        return {"ok": True}
 
     @app.post("/api/entities/variants")
     def create_entity_variant(payload: EntityVariantPayload):
@@ -934,6 +2042,14 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             return workspace.update_variant(variant_id, note=note, **data)
         except (KeyError, ValueError) as exc:
             raise HTTPException(400, str(exc)) from exc
+
+    @app.delete("/api/entities/variants/{variant_id}")
+    def delete_entity_variant(variant_id: str):
+        try:
+            workspace.delete_variant(variant_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Variant not found") from exc
+        return {"ok": True}
 
     @app.get("/api/entities/variants/compare/{left_variant_id}/{right_variant_id}")
     def compare_entity_variants(left_variant_id: str, right_variant_id: str):
@@ -973,6 +2089,14 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         except (KeyError, ValueError) as exc:
             raise HTTPException(400, str(exc)) from exc
 
+    @app.delete("/api/relationships/{relationship_id}")
+    def delete_relationship(relationship_id: str):
+        try:
+            workspace.delete_relationship(relationship_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Relationship not found") from exc
+        return {"ok": True}
+
     @app.get("/api/templates")
     def list_templates(project_id: str | None = Query(None), entity_type: str | None = Query(None)):
         return {"templates": workspace.list_templates(project_id=project_id, entity_type=entity_type)}
@@ -983,6 +2107,16 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             return workspace.create_template(**payload.model_dump())
         except (KeyError, ValueError, sqlite3.IntegrityError) as exc:
             raise HTTPException(400, str(exc)) from exc
+
+    @app.delete("/api/templates/{template_id}")
+    def delete_template(template_id: str):
+        try:
+            workspace.delete_template(template_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Template not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return {"ok": True}
 
     @app.get("/api/scenes/{scene_document_id}/dependencies")
     def list_scene_dependencies(scene_document_id: str):
@@ -1039,6 +2173,14 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     def list_tags(project_id: str = Query(...)):
         return {"tags": workspace.list_tags(project_id)}
 
+    @app.delete("/api/tags/{tag_id}")
+    def delete_tag(tag_id: str):
+        try:
+            workspace.delete_tag(tag_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Tag not found") from exc
+        return {"ok": True}
+
     @app.post("/api/tags/{tag_id}/link")
     def link_tag(tag_id: str, payload: TagLinkPayload):
         workspace.tag_resource(tag_id, payload.resource_type, payload.resource_id)
@@ -1066,6 +2208,14 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             project_id=project_id, world_id=world_id, branch_id=branch_id,
             owner_type=owner_type, owner_id=owner_id,
         )}
+
+    @app.delete("/api/facts/{fact_id}")
+    def delete_fact(fact_id: str):
+        try:
+            workspace.delete_fact(fact_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Fact not found") from exc
+        return {"ok": True}
 
     @app.post("/api/canon/promote")
     def promote_to_canon(payload: FactPayload):
@@ -1145,6 +2295,14 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     def list_snapshots(world_id: str = Query(...)):
         return {"snapshots": workspace.list_snapshots(world_id)}
 
+    @app.delete("/api/snapshots/{snapshot_id}")
+    def delete_snapshot(snapshot_id: str):
+        try:
+            workspace.delete_snapshot(snapshot_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Snapshot not found") from exc
+        return {"ok": True}
+
     @app.post("/api/snapshots/{snapshot_id}/restore")
     def restore_snapshot(snapshot_id: str, payload: RestoreSnapshotPayload):
         try:
@@ -1164,14 +2322,48 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
 
     @app.get("/api/mentions")
     def mentions(
-        q: str = Query(""), project_id: str = Query(...),
+        q: str = Query(""), project_id: str | None = Query(None),
         world_id: str | None = Query(None), branch_id: str | None = Query(None),
         limit: int = Query(20, ge=1, le=50),
     ):
-        return {"results": workspace.search_mentions(
+        project_folder_ids = visible_folder_ids(project_id)
+        bible_folder_ids = visible_folder_ids(WORLD_BIBLE_PROJECT_ID)
+        raw_results = workspace.search_mentions(
             q, project_id=project_id, world_id=world_id,
             branch_id=branch_id, limit=limit,
-        )}
+        )
+        results = []
+        for item in raw_results:
+            lifecycle_type = {"entity": "entity_family"}.get(item.get("type"), item.get("type"))
+            if item.get("id") and foundation.is_hidden(lifecycle_type, item["id"]):
+                continue
+            if item.get("type") == "entity_variant" and item.get("family_id") and foundation.is_hidden("entity_family", item["family_id"]):
+                continue
+            folder_id = item.get("folder_id")
+            if folder_id:
+                scope_ids = bible_folder_ids if item.get("type") in {"entity_family", "entity_variant"} else project_folder_ids
+                if folder_id not in scope_ids:
+                    continue
+            results.append(item)
+        known = {(item.get("type"), item.get("id")) for item in results}
+        for alias in foundation.alias_matches(q, limit=limit):
+            key = (alias["resource_type"], alias["resource_id"])
+            if key in known or foundation.is_hidden(*key):
+                continue
+            try:
+                resource = _resource_payload(*key)
+            except KeyError:
+                continue
+            folder_scope = bible_folder_ids if alias["resource_type"] in {"entity_family", "entity_variant"} else project_folder_ids
+            if resource.get("folder_id") and not resource_folder_visible(resource, folder_scope):
+                continue
+            label = resource.get("display_name") or resource.get("name") or resource.get("title") or alias["alias"]
+            results.insert(0, {
+                "type": alias["resource_type"], "id": alias["resource_id"], "label": label,
+                "subtitle": f"alias · {alias['alias']}", "current_world": True,
+            })
+            known.add(key)
+        return {"results": results[:limit]}
 
     @app.get("/api/commands")
     def commands(q: str = Query(""), project_id: str | None = Query(None)):
@@ -1188,11 +2380,12 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         tag: str | None = Query(None),
         session_kind: str | None = Query(None),
     ):
-        return {"sessions": history.list_sessions(
+        sessions = history.list_sessions(
             search=search, limit=limit, project_id=project_id,
             world_id=world_id, branch_id=branch_id, folder_id=folder_id,
             tag=tag, session_kind=session_kind,
-        )}
+        )
+        return {"sessions": foundation.filter_visible("session", sessions)}
 
     @app.get("/api/sessions/{session_id}")
     def get_session(session_id: str):
@@ -1212,6 +2405,13 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         except KeyError as exc:
             raise HTTPException(404, "Session or turn not found") from exc
 
+    @app.get("/api/sessions/{session_id}/forks")
+    def session_forks(session_id: str):
+        try:
+            return history.list_session_forks(session_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Session not found") from exc
+
     @app.patch("/api/sessions/{session_id}")
     def update_session(session_id: str, payload: SessionPatchPayload):
         try:
@@ -1228,6 +2428,8 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                 session_kind=payload.session_kind,
                 tags=payload.tags,
                 workspace_refs=payload.workspace_refs,
+                scratch_mode=payload.scratch_mode,
+                world_fork_id=payload.world_fork_id,
             )
         except KeyError as exc:
             raise HTTPException(404, "Session not found") from exc
@@ -1266,6 +2468,14 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         return {"ok": True, "turn": turn, "dataset": history.dataset_stats()}
+
+    @app.get("/api/feedback/queue")
+    def feedback_queue(status: str = Query("unreviewed"), limit: int = Query(100), project_id: str | None = Query(None)):
+        return {"items": history.feedback_queue(status=status, limit=limit, project_id=project_id)}
+
+    @app.get("/api/feedback/comparisons")
+    def feedback_comparisons(project_id: str | None = Query(None), limit: int = Query(100)):
+        return {"items": history.preference_opportunities(project_id=project_id, limit=limit)}
 
     @app.get("/api/dataset/stats")
     def dataset_stats():
@@ -1320,8 +2530,9 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                     world_id=payload.world_id,
                     branch_id=payload.branch_id,
                     references=refs,
+                    recipe_id=payload.context_recipe_id,
                 )
-                if cfg.workspace.context_enabled and payload.project_id
+                if cfg.workspace.context_enabled and (payload.project_id or payload.world_id)
                 else None
             )
             bundle = ArlineService(cfg).analyze(
@@ -1370,19 +2581,22 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         project_id = payload.project_id or (existing_session or {}).get("project_id")
         world_id = payload.world_id or (existing_session or {}).get("world_id")
         branch_id = payload.branch_id or (existing_session or {}).get("branch_id")
-        folder_id = payload.folder_id or (existing_session or {}).get("folder_id")
+        # Project folders are a document/filesystem concern in v1.1. Chats
+        # remain a separate layer even when attached to the same project.
+        folder_id = None
         refs = [item.model_dump() for item in payload.references]
         if not refs and existing_session:
             refs = existing_session.get("workspace_refs") or []
 
         ws_context = None
-        if cfg.workspace.context_enabled and project_id:
+        if cfg.workspace.context_enabled and (project_id or world_id):
             try:
                 ws_context = workspace_context.resolve(
                     project_id=project_id,
                     world_id=world_id,
                     branch_id=branch_id,
                     references=refs,
+                    recipe_id=payload.context_recipe_id,
                 )
             except (KeyError, ValueError) as exc:
                 raise HTTPException(400, f"Workspace context error: {exc}") from exc
@@ -1393,9 +2607,15 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             and cfg.history.smart_hybrid_continuity
             and payload.input_mode == "smart_hybrid"
         ):
+            context_policy = (ws_context.scope.get("context_policy") if ws_context else {}) or {}
+            requested_turns = context_policy.get("recent_turns", cfg.history.continuity_turns)
+            try:
+                requested_turns = max(1, min(50, int(requested_turns)))
+            except (TypeError, ValueError):
+                requested_turns = cfg.history.continuity_turns
             session_context = history.build_continuity_context(
                 existing_session["id"],
-                max_turns=cfg.history.continuity_turns,
+                max_turns=requested_turns,
                 max_chars=cfg.history.continuity_chars,
             )
 
@@ -1440,6 +2660,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                 branch_id=branch_id,
                 folder_id=folder_id,
                 workspace_refs=refs,
+                scratch_mode=payload.scratch_mode,
             )
         else:
             session = history.create_session(
@@ -1450,10 +2671,11 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                 folder_id=folder_id,
                 session_kind="chat",
                 workspace_refs=refs,
+                scratch_mode=payload.scratch_mode,
             )
 
         lineage = {
-            "application_version": "0.6.4",
+            "application_version": STUDIO_VERSION,
             "wcf_version": bundle.analysis.writer_context.version,
             "aif_core_profile": "teacher",
             "projection_mode": cfg.projection.mode,
@@ -1516,6 +2738,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                 "beat_count": payload.beat_count if payload.generation_mode == "beats" else 1,
                 "beat_tokens": payload.beat_tokens if payload.generation_mode == "beats" else None,
             },
+            "scratch_mode": payload.scratch_mode,
         }
 
 

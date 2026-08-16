@@ -13,7 +13,7 @@
       <div class="sidebar-head">
         <button id="brandBtn" class="brand-button" title="Arline Studio">
           <span class="brand-mark">A</span>
-          <span class="brand-copy"><b>Arline</b><small>Studio 0.6.4</small></span>
+          <span class="brand-copy"><b>Arline</b><small>Studio v1.1</small></span>
         </button>
         <button id="collapseSidebarBtn" class="icon-btn" title="Collapse sidebar">‹</button>
       </div>
@@ -24,28 +24,34 @@
       </div>
 
       <nav class="workspace-nav" aria-label="Workspace views">
-        <button data-view="chat" class="workspace-nav-item active"><span>◉</span><b>Chat</b></button>
-        <button data-view="draft" class="workspace-nav-item"><span>✎</span><b>Draft</b></button>
-        <button data-view="world" class="workspace-nav-item"><span>◇</span><b>World</b></button>
-        <button data-view="data" class="workspace-nav-item"><span>▣</span><b>Data</b></button>
+        <button data-view="home" class="workspace-nav-item active"><span>⌂</span><b>Home</b></button>
+        <button data-view="chat" class="workspace-nav-item"><span>◉</span><b>Chat</b></button>
+        <button data-view="draft" class="workspace-nav-item"><span>✎</span><b>Manuscript</b></button>
+        <button data-view="world" class="workspace-nav-item"><span>◇</span><b>World Bible</b></button>
+        <button data-view="data" class="workspace-nav-item"><span>◫</span><b>Feedback Lab</b></button>
       </nav>
 
-      <div class="scope-card">
+      <div class="context-stack-card" id="contextStackCard">
         <div class="section-title-row">
-          <span class="section-label">Scope</span>
-          <button id="projectMenuBtn" class="mini-icon-btn" title="Project actions">•••</button>
+          <span class="section-label">Context stack</span>
+          <div class="inline-actions"><button id="contextStackEditBtn" class="mini-icon-btn" title="Edit AI context">◎</button><button id="projectMenuBtn" class="mini-icon-btn" title="Project actions">•••</button></div>
         </div>
-        <label class="compact-select"><span>Project</span><select id="projectSelect"></select></label>
-        <label class="compact-select"><span>World</span><select id="worldSelect"></select></label>
-        <label class="compact-select"><span>Branch</span><select id="branchSelect"></select></label>
+        <button id="contextStackSummary" class="context-stack-summary" type="button">
+          <b id="contextStackProject">Loading…</b>
+          <span id="contextStackWorld">World · Branch</span>
+          <small id="contextStackScene">No active scene</small>
+        </button>
         <div id="scopeStatus" class="scope-status"><span class="status-dot"></span><span>Loading workspace…</span></div>
+        <div class="legacy-scope-controls" aria-hidden="true">
+          <select id="projectSelect" tabindex="-1"></select><select id="worldSelect" tabindex="-1"></select><select id="branchSelect" tabindex="-1"></select>
+        </div>
       </div>
 
       <div id="sidebarScroll" class="sidebar-scroll">
         <section class="sidebar-section">
           <div class="section-title-row">
-            <span class="section-label">Library</span>
-            <button id="newLibraryBtn" class="mini-icon-btn" title="New library item">＋</button>
+            <span class="section-label">World Bible</span>
+            <button id="newLibraryBtn" class="mini-icon-btn" title="Quick create in World Bible">＋</button>
           </div>
           <div class="library-links">
             <button data-library="character"><span>♙</span><b>Characters</b><em id="characterCount">0</em></button>
@@ -84,7 +90,7 @@
       </div>
 
       <div class="sidebar-footer">
-        <button id="datasetFooterBtn" class="footer-status"><span>Dataset</span><b id="datasetMiniCount">0 reviewed</b></button>
+        <button id="datasetFooterBtn" class="footer-status"><span>Feedback</span><b id="datasetMiniCount">0 to review</b></button>
         <button id="settingsBtn" class="icon-btn" title="Inspector">⚙</button>
       </div>
     </aside>
@@ -94,6 +100,8 @@
       <header class="topbar">
         <div class="topbar-left">
           <button id="mobileSidebarBtn" class="icon-btn mobile-only">☰</button>
+          <button id="navBackBtn" class="icon-btn nav-history-btn" title="Back" disabled>‹</button>
+          <button id="navForwardBtn" class="icon-btn nav-history-btn" title="Forward" disabled>›</button>
           <div id="breadcrumbs" class="breadcrumbs">
             <button data-crumb="project">Project</button><span>›</span>
             <button data-crumb="world">World</button><span>›</span>
@@ -102,15 +110,29 @@
           <span id="sandboxBadge" class="scope-badge warning hidden">Sandbox</span>
         </div>
         <div class="topbar-actions">
-          <button id="contextScopeBtn" class="context-scope-button" title="Context scope"><span>◎</span><b id="contextScopeLabel">0 refs</b></button>
+          <button id="activityBtn" class="context-scope-button" title="Activity and issues"><span>◌</span><b id="activityCount">0</b></button>
+          <button id="contextScopeBtn" class="context-scope-button" title="AI Context Stack"><span>◎</span><b id="contextScopeLabel">0 refs</b></button>
           <div id="connectionBadge" class="connection-badge offline"><span></span><b>LM Studio</b><em>offline</em></div>
           <button id="openInspectorBtn" class="icon-btn" title="Developer inspector">⚙</button>
         </div>
       </header>
 
       <main id="mainStage" class="main-stage">
+        <!-- HOME -->
+        <section id="homeView" class="workspace-view active" data-view-panel="home">
+          <div class="home-page">
+            <header class="home-hero"><div><span class="eyebrow">Workspace</span><h1 id="homeProjectTitle">Arline Studio</h1><p>Continue writing, inspect the world, or review what Arline learned.</p></div><button id="homeQuickCreateBtn" class="primary-btn">＋ Quick create</button></header>
+            <div class="home-grid">
+              <section class="home-card home-continue"><div class="section-head"><div><h2>Continue</h2><p>Your current narrative cursor and recent work.</p></div></div><div id="homeContinue"></div></section>
+              <section class="home-card"><div class="section-head"><div><h2>Needs attention</h2><p>Feedback, staged changes, and unresolved issues.</p></div></div><div id="homeAttention"></div></section>
+              <section class="home-card"><div class="section-head"><div><h2>Recent</h2><p>Documents and chats across this project.</p></div></div><div id="homeRecent"></div></section>
+              <section class="home-card"><div class="section-head"><div><h2>Pinned</h2><p>Fast access without changing AI context.</p></div></div><div id="homeFavorites"></div></section>
+            </div>
+          </div>
+        </section>
+
         <!-- CHAT -->
-        <section id="chatView" class="workspace-view active" data-view-panel="chat">
+        <section id="chatView" class="workspace-view" data-view-panel="chat">
           <div id="chatLanding" class="chat-landing">
             <div class="hero-orb">A</div>
             <h1>Ready when you are</h1>
@@ -118,8 +140,12 @@
           </div>
           <div id="conversationSection" class="conversation-section hidden">
             <div class="conversation-toolbar">
-              <strong id="activeChatTitle">Current chat</strong>
-              <button id="deleteActiveChatBtn" class="danger-text-btn" title="Delete this chat and all of its turns">Delete chat</button>
+              <div class="conversation-title-stack"><strong id="activeChatTitle">Current chat</strong><div id="chatForkTrail" class="chat-fork-trail"></div></div>
+              <div class="conversation-toolbar-actions">
+                <button id="scratchToggleBtn" class="tiny-btn" title="Scratch mode never stages canon changes">◇ Scratch</button>
+                <button id="forkCurrentChatBtn" class="tiny-btn" title="Fork this chat from its latest turn">↗ Fork</button>
+                <button id="deleteActiveChatBtn" class="danger-text-btn" title="Move this chat to recoverable Trash">Trash chat</button>
+              </div>
             </div>
             <div id="conversationFeed" class="conversation-feed"></div>
           </div>
@@ -133,65 +159,75 @@
           <div id="composerDock" class="composer-dock">
             <div id="contextChips" class="context-chips hidden"></div>
             <div class="composer-card">
-              <textarea id="promptInput" spellcheck="true" placeholder="Continue a scene, ask about @Vian, or use /continue…"></textarea>
+              <div class="composer-editor-shell">
+                <div id="promptHighlight" class="prompt-highlight" aria-hidden="true"></div>
+                <textarea id="promptInput" spellcheck="true" placeholder="Continue a scene, ask about @Vian, or use /continue…"></textarea>
+              </div>
+              <div id="referencePreviewBar" class="reference-preview-bar hidden"></div>
               <div id="mentionPopup" class="autocomplete-popup hidden"></div>
               <div id="slashPopup" class="autocomplete-popup command-popup hidden"></div>
-              <div class="composer-footer">
-                <div class="quick-controls">
-                  <select id="modelSelect" aria-label="Model"><option value="">Select model…</option></select>
-                  <select id="modeSelect" aria-label="Input mode">
-                    <option value="smart_hybrid">Smart Hybrid</option>
-                    <option value="wcf">WCF only</option>
-                    <option value="raw">Raw only</option>
-                    <option value="wcf_raw">WCF + Raw</option>
-                    <option value="aif_core">AIF-Core</option>
-                  </select>
-                  <select id="reasoningSelect" aria-label="Reasoning"><option value="off">Thinking Off</option></select>
-                  <select id="lengthPreset" aria-label="Output length">
-                    <option value="1024">Short · 1K</option>
-                    <option value="2048">Medium · 2K</option>
-                    <option value="4096" selected>Long · 4K</option>
-                    <option value="maximum">Maximum · calculating…</option>
-                    <option value="custom">Custom</option>
-                  </select>
+              <div class="composer-footer composer-footer-v3">
+                <div class="composer-profile-controls">
+                  <button id="composerAddContextBtn" class="composer-tool-btn" title="Add reference or context">@</button>
+                  <button id="composerAttachBtn" class="composer-tool-btn" title="Quick create or attach">＋</button>
+                  <select id="runProfileSelect" class="run-profile-select" aria-label="Run profile"><option value="PROFILE-STORY">Story Writing</option></select>
+                  <button id="composerProfileBtn" class="composer-profile-summary" type="button" title="Run profile settings"><span id="composerProfileSummary">Smart Hybrid · 4K</span><b>⌄</b></button>
                 </div>
                 <div class="composer-actions">
-                  <button id="analyzeBtn" class="secondary-btn">Analyze</button>
+                  <button id="analyzeBtn" class="secondary-btn">Context</button>
                   <button id="generateBtn" class="generate-btn" aria-label="Generate">↑</button>
                 </div>
               </div>
-              <div class="composer-notes"><span id="modeNote">WCF + compact request + unresolved source fragments.</span><span id="tokenEstimate">0 estimated tokens</span></div>
+              <div id="composerAdvanced" class="composer-advanced hidden">
+                <div class="quick-controls composer-primary-controls">
+                  <select id="modelSelect" aria-label="Model"><option value="">Select model…</option></select>
+                  <select id="contextRecipeSelect" aria-label="Context recipe"><option value="">Story Writing</option></select>
+                  <select id="reasoningSelect" aria-label="Reasoning"><option value="off">Thinking Off</option></select>
+                  <select id="modeSelect" aria-label="Input mode" title="Advanced context serialization">
+                    <option value="smart_hybrid">Smart Hybrid</option><option value="wcf">WCF only</option><option value="raw">Raw only</option><option value="wcf_raw">WCF + Raw</option><option value="aif_core">AIF-Core</option>
+                  </select>
+                  <button id="saveRunProfileBtn" class="tiny-btn" type="button">Save as profile</button>
+                </div>
+              </div>
+              <div class="length-control" title="Response budget grows logarithmically after Long">
+                <div class="length-control-head"><span>Response</span><b id="lengthLabel">Long · 4K</b><em id="lengthMaxLabel">model-aware</em></div>
+                <input id="lengthSlider" type="range" min="0" max="2" step="1" value="2" aria-label="Response length" />
+                <div id="lengthTicks" class="length-ticks"></div>
+              </div>
+              <button id="composerBudgetButton" class="composer-budget" type="button" title="Open explainable context inspector"><span class="composer-budget-track"><i id="composerBudgetFill"></i></span><b id="composerBudgetText">Context budget</b><em id="tokenEstimate">0 estimated tokens</em></button>
+              <div class="composer-notes"><span id="modeNote">WCF + compact request + unresolved source fragments.</span><span id="activeSceneNote">No active scene</span></div>
               <div id="reasoningNote" class="inline-warning hidden"></div>
             </div>
           </div>
         </section>
 
-        <!-- DRAFT -->
+        <!-- MANUSCRIPT -->
         <section id="draftView" class="workspace-view" data-view-panel="draft">
           <div class="three-pane-layout">
             <aside class="document-rail">
-              <div class="pane-head"><div><span class="eyebrow">Draft</span><h2>Documents</h2></div><button id="newDocumentBtn" class="icon-btn">＋</button></div>
-              <div class="document-filters"><button class="active" data-doc-filter="all">All</button><button data-doc-filter="scene">Scenes</button><button data-doc-filter="draft">Drafts</button><button data-doc-filter="outline">Outline</button></div>
+              <div class="pane-head"><div><span class="eyebrow">Manuscript</span><h2>Binder</h2></div><button id="newDocumentBtn" class="icon-btn">＋</button></div>
+              <div class="document-filters"><button class="active" data-doc-filter="all">Binder</button><button data-doc-filter="scene">Scenes</button><button data-doc-filter="chapter">Chapters</button><button data-doc-filter="note">Notes</button><button data-doc-filter="research">Research</button></div>
               <div id="documentList" class="document-list"></div>
-              <div id="documentEmpty" class="empty-state small">Create a scene, outline, or lore note.</div>
+              <div id="documentEmpty" class="empty-state small"><b>Your manuscript is empty.</b><span>Create a chapter, scene, or note—or import existing writing.</span><button id="manuscriptEmptyCreateBtn" class="tiny-btn">＋ Create first scene</button></div>
             </aside>
             <section class="draft-editor-pane">
               <div class="draft-toolbar">
                 <input id="draftTitle" class="title-input" placeholder="Untitled scene" />
                 <div class="draft-toolbar-actions">
-                  <select id="draftStatus"><option value="draft">Draft</option><option value="provisional">Provisional</option><option value="canon">Canon</option></select>
-                  <button id="draftReferenceBtn" class="secondary-btn" title="Add document as context">@ Reference</button>
-                  <button id="saveDraftBtn" class="primary-btn">Save</button>
+                  <select id="draftStatus" title="Writing status"><option value="planned">Planned</option><option value="writing">Writing</option><option value="revising">Revising</option><option value="final">Final</option></select>
+                  <button id="deleteDraftBtn" class="danger-text-btn" title="Move this document to Trash">Trash</button>
+                  <button id="setActiveSceneBtn" class="secondary-btn" title="Use this scene as the project narrative cursor">◎ Set active</button><button id="draftReferenceBtn" class="secondary-btn" title="Add document as context">@ Reference</button>
+                  <button id="saveDraftBtn" class="primary-btn" title="Create a meaningful revision checkpoint">Checkpoint</button>
                 </div>
               </div>
               <textarea id="draftEditor" class="draft-editor" placeholder="Write the scene here…"></textarea>
               <div class="draft-footer"><span id="draftSaveStatus">No document selected</span><span id="draftStats">0 words</span></div>
             </section>
             <aside class="draft-sidecar">
-              <div class="pane-head"><div><span class="eyebrow">History</span><h2>Revisions</h2></div><button id="newDependencyBtn" class="icon-btn" title="Scene dependency">＋</button></div>
-              <div id="revisionList" class="revision-list"></div>
+              <div class="pane-head"><div><span class="eyebrow">Inspector</span><h2>Scene</h2></div><button id="newDependencyBtn" class="icon-btn" title="Scene dependency">＋</button></div>
+              <div class="sidecar-section"><div class="section-title-row"><span class="section-label">Checkpoints</span><span class="revision-badge">History</span></div><div id="revisionList" class="revision-list"></div></div>
               <div class="sidecar-section"><div class="section-title-row"><span class="section-label">Scene dependencies</span><span id="dependencyStatus" class="revision-badge">0</span></div><div id="dependencyList" class="dependency-list"><div class="empty-note">Select a scene to manage prerequisites.</div></div></div>
-              <div class="sidecar-section"><span class="section-label">AI suggestions</span><div id="suggestionCards" class="suggestion-cards"><div class="empty-note">Generated alternatives and accepted edits can live here.</div></div></div>
+              <div class="sidecar-section"><span class="section-label">Review & proposals</span><div id="suggestionCards" class="suggestion-cards"><div class="empty-note">State proposals and assistant alternatives related to this writing can be reviewed here without changing canon automatically.</div></div></div>
             </aside>
           </div>
         </section>
@@ -202,10 +238,12 @@
             <header class="world-header">
               <div><span class="eyebrow">World Bible</span><h1 id="worldTitle">Main</h1><p id="worldDescription">Canonical entities, variants, relationships, timeline, and lore.</p></div>
               <div class="world-actions">
+                <button id="continuityBtn" class="secondary-btn">Continuity</button>
+                <button id="compareBranchBtn" class="secondary-btn">Compare branches</button>
                 <button id="compareWorldBtn" class="secondary-btn">Compare worlds</button>
                 <button id="snapshotBtn" class="secondary-btn">Snapshot</button>
                 <button id="sandboxBtn" class="secondary-btn">What-if</button>
-                <button id="newEntityBtn" class="primary-btn">＋ New entity</button>
+                <button id="newEntityBtn" class="primary-btn">＋ New</button>
               </div>
             </header>
             <nav class="world-tabs" id="worldTabs">
@@ -219,34 +257,47 @@
               <button data-world-tab="timeline">Timeline</button>
               <button data-world-tab="worlds">Worlds & branches</button>
             </nav>
-            <div class="world-content">
-              <div class="world-filter-row">
-                <label class="search-field"><span>⌕</span><input id="worldSearch" placeholder="Search this world…" /></label>
-                <div id="worldTagFilters" class="inline-tags"></div>
-              </div>
-              <div id="worldGrid" class="world-grid"></div>
-              <div id="worldEmpty" class="empty-state">No entries in this section yet.</div>
+            <div class="world-content world-library-shell">
+              <aside class="world-library-rail">
+                <div class="section-title-row"><span class="section-label">Library</span><button id="newWorldFolderBtn" class="mini-icon-btn" title="New World Bible folder">＋</button></div>
+                <button id="worldAllFolderBtn" class="library-tree-root active" type="button">◇ All entries</button>
+                <div id="worldFolderTree" class="world-folder-tree"></div>
+                <div class="section-title-row world-library-subhead"><span class="section-label">Collections</span><button id="newCollectionBtn" class="mini-icon-btn" title="New collection">＋</button></div>
+                <div id="worldCollections" class="world-collection-list"></div>
+                <div class="section-title-row world-library-subhead"><span class="section-label">Views</span><button id="newSavedViewBtn" class="mini-icon-btn" title="Save current view">＋</button></div>
+                <div id="worldSavedViews" class="world-saved-views"></div>
+              </aside>
+              <section class="world-library-main">
+                <div class="world-filter-row">
+                  <label class="search-field"><span>⌕</span><input id="worldSearch" placeholder="Search the World Bible…" /></label>
+                  <div id="worldTagFilters" class="inline-tags"></div>
+                </div>
+                <div id="worldGrid" class="world-grid"></div>
+                <div id="worldEmpty" class="empty-state"><b>Nothing here yet.</b><span>Describe a character, location, item, or idea normally and Arline will structure it underneath.</span><button id="worldEmptyCreateBtn" class="tiny-btn">＋ Quick create</button></div>
+              </section>
             </div>
           </div>
         </section>
 
-        <!-- DATA -->
+        <!-- FEEDBACK LAB -->
         <section id="dataView" class="workspace-view" data-view-panel="data">
-          <div class="data-page">
-            <header class="page-header"><div><span class="eyebrow">Feedback flywheel</span><h1>Dataset</h1><p>Generated prose remains a candidate until you accept, edit, or reject it.</p></div></header>
+          <div class="data-page feedback-lab">
+            <header class="page-header"><div><span class="eyebrow">Learning loop</span><h1>Feedback Lab</h1><p>Review Arline's output. Training and evaluation data are produced underneath as a consequence of your decisions.</p></div><button id="feedbackAdvancedToggle" class="secondary-btn">Data & evaluation</button></header>
             <div id="datasetCards" class="metric-grid"></div>
-            <section class="data-section">
-              <div class="section-head"><div><h2>Exports</h2><p>One reviewed run can feed master, SFT, preference, and evaluator datasets.</p></div></div>
+            <nav class="feedback-tabs"><button class="active" data-feedback-tab="queue">Review queue</button><button data-feedback-tab="comparisons">Comparisons</button><button data-feedback-tab="reviewed">Reviewed</button></nav>
+            <section class="feedback-workbench">
+              <div id="feedbackQueue" class="feedback-queue"></div>
+              <div id="feedbackQueueEmpty" class="empty-state"><b>Nothing waiting for review.</b><span>New generated prose will appear here until you accept, edit, or reject it.</span></div>
+            </section>
+            <section id="feedbackAdvanced" class="data-section feedback-advanced hidden">
+              <div class="section-head"><div><h2>Data & evaluation</h2><p>Exports are advanced artifacts; lineage remains attached automatically.</p></div></div>
               <div class="export-grid">
                 <button data-export="master"><b>Master records</b><span>Full lineage and artifacts</span></button>
-                <button data-export="sft"><b>SFT</b><span>Accepted WCF → final prose</span></button>
-                <button data-export="preference"><b>Preference</b><span>Chosen vs rejected candidate</span></button>
+                <button data-export="sft"><b>SFT</b><span>Accepted context → final prose</span></button>
+                <button data-export="preference"><b>Preference</b><span>Chosen vs rejected candidates</span></button>
                 <button data-export="eval"><b>Evaluator</b><span>Context + issue labels</span></button>
               </div>
-            </section>
-            <section class="data-section">
-              <div class="section-head"><div><h2>Lineage policy</h2><p>Every sample keeps project, world, branch, WCF, projection, validator, model, and revision versions.</p></div></div>
-              <div class="policy-card"><code>generated-only ≠ positive</code><code>edited + accepted = gold</code><code>rejected = negative candidate</code><code>forked continuations = preference opportunity</code></div>
+              <div class="policy-card"><code>generated ≠ accepted</code><code>edited + accepted = gold</code><code>rejected = negative</code><code>chat forks = comparison opportunity</code></div>
             </section>
           </div>
         </section>
@@ -280,7 +331,7 @@
       </div>
       <div class="inspector-panel" data-inspector-panel="context">
         <label>Projection mode<select id="projectionMode"><option value="off">Off</option><option value="conservative">Conservative</option><option value="balanced" selected>Balanced</option><option value="vivid">Vivid</option></select></label>
-        <div id="scopeVisualization" class="scope-visualization">No active context.</div>
+        <div id="scopeVisualization" class="scope-visualization">No active context.</div><div id="contextWhy" class="context-why"><div class="empty-note">Analyze to see why each context item was included.</div></div>
         <div class="subtabs"><button class="active" data-subtab="wcf">WCF</button><button data-subtab="brief">Brief</button><button data-subtab="workspace">Workspace</button><button data-subtab="projection">Projection</button><button data-subtab="aif">AIF</button></div>
         <pre id="wcfOutput" class="code-output active" data-subpanel="wcf">Analyze first.</pre><pre id="briefOutput" class="code-output" data-subpanel="brief">No brief.</pre><pre id="workspaceContextOutput" class="code-output" data-subpanel="workspace">No workspace context.</pre><pre id="projectionOutput" class="code-output" data-subpanel="projection">No projections.</pre><pre id="aifOutput" class="code-output" data-subpanel="aif">No AIF-Core.</pre>
       </div>
@@ -309,8 +360,20 @@
     <!-- Generic form modal -->
     <dialog id="formDialog" class="form-dialog"><form method="dialog"><div class="dialog-head"><div><span id="formEyebrow" class="eyebrow">Create</span><h2 id="formTitle">New item</h2><p id="formDescription"></p></div><button value="cancel" class="icon-btn">×</button></div><div id="formFields" class="form-fields"></div><div class="dialog-actions"><button value="cancel" class="secondary-btn">Cancel</button><button id="formSubmitBtn" value="default" class="primary-btn">Save</button></div></form></dialog>
 
+    <!-- Quick Create -->
+    <dialog id="quickCreateDialog" class="quick-create-dialog">
+      <form method="dialog" id="quickCreateForm">
+        <div class="dialog-head"><div><span class="eyebrow">Natural creation</span><h2>Create something</h2><p>Describe it normally. Arline handles the schema underneath.</p></div><button value="cancel" class="icon-btn">×</button></div>
+        <textarea id="quickCreateInput" rows="5" placeholder="Apartemen Puncak Dharmahusada lantai 3 unit A0325"></textarea>
+        <div id="quickCreatePreview" class="quick-create-preview"><span class="preview-icon">◇</span><div><b>Start typing…</b><small>Entity, world, project file, or project will be inferred.</small></div></div>
+        <div class="quick-create-options"><label>Force type<select id="quickCreateKind"><option value="">Auto detect</option><option value="entity">Entity / sheet</option><option value="world">World</option><option value="project">Project</option><option value="folder">Project folder</option><option value="document">Project document</option></select></label><button id="quickCreateAdvancedBtn" type="button" class="ghost-btn">Advanced…</button></div>
+        <div class="dialog-actions"><button value="cancel" class="secondary-btn">Cancel</button><button id="quickCreateSubmitBtn" value="default" class="primary-btn">Create</button></div>
+      </form>
+    </dialog>
+    <div id="referencePeek" class="reference-peek hidden"></div>
+
     <!-- Feedback modal -->
-    <dialog id="feedbackDialog" class="feedback-dialog"><form method="dialog"><div class="dialog-head"><div><span class="eyebrow">Dataset feedback</span><h2 id="feedbackTitle">Review candidate</h2></div><button value="cancel" class="icon-btn">×</button></div><fieldset><legend>Issue labels</legend><div id="issueGrid" class="issue-grid"></div></fieldset><label>Note<textarea id="feedbackNote" rows="3"></textarea></label><label id="editedStoryLabel" class="hidden">Your accepted revision<textarea id="editedStory" rows="18"></textarea></label><div class="dialog-actions"><button value="cancel" class="secondary-btn">Cancel</button><button id="feedbackSubmitBtn" value="default" class="primary-btn">Save feedback</button></div></form></dialog>
+    <dialog id="feedbackDialog" class="feedback-dialog"><form method="dialog"><div class="dialog-head"><div><span class="eyebrow">Feedback Lab</span><h2 id="feedbackTitle">Review candidate</h2></div><button value="cancel" class="icon-btn">×</button></div><fieldset><legend>Issue labels</legend><div id="issueGrid" class="issue-grid"></div></fieldset><label>Note<textarea id="feedbackNote" rows="3"></textarea></label><label id="editedStoryLabel" class="hidden">Your accepted revision<textarea id="editedStory" rows="18"></textarea></label><div class="dialog-actions"><button value="cancel" class="secondary-btn">Cancel</button><button id="feedbackSubmitBtn" value="default" class="primary-btn">Save feedback</button></div></form></dialog>
 
     <!-- Compare modal -->
     <dialog id="compareDialog" class="compare-dialog"><div class="dialog-head"><div><span class="eyebrow">Diff</span><h2 id="compareTitle">Compare</h2></div><button id="closeCompareBtn" class="icon-btn">×</button></div><div id="compareBody" class="compare-body"></div></dialog>

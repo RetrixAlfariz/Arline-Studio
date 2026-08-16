@@ -159,6 +159,20 @@ class RuntimeConfig:
                 value = value[:-len(suffix)]
         return value.rstrip("/")
 
+    @staticmethod
+    def portable_path(value: str) -> Path:
+        """Interpret config paths consistently on Windows, Linux, and WSL.
+
+        Older Arline configs used Windows backslashes. On POSIX, ``Path`` treats
+        those as literal filename characters, which could create a file named
+        ``data\\arline_history.db`` beside the source tree. Normalize only on
+        non-Windows hosts so existing Windows behavior stays unchanged.
+        """
+        text = str(value).strip()
+        if os.name != "nt":
+            text = text.replace("\\", "/")
+        return Path(text)
+
     @classmethod
     def load(cls, path: Path | str = DEFAULT_CONFIG_PATH):
         path = Path(path)
@@ -277,19 +291,19 @@ class RuntimeConfig:
                 story_target_ratio_warn=float(rr.get("story_target_ratio_warn", 0.35)),
             ),
             artifacts=ArtifactConfig(
-                output_root=Path(str(art.get("output_root", "output"))),
-                saved_root=Path(str(art.get("saved_root", "output/saved"))),
+                output_root=cls.portable_path(str(art.get("output_root", "output"))),
+                saved_root=cls.portable_path(str(art.get("saved_root", "output/saved"))),
             ),
             history=HistoryConfig(
-                database_path=Path(str(hist.get("database_path", "data/arline_history.db"))),
-                dataset_root=Path(str(hist.get("dataset_root", "data/datasets"))),
+                database_path=cls.portable_path(str(hist.get("database_path", "data/arline_history.db"))),
+                dataset_root=cls.portable_path(str(hist.get("dataset_root", "data/datasets"))),
                 recent_limit=int(hist.get("recent_limit", 100)),
                 continuity_turns=int(hist.get("continuity_turns", 2)),
                 continuity_chars=int(hist.get("continuity_chars", 12000)),
                 smart_hybrid_continuity=bool(hist.get("smart_hybrid_continuity", True)),
             ),
             workspace=WorkspaceConfig(
-                database_path=Path(str(ws.get("database_path", hist.get("database_path", "data/arline_history.db")))),
+                database_path=cls.portable_path(str(ws.get("database_path", hist.get("database_path", "data/arline_history.db")))),
                 default_project_id=(str(ws.get("default_project_id", "")).strip() or None),
                 context_enabled=bool(ws.get("context_enabled", True)),
                 mention_limit=int(ws.get("mention_limit", 20)),

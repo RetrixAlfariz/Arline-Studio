@@ -12,7 +12,7 @@ from typing import Any, Iterable
 from uuid import uuid4
 
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 VALID_FEEDBACK = {"unreviewed", "accepted", "edited_accept", "rejected"}
 
 
@@ -117,6 +117,10 @@ class HistoryStore:
                     session_kind TEXT NOT NULL DEFAULT 'chat',
                     tags_json TEXT NOT NULL DEFAULT '[]',
                     workspace_refs_json TEXT NOT NULL DEFAULT '[]',
+                    parent_session_id TEXT,
+                    forked_from_turn_id TEXT,
+                    scratch_mode INTEGER NOT NULL DEFAULT 0,
+                    world_fork_id TEXT,
                     last_model TEXT,
                     last_mode TEXT,
                     last_reasoning TEXT
@@ -172,6 +176,10 @@ class HistoryStore:
                 ("session_kind", "TEXT NOT NULL DEFAULT 'chat'"),
                 ("tags_json", "TEXT NOT NULL DEFAULT '[]'"),
                 ("workspace_refs_json", "TEXT NOT NULL DEFAULT '[]'"),
+                ("parent_session_id", "TEXT"),
+                ("forked_from_turn_id", "TEXT"),
+                ("scratch_mode", "INTEGER NOT NULL DEFAULT 0"),
+                ("world_fork_id", "TEXT"),
             ):
                 if name not in session_columns:
                     con.execute(f"ALTER TABLE sessions ADD COLUMN {name} {definition}")
@@ -216,6 +224,10 @@ class HistoryStore:
         session_kind: str = "chat",
         tags: list[str] | None = None,
         workspace_refs: list[dict[str, Any]] | None = None,
+        parent_session_id: str | None = None,
+        forked_from_turn_id: str | None = None,
+        scratch_mode: bool = False,
+        world_fork_id: str | None = None,
     ) -> dict[str, Any]:
         session_id = _id("CHAT")
         now = utc_now()
@@ -225,13 +237,15 @@ class HistoryStore:
                 """
                 INSERT INTO sessions(
                     id,title,created_at,updated_at,pinned,archived,project,
-                    project_id,world_id,branch_id,folder_id,session_kind,tags_json,workspace_refs_json
-                ) VALUES(?,?,?,?,0,0,?,?,?,?,?,?,?,?)
+                    project_id,world_id,branch_id,folder_id,session_kind,tags_json,workspace_refs_json,
+                    parent_session_id,forked_from_turn_id,scratch_mode,world_fork_id
+                ) VALUES(?,?,?,?,0,0,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     session_id, title, now, now, project, project_id, world_id,
                     branch_id, folder_id, session_kind, json.dumps(tags or [], ensure_ascii=False),
                     json.dumps(workspace_refs or [], ensure_ascii=False),
+                    parent_session_id, forked_from_turn_id, 1 if scratch_mode else 0, world_fork_id,
                 ),
             )
         return self.get_session_meta(session_id)
@@ -344,6 +358,8 @@ class HistoryStore:
         session_kind: str | None = None,
         tags: list[str] | None = None,
         workspace_refs: list[dict[str, Any]] | None = None,
+        scratch_mode: bool | None = None,
+        world_fork_id: str | None = None,
     ) -> dict[str, Any]:
         fields: list[str] = []
         params: list[Any] = []
@@ -376,6 +392,12 @@ class HistoryStore:
         if workspace_refs is not None:
             fields.append("workspace_refs_json=?")
             params.append(json.dumps(workspace_refs, ensure_ascii=False))
+        if scratch_mode is not None:
+            fields.append("scratch_mode=?")
+            params.append(1 if scratch_mode else 0)
+        if world_fork_id is not None:
+            fields.append("world_fork_id=?")
+            params.append(world_fork_id or None)
         if fields:
             fields.append("updated_at=?")
             params.append(utc_now())
@@ -423,10 +445,16 @@ class HistoryStore:
             project_id=source.get("project_id"),
             world_id=source.get("world_id"),
             branch_id=source.get("branch_id"),
-            folder_id=source.get("folder_id"),
+            # Chat forks remain in the chat layer. Project folders are a
+            # document/filesystem concern in v1.1, not conversation storage.
+            folder_id=None,
             session_kind=source.get("session_kind") or "chat",
             tags=source.get("tags") or [],
             workspace_refs=source.get("workspace_refs") or [],
+            parent_session_id=session_id,
+            forked_from_turn_id=through_turn_id or (turns[-1]["id"] if turns else None),
+            scratch_mode=bool(source.get("scratch_mode")),
+            world_fork_id=source.get("world_fork_id"),
         )
         for index, turn in enumerate(turns, start=1):
             lineage = dict(turn.get("lineage") or {})
@@ -468,11 +496,80 @@ class HistoryStore:
                 )
         return self.get_session(fork["id"])
 
+    def list_session_forks(self, session_id: str) -> dict[str, Any]:
+        """Return the root/children graph for the conversation branch family."""
+        source = self.get_session_meta(session_id)
+        root_id = source.get("parent_session_id") or session_id
+        # Walk upward because forks can fork forks.
+        seen: set[str] = set()
+        current = source
+        while current.get("parent_session_id") and current["id"] not in seen:
+            seen.add(current["id"])
+            try:
+                current = self.get_session_meta(current["parent_session_id"])
+                root_id = current["id"]
+            except KeyError:
+                break
+        with self._connection() as con:
+            rows = con.execute(
+                "SELECT id FROM sessions WHERE id=? OR parent_session_id IS NOT NULL ORDER BY created_at ASC",
+                (root_id,),
+            ).fetchall()
+        all_rows = [self.get_session_meta(row["id"]) for row in rows]
+        # Keep only descendants of the located root.
+        by_parent: dict[str, list[dict[str, Any]]] = {}
+        for item in all_rows:
+            if item.get("parent_session_id"):
+                by_parent.setdefault(item["parent_session_id"], []).append(item)
+        descendants: list[dict[str, Any]] = []
+        queue = [root_id]
+        visited: set[str] = set()
+        while queue:
+            parent = queue.pop(0)
+            if parent in visited:
+                continue
+            visited.add(parent)
+            for child in by_parent.get(parent, []):
+                descendants.append(child)
+                queue.append(child["id"])
+        root = self.get_session_meta(root_id)
+        return {"root": root, "sessions": [root, *descendants], "active_id": session_id}
+
     def delete_session(self, session_id: str) -> None:
         with self._lock, self._connection() as con:
             cur = con.execute("DELETE FROM sessions WHERE id=?", (session_id,))
             if cur.rowcount == 0:
                 raise KeyError(session_id)
+
+    def delete_sessions_by_scope(
+        self, *, project_id: str | None = None, world_id: str | None = None,
+        branch_id: str | None = None
+    ) -> int:
+        """Delete chats bound to a workspace scope that is being deleted."""
+        filters: list[str] = []
+        params: list[Any] = []
+        for column, value in (
+            ("project_id", project_id), ("world_id", world_id), ("branch_id", branch_id)
+        ):
+            if value is not None:
+                filters.append(f"{column}=?")
+                params.append(value)
+        if not filters:
+            raise ValueError("At least one scope id is required")
+        with self._lock, self._connection() as con:
+            cur = con.execute(
+                f"DELETE FROM sessions WHERE {' AND '.join(filters)}", params
+            )
+            return max(0, cur.rowcount)
+
+    def clear_folder_reference(self, folder_id: str) -> int:
+        """Keep chats when a folder is removed, but move them back to unfiled."""
+        with self._lock, self._connection() as con:
+            cur = con.execute(
+                "UPDATE sessions SET folder_id=NULL,updated_at=? WHERE folder_id=?",
+                (utc_now(), folder_id),
+            )
+            return max(0, cur.rowcount)
 
     def add_turn(
         self,
@@ -654,6 +751,86 @@ class HistoryStore:
             "preference_ready": by.get("edited_accept", 0),
         }
 
+    def feedback_queue(self, *, status: str = "unreviewed", limit: int = 100, project_id: str | None = None) -> list[dict[str, Any]]:
+        limit = max(1, min(int(limit), 500))
+        where = ["t.feedback_status=?", "s.archived=0"]
+        params: list[Any] = [status]
+        if project_id:
+            where.append("s.project_id=?")
+            params.append(project_id)
+        params.append(limit)
+        with self._connection() as con:
+            rows = con.execute(
+                f"""
+                SELECT t.*, s.title AS session_title, s.project_id, s.world_id, s.branch_id,
+                       s.parent_session_id, s.forked_from_turn_id
+                FROM turns t JOIN sessions s ON s.id=t.session_id
+                WHERE {' AND '.join(where)}
+                ORDER BY t.updated_at DESC, t.created_at DESC
+                LIMIT ?
+                """,
+                params,
+            ).fetchall()
+        result = []
+        for row in rows:
+            item = self._turn_row(row, include_context=True)
+            item.update({
+                "session_title": row["session_title"],
+                "project_id": row["project_id"],
+                "world_id": row["world_id"],
+                "branch_id": row["branch_id"],
+                "parent_session_id": row["parent_session_id"],
+                "forked_from_turn_id": row["forked_from_turn_id"],
+            })
+            result.append(item)
+        return result
+
+    def preference_opportunities(self, *, project_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        """Return sibling chat forks that can be reviewed as preference pairs.
+
+        The pair is intentionally lineage-driven: two sessions only become a
+        comparison when they forked from the same parent turn.  This avoids
+        pretending unrelated generations are preference examples.
+        """
+        where = ["c.parent_session_id IS NOT NULL", "c.forked_from_turn_id IS NOT NULL", "c.archived=0"]
+        params: list[Any] = []
+        if project_id:
+            where.append("c.project_id=?")
+            params.append(project_id)
+        params.append(max(1, min(int(limit), 300)))
+        with self._connection() as con:
+            children = con.execute(
+                f"SELECT c.* FROM sessions c WHERE {' AND '.join(where)} ORDER BY c.updated_at DESC LIMIT ?",
+                params,
+            ).fetchall()
+            grouped: dict[tuple[str, str], list[sqlite3.Row]] = {}
+            for row in children:
+                grouped.setdefault((row["parent_session_id"], row["forked_from_turn_id"]), []).append(row)
+            opportunities = []
+            for (parent_id, turn_id), siblings in grouped.items():
+                parent_turn = con.execute("SELECT user_prompt,story FROM turns WHERE id=?", (turn_id,)).fetchone()
+                candidates = []
+                # Include the original parent continuation after the fork point, if any.
+                parent_next = con.execute(
+                    "SELECT * FROM turns WHERE session_id=? AND rowid>(SELECT rowid FROM turns WHERE id=?) ORDER BY rowid ASC LIMIT 1",
+                    (parent_id, turn_id),
+                ).fetchone()
+                if parent_next:
+                    candidates.append({"session_id": parent_id, "turn_id": parent_next["id"], "story": parent_next["story"], "label": "Original"})
+                for sibling in siblings:
+                    first = con.execute("SELECT * FROM turns WHERE session_id=? ORDER BY rowid ASC LIMIT 1", (sibling["id"],)).fetchone()
+                    if first:
+                        candidates.append({"session_id": sibling["id"], "turn_id": first["id"], "story": first["story"], "label": sibling["title"]})
+                if len(candidates) >= 2:
+                    opportunities.append({
+                        "parent_session_id": parent_id,
+                        "forked_from_turn_id": turn_id,
+                        "prompt": parent_turn["user_prompt"] if parent_turn else "",
+                        "context_story": parent_turn["story"] if parent_turn else "",
+                        "candidates": candidates,
+                    })
+            return opportunities[:limit]
+
     def export_dataset(self, kind: str, output_dir: Path | str) -> DatasetExport:
         kind = kind.lower().strip()
         if kind not in {"master", "sft", "preference", "eval"}:
@@ -746,6 +923,10 @@ class HistoryStore:
             "session_kind": (row["session_kind"] if "session_kind" in row.keys() else "chat") or "chat",
             "tags": self._loads(row["tags_json"] if "tags_json" in row.keys() else "[]", []),
             "workspace_refs": self._loads(row["workspace_refs_json"] if "workspace_refs_json" in row.keys() else "[]", []),
+            "parent_session_id": row["parent_session_id"] if "parent_session_id" in row.keys() else None,
+            "forked_from_turn_id": row["forked_from_turn_id"] if "forked_from_turn_id" in row.keys() else None,
+            "scratch_mode": bool(row["scratch_mode"]) if "scratch_mode" in row.keys() else False,
+            "world_fork_id": row["world_fork_id"] if "world_fork_id" in row.keys() else None,
             "last_model": row["last_model"],
             "last_mode": row["last_mode"],
             "last_reasoning": row["last_reasoning"],

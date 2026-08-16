@@ -1,11 +1,112 @@
-# Arline Studio v1
+# Arline Studio 1.1
 
-ARLINE STUDIO is a project that are made for making story
+Arline Studio is a Project that mainly focused on making story
 
-__WIP__
+## v1.1 mental model
 
-## How to use
+- **World Bible** — what is true: worlds, entity sheets, variants, relationships, canon facts, lore, timeline.
+- **Project** — what you are making: a focused story workspace, folders, manuscript, notes, research, assets, and references.
+- **Manuscript** — what you have written: scenes, chapters, notes, research, and outline views.
+- **Chat** — what you are exploring: conversations, forks, scratch/what-if exploration.
+- **Scene** — where you are narratively: POV, location, participants, narrative time, target outcome.
+- **Feedback Lab** — what Arline learns from your choices: review, accept/edit/reject, fork comparisons, advanced dataset exports.
+- **Context Stack** — what Arline is allowed to use for the current generation.
 
->uv sync
-<br>
->uv run python app.py
+Opening something in the UI does **not** automatically put it into context. Navigation state and Context Stack are deliberately separate.
+
+## Quick start
+
+1. Install the project dependencies used by your existing Arline setup. `uv sync`
+2. Start LM Studio and expose its local API (the default config expects `127.0.0.1:1234`).
+3. From the repository root, run either:
+
+```powershell
+python app.py
+```
+
+or the existing CLI entry point:
+
+```powershell
+python main.py
+```
+
+4. Open the Studio URL configured under `[ui]` in `config/arline.toml` (default port `7860`).
+
+The SQLite database, exports, backups, and generated output are runtime data and are intentionally not included in release ZIPs.
+
+## The v1.1 workflow
+
+### Create naturally
+
+Use **Quick Create** instead of filling schema-heavy forms. For example:
+
+```text
+Taman Bunga di belakang kampus
+```
+
+Arline can infer a Location sheet, suggest possible duplicate identities, and place the sheet in a World Bible folder. Advanced family/variant/JSON editing is still available from the Inspector.
+
+### Organize the World Bible
+
+World Bible folders are organizational only. A sheet remains shared knowledge and is never made Project-owned by putting it in a folder.
+
+Use:
+
+- **Folders** for one structural location.
+- **Tags** for many-to-many descriptors.
+- **Collections** for curated groups without moving a sheet.
+- **Saved Views** for reusable filters/query views.
+
+### Write in Manuscript
+
+Project folders contain Project files only. Manuscript items use explicit types such as Scene, Chapter, Note, Research, and Outline. Writing status is separate:
+
+```text
+Planned → Writing → Revising → Final
+```
+
+Editing autosaves recovery state without flooding revision history. Use **Checkpoint** when you want a meaningful durable revision.
+
+### Use Context Stack deliberately
+
+The Context Stack tracks the active Project, World/branch, Scene, Chat fork, Run Profile, explicit references, pins, and overrides. `@references` can use Mention / Context / Deep depth without changing the World Bible itself.
+
+### Fork without polluting canon
+
+A Chat fork is only a conversation fork. It does not become a semantic World branch unless you explicitly promote it. Scratch mode prevents proposed state changes from being staged into canon.
+
+### Review instead of silently learning
+
+Generated prose enters **Feedback Lab** as reviewable output. Accept/edit/reject decisions and fork comparisons can later feed SFT, preference, and evaluation exports; dataset plumbing stays in the advanced layer rather than dominating the everyday UI.
+
+## Data safety
+
+Normal destructive actions use **Trash**, not immediate permanent deletion. Activity Center provides Restore and explicit permanent deletion. Archive is separate from Trash.
+
+Before a database schema upgrade, v1.1 creates a consistent SQLite backup under the runtime database directory's `backups/` folder. Legacy Manuscript rows are migrated from the old broad Draft vocabulary to the v1.1 Scene/writing-state model.
+
+Project deletion never owns or deletes shared World Bible sheets. Project bundles reference World Bible resources rather than silently embedding ownership copies.
+
+## Useful shortcuts
+
+- `Ctrl/Cmd + K` — global Search / Command Palette
+- `Ctrl/Cmd + Shift + P` — Command Palette
+- `Ctrl/Cmd + N` — Quick Create
+- `Ctrl/Cmd + Shift + N` — New Chat
+- `Ctrl/Cmd + S` — create a meaningful Manuscript checkpoint
+- `Ctrl/Cmd + Z` — undo the most recent Trash action when not editing text
+- `Alt + Left / Right` — navigation history
+
+## Regression tests
+
+The v1.1 foundation suite uses temporary databases and does not require a running LM Studio server:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+A release pass should also include:
+
+```powershell
+python -m compileall -q src
+node --check src/interface/web/static/arline.js
