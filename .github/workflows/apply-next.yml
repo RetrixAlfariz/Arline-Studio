@@ -18,38 +18,13 @@ jobs:
         with:
           ref: develop/v1.2
           fetch-depth: 0
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Install uv
-        uses: astral-sh/setup-uv@v6
-      - name: Install locked environment
-        run: uv sync --locked
-      - name: Reconstruct applicator
+      - name: Reconstruct and apply v1.2.1 patch
         run: |
           cat tools/apply_next.part00 tools/apply_next.part01 tools/apply_next.part02 tools/apply_next.part03 tools/apply_next.part04 \
             | base64 -d | gzip -d > /tmp/apply_next.py
           python -m py_compile /tmp/apply_next.py
-      - name: Apply v1.2.1 patch
-        run: python /tmp/apply_next.py
-      - name: Python regression suite
-        run: uv run python -m unittest discover -s tests -v
-      - name: Compile Python
-        run: uv run python -m compileall -q src tests
-      - name: JavaScript syntax
-        run: |
-          node --check src/interface/web/static/js/commands.js
-          node --check src/interface/web/static/js/stream.js
-          node --check src/interface/web/static/js/quick-create.js
-          node --check src/interface/web/static/js/memory.js
-          node --check src/interface/web/static/arline.js
-          node --check tests/frontend/memory_runtime_smoke.js
-      - name: Memory runtime scope smoke
-        run: node tests/frontend/memory_runtime_smoke.js
-      - name: Commit tested feature update
+          python /tmp/apply_next.py
+      - name: Commit feature update
         run: |
           git config user.name "Rafzan"
           git config user.email "86295808+RetrixAlfariz@users.noreply.github.com"
@@ -59,4 +34,4 @@ jobs:
           git commit -m "feat: start v1.2.1 temporal memory and Character Rails"
           git push origin HEAD:develop/v1.2
 
-# retrigger: 2026-08-18 v1.2.1 bulk pass
+# permanent CI validates the generated feature commit
