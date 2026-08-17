@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - fix/v1.1-hardening-polish
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
@@ -15,6 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: fix/v1.1-hardening-polish
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
@@ -45,4 +49,4 @@ jobs:
           git add -A
           git diff --cached --stat
           git commit -m 'fix: harden v1.1 architecture and polish composer'
-          git push
+          git push origin HEAD:fix/v1.1-hardening-polish
