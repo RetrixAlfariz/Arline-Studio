@@ -14,6 +14,7 @@ class V11QuickCreateFeatureTests(unittest.TestCase):
         app = (ROOT / "src/interface/web/app.py").read_text(encoding="utf-8")
 
         self.assertIn("/static/js/quick-create.js?v=1.1.4-qc", stream)
+        self.assertIn("installQuickCreateProjectScopeBridge", stream)
         for token in (
             'value="entity:character"', 'value="entity:location"',
             'value="entity:item"', 'value="entity:organization"',
