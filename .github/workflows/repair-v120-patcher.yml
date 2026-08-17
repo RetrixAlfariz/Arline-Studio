@@ -1,0 +1,36 @@
+name: Repair v1.2.0 patcher
+
+on:
+  push:
+    branches:
+      - develop/v1.2
+    paths:
+      - tools/repair_v120_patcher.py
+      - .github/workflows/repair-v120-patcher.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop/v1.2
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Repair patcher
+        run: python tools/repair_v120_patcher.py
+      - name: Validate patcher syntax
+        run: python -m py_compile tools/complete_v120_foundation.py
+      - name: Commit repair
+        run: |
+          git config user.name "Rafzan"
+          git config user.email "86295808+RetrixAlfariz@users.noreply.github.com"
+          rm -f tools/repair_v120_patcher.py .github/workflows/repair-v120-patcher.yml
+          git add -A
+          git commit -m "fix: repair v1.2.0 completion patcher"
+          git push origin HEAD:develop/v1.2
