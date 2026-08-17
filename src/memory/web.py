@@ -36,14 +36,16 @@ class MemoryBackfillPayload(BaseModel):
 class MemoryRefreshPayload(BaseModel):
     document_id: str | None = None
     turn_id: str | None = None
+    world_id: str | None = None
+    branch_id: str | None = None
 
 
 def create_memory_router(*, service, store, foundation=None) -> APIRouter:
-    """Expose the v1.2.0 evidence/retrieval foundation without owning canon.
+    """Expose the v1.2 evidence/retrieval system without owning canon.
 
     The router intentionally exposes read/debug/index operations only. Accepted
     World Bible truth remains owned by WorkspaceStore and its explicit review
-    workflows.
+    workflows; timeline refresh only rebuilds derived temporal projections.
     """
 
     router = APIRouter(prefix="/api/memory", tags=["memory"])
@@ -190,6 +192,11 @@ def create_memory_router(*, service, store, foundation=None) -> APIRouter:
             return {"document": service.refresh_document(payload.document_id)}
         if payload.turn_id:
             return {"turn": service.refresh_turn(payload.turn_id)}
-        raise HTTPException(400, "Provide document_id or turn_id")
+        if payload.world_id:
+            refresh_timeline = getattr(service, "refresh_timeline_state", None)
+            if not callable(refresh_timeline):
+                raise HTTPException(409, "Timeline temporal projection is unavailable")
+            return {"timeline_state": refresh_timeline(payload.world_id, payload.branch_id)}
+        raise HTTPException(400, "Provide document_id, turn_id, or world_id")
 
     return router
