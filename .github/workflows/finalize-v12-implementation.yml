@@ -1,0 +1,53 @@
+name: Finalize v1.2 implementation
+
+on:
+  push:
+    branches:
+      - develop/v1.2
+    paths:
+      - tools/finalize_v12_implementation.py
+      - .github/workflows/finalize-v12-implementation.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop/v1.2
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Apply final v1.2 contract
+        run: python tools/finalize_v12_implementation.py
+      - name: Refresh lockfile
+        run: |
+          python -m pip install --quiet uv
+          uv lock
+      - name: Install
+        run: python -m pip install -e .
+      - name: Python regressions
+        run: python -m unittest discover -s tests -v
+      - name: Compile Python
+        run: python -m compileall -q src tests
+      - name: JavaScript syntax
+        run: |
+          node --check src/interface/web/static/js/commands.js
+          node --check src/interface/web/static/js/stream.js
+          if [ -f src/interface/web/static/js/memory.js ]; then node --check src/interface/web/static/js/memory.js; fi
+          node --check src/interface/web/static/arline.js
+      - name: Commit finalized branch
+        run: |
+          git config user.name "Rafzan"
+          git config user.email "86295808+RetrixAlfariz@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "feat: finalize v1.2 memory query foundation"
+          git push origin HEAD:develop/v1.2
