@@ -36,6 +36,9 @@ jobs:
           node --check src/interface/web/static/arline.js
       - name: Repository hygiene
         run: |
-          test ! -d src/arline_studio.egg-info
+          if git ls-files 'src/arline_studio.egg-info/**' | grep -q .; then
+            echo 'Generated egg-info is tracked in the repository.' >&2
+            exit 1
+          fi
           test ! -e tools/apply_v11_hardening.py
           test ! -e .github/workflows/apply-hardening.yml
