@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+from src.narrative.dynamics import SceneDynamicsPlanner
 from src.narrative.rails import CharacterRailParser
 
 from .arline_service import ArlineService
@@ -26,12 +27,14 @@ def _strip_persisted_rail_lines(text: str | None) -> str | None:
 def _analyze_v121(self: ArlineService, prompt: str, *, surface_history=None, workspace_context=None):
     compilation = CharacterRailParser.parse(prompt)
     if compilation.active and workspace_context is not None:
+        plans = SceneDynamicsPlanner.plan(compilation)
         workspace_context.scope["character_rails"] = {
             "active": True,
             "count": len(compilation.rails),
             "kinds": [rail.kind.value for rail in compilation.rails],
             "generation_only": True,
             "canon_commit": False,
+            "scene_dynamics": [plan.to_dict() for plan in plans],
         }
     return _ORIGINAL_ANALYZE(
         self,
@@ -64,9 +67,13 @@ def _compose_v121(
     if not compilation.active or not compilation.rendered_text:
         return model_input
 
+    dynamics = SceneDynamicsPlanner.render(compilation)
+    rail_payload = compilation.rendered_text.rstrip()
+    if dynamics:
+        rail_payload += "\n\n" + dynamics.rstrip()
     block = (
         f"{V121_RAIL_BLOCK_OPEN}\n"
-        f"{compilation.rendered_text.rstrip()}\n"
+        f"{rail_payload}\n"
         f"{V121_RAIL_BLOCK_CLOSE}\n\n"
     )
     marker = "<REQUEST>"
