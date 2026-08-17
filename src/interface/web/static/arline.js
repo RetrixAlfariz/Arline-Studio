@@ -95,6 +95,20 @@ const state = {
   conversationRenderLimit: 80,
 };
 
+// Public, read-only bridge for feature modules. Top-level `const state` is not
+// a Window property in browser scripts, so modules must use this interface
+// instead of reaching for window.state.
+window.ArlineRuntime = Object.freeze({
+  getState: () => state,
+  getScope: () => ({
+    projectId: state.activeProject?.id || null,
+    worldId: state.activeWorld?.id || null,
+    branchId: state.activeBranch?.id || null,
+    sessionId: state.activeSession?.id || null,
+    activeScene: state.activeScene || null,
+  }),
+});
+
 const ISSUE_LABELS = [
   "hallucination", "too_formal", "translationese", "repetitive",
   "semantic_echo", "bad_projection", "state_error", "relationship_error",

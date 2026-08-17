@@ -11,6 +11,26 @@
   };
   window.ArlineMemory = memoryState;
 
+  function appState() {
+    return window.ArlineRuntime?.getState?.() || {};
+  }
+
+  function activeScope() {
+    const current = appState();
+    const scope = window.ArlineRuntime?.getScope?.() || {};
+    const activeDocumentId = current.activeScene?.document_id || null;
+    const sceneCard = (current.sceneCards || []).find((item) => item.document_id === activeDocumentId) || null;
+    return {
+      projectId: scope.projectId || null,
+      worldId: scope.worldId || null,
+      branchId: scope.branchId || null,
+      sessionId: scope.sessionId || null,
+      storyOrder: memoryState.storyOrder ?? sceneCard?.sort_order ?? current.activeDocument?.sort_order ?? null,
+      worldTime: memoryState.worldTime ?? current.activeScene?.narrative_time ?? sceneCard?.narrative_time ?? null,
+      povVariantId: memoryState.povVariantId ?? current.activeScene?.pov_variant_id ?? sceneCard?.pov_variant_id ?? null,
+    };
+  }
+
   async function request(path, options = {}) {
     const response = await fetch(path, {
       ...options,
@@ -87,7 +107,8 @@
     button.disabled = true;
     button.textContent = "Indexing…";
     try {
-      const projectId = window.state?.activeProject?.id || null;
+      const projectId = activeScope().projectId;
+      if (!projectId) throw new Error("Open a project before running scoped Memory backfill.");
       const result = await request("/api/memory/backfill", {
         method: "POST",
         body: JSON.stringify({project_id: projectId, background: true}),
@@ -114,21 +135,18 @@
   }
 
   function currentScope(query) {
-    const projectId = window.state?.activeProject?.id || null;
-    const worldId = window.state?.activeWorld?.id || null;
-    const branchId = window.state?.activeBranch?.id || null;
-    const sessionId = window.state?.activeSession?.id || null;
+    const scope = activeScope();
     const refs = typeof window.collectPromptReferences === "function" ? window.collectPromptReferences() : [];
     return {
       query,
-      project_id: projectId,
-      world_id: worldId,
-      branch_id: branchId,
-      session_id: sessionId,
+      project_id: scope.projectId,
+      world_id: scope.worldId,
+      branch_id: scope.branchId,
+      session_id: scope.sessionId,
       context_lens: memoryState.lens,
-      story_order: memoryState.storyOrder,
-      world_time: memoryState.worldTime,
-      pov_variant_id: memoryState.povVariantId,
+      story_order: scope.storyOrder,
+      world_time: scope.worldTime,
+      pov_variant_id: scope.povVariantId,
       explicit_references: refs,
     };
   }
@@ -185,8 +203,9 @@
   }
 
   async function openResourceMemory(familyId, variantId) {
-    const worldId = window.state?.activeWorld?.id;
-    const branchId = window.state?.activeBranch?.id;
+    const scope = activeScope();
+    const worldId = scope.worldId;
+    const branchId = scope.branchId;
     const type = variantId ? "entity_variant" : "entity_family";
     const id = variantId || familyId;
     if (!worldId) return window.toast?.("Open a world first");
@@ -209,6 +228,10 @@
       window.toast?.(error.message, 6000);
     }
   }
+
+  // Tiny executable surface used by the runtime smoke test and future feature
+  // modules. It deliberately returns a snapshot instead of exposing mutable state.
+  window.ArlineMemoryRuntime = Object.freeze({ currentScope, activeScope });
 
   document.addEventListener("DOMContentLoaded", () => {
     injectSettings();

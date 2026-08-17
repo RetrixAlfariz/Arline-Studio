@@ -958,6 +958,15 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         lens = str(payload.context_lens or memory_config.default_lens or "scene").lower()
         if lens not in {"author", "scene", "pov"}:
             lens = memory_config.default_lens if memory_config.default_lens in {"author", "scene", "pov"} else "scene"
+        output_reserve = int(payload.visible_output_tokens) + (int(payload.reasoning_reserve_tokens) if payload.reasoning != "off" else 0)
+        fixed_reserve = (
+            initial_cfg.context_budget.safety_margin
+            + initial_cfg.context_budget.system_prompt_token_estimate
+            + initial_cfg.context_budget.minimum_writer_context_tokens
+            + int(ws_context.estimated_tokens or 0)
+        )
+        remaining = max(0, int(payload.context_length) - output_reserve - fixed_reserve)
+        memory_budget = min(memory_config.max_pack_tokens, remaining)
         memory_scope = MemoryQueryContext(
             project_id=project_id,
             world_id=world_id,
@@ -971,6 +980,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             explicit_references=refs,
             allow_scratch=bool(payload.scratch_mode),
             allow_future_author_knowledge=(lens == "author"),
+            token_budget=memory_budget,
         )
         try:
             result = memory_service.retrieve(prompt, memory_scope)
@@ -1962,7 +1972,9 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     @app.put("/api/projects/{project_id}/scene-cards/{document_id}")
     def set_scene_card(project_id: str, document_id: str, payload: SceneCardPayload):
         try:
-            return workspace.set_scene_card(project_id, document_id, **payload.model_dump())
+            card = workspace.set_scene_card(project_id, document_id, **payload.model_dump())
+            memory_service.schedule_document_refresh(document_id)
+            return card
         except KeyError as exc:
             raise HTTPException(404, "Project or document not found") from exc
         except ValueError as exc:
@@ -2203,6 +2215,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     @app.delete("/api/documents/{document_id}")
     def delete_document(document_id: str):
         try:
+            memory_service.cancel_document_refresh(document_id)
             workspace.delete_document(document_id)
             memory_service.forget_document(document_id)
         except KeyError as exc:
@@ -2678,6 +2691,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     @app.delete("/api/sessions/{session_id}")
     def delete_session(session_id: str):
         try:
+            memory_service.cancel_session_refreshes(session_id)
             history.delete_session(session_id)
             memory_service.forget_session(session_id)
         except KeyError as exc:

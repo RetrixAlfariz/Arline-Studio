@@ -125,6 +125,9 @@ final_k = 12
 max_per_source = 2
 rrf_k = 60
 trace_enabled = true
+# Hard ceiling for evidence packed into one model context. The runtime may
+# allocate less when the Context Compiler has less headroom.
+max_pack_tokens = 4096
 
 [memory.embedding]
 # Install the recommended model in LM Studio normally, then set its local

@@ -26,18 +26,23 @@ from .store import MemoryStore, make_id
 class QueryCompiler:
     """Deterministic-first narrative query compiler."""
 
+    STORY_CONTINUE_PATTERN = re.compile(
+        r"^\s*(?:please\s+)?(?:continue|write|lanjut(?:kan)?|tulis(?:kan)?)\b|"
+        r"\bcontinue\s+(?:the\s+)?(?:current\s+)?(?:scene|dialogue)\b|"
+        r"\b(?:write|tulis(?:kan)?)\s+(?:the\s+)?(?:next|current)?\s*(?:scene|adegan|dialogue)\b",
+        re.I,
+    )
     ROUTE_PATTERNS: list[tuple[QueryRoute, re.Pattern[str]]] = [
-        (QueryRoute.STORY_CONTINUE, re.compile(r"\b(continue|write|scene|dialogue|lanjut|tulis|adegan)\b", re.I)),
         (QueryRoute.EPISTEMIC_STATE, re.compile(r"\b(know|knew|believe|believed|suspect|aware|secret|tahu|percaya|curiga)\b", re.I)),
         (QueryRoute.TEMPORAL_STATE, re.compile(r"\b(before|after|at the time|used to|previously|historical|sebelum|setelah|saat itu|dulu)\b", re.I)),
-        (QueryRoute.SPATIAL_LOOKUP, re.compile(r"\b(where|inside|contains?|room|stored|located|near|adjacent|di mana|ruang|berisi|tersimpan)\b", re.I)),
+        (QueryRoute.BRANCH_COMPARE, re.compile(r"\b(compare branches?|alternate timeline|what-if|bandingkan cabang|timeline alternatif)\b", re.I)),
+        (QueryRoute.CONTINUITY_CHECK, re.compile(r"\b(continuity|contradiction|inconsistent|conflict|kontinuitas|kontradiksi|tidak konsisten)\b", re.I)),
+        (QueryRoute.GLOBAL_SUMMARY, re.compile(r"\b(summar(?:y|ize)|overview|across the chapter|recap|ringkas|rangkuman)\b", re.I)),
+        (QueryRoute.SPATIAL_LOOKUP, re.compile(r"\b(where|inside|contains?|room|stored|located|near|adjacent|happen(?:ed)?\s+where|di mana|ruang|berisi|tersimpan)\b", re.I)),
         (QueryRoute.THREAD_LOOKUP, re.compile(r"\b(unresolved|promise|mystery|goal|foreshadow|thread|belum selesai|janji|misteri|tujuan)\b", re.I)),
         (QueryRoute.WHY_CAUSAL, re.compile(r"\b(why|cause|caused|because|motivated|mengapa|kenapa|sebab)\b", re.I)),
         (QueryRoute.EVENT_LOOKUP, re.compile(r"\b(when|what happened|event|changed|happened|kapan|terjadi|peristiwa|berubah)\b", re.I)),
-        (QueryRoute.CONTINUITY_CHECK, re.compile(r"\b(continuity|contradiction|inconsistent|conflict|kontinuitas|kontradiksi|tidak konsisten)\b", re.I)),
-        (QueryRoute.BRANCH_COMPARE, re.compile(r"\b(compare branches?|alternate timeline|what-if|bandingkan cabang|timeline alternatif)\b", re.I)),
-        (QueryRoute.GLOBAL_SUMMARY, re.compile(r"\b(summar(?:y|ize)|overview|across the chapter|recap|ringkas|rangkuman)\b", re.I)),
-        (QueryRoute.CURRENT_STATE, re.compile(r"\b(current|currently|now|is|has|owns|status|sekarang|punya|milik|status)\b", re.I)),
+        (QueryRoute.CURRENT_STATE, re.compile(r"\b(current|currently|now|status|sekarang|punya|milik)\b", re.I)),
     ]
 
     def __init__(self, workspace, foundation=None, config: MemoryConfig | None = None):
@@ -83,10 +88,15 @@ class QueryCompiler:
     def route(cls, query: str) -> QueryRoute:
         stripped = query.strip()
         for route, pattern in cls.ROUTE_PATTERNS:
+            if route == QueryRoute.CURRENT_STATE:
+                continue
             if pattern.search(stripped):
                 return route
-        if re.search(r"\b(continue|write|scene|dialogue|lanjut|tulis|adegan)\b", stripped, re.I):
+        if cls.STORY_CONTINUE_PATTERN.search(stripped):
             return QueryRoute.STORY_CONTINUE
+        for route, pattern in cls.ROUTE_PATTERNS:
+            if route == QueryRoute.CURRENT_STATE and pattern.search(stripped):
+                return route
         return QueryRoute.TEXT_RECALL
 
     def compile(self, query: str, scope: MemoryQueryContext) -> QueryPlan:
@@ -103,11 +113,16 @@ class QueryCompiler:
             QueryRoute.GLOBAL_SUMMARY: ([RetrievalLane.SUMMARIES], [RetrievalLane.FTS_SUMMARY, RetrievalLane.FTS_MANUSCRIPT]),
             QueryRoute.CONTINUITY_CHECK: ([RetrievalLane.CONTINUITY, RetrievalLane.STRUCTURED_STATE], [RetrievalLane.EVENTS, RetrievalLane.SPATIAL, RetrievalLane.EPISTEMIC]),
             QueryRoute.BRANCH_COMPARE: ([RetrievalLane.STRUCTURED_STATE, RetrievalLane.EVENTS], [RetrievalLane.SUMMARIES]),
-            QueryRoute.STORY_CONTINUE: ([RetrievalLane.STRUCTURED_STATE], [RetrievalLane.EVENTS, RetrievalLane.THREADS, RetrievalLane.FTS_MANUSCRIPT, RetrievalLane.FTS_CHAT, RetrievalLane.DENSE]),
-            QueryRoute.TEXT_RECALL: ([RetrievalLane.FTS_MANUSCRIPT], [RetrievalLane.FTS_CHAT, RetrievalLane.FTS_SUMMARY, RetrievalLane.FTS_IMPORT, RetrievalLane.DENSE]),
+            QueryRoute.STORY_CONTINUE: ([], [RetrievalLane.STRUCTURED_STATE, RetrievalLane.EVENTS, RetrievalLane.THREADS, RetrievalLane.FTS_MANUSCRIPT, RetrievalLane.FTS_CHAT, RetrievalLane.DENSE]),
+            QueryRoute.TEXT_RECALL: ([], [RetrievalLane.FTS_MANUSCRIPT, RetrievalLane.FTS_CHAT, RetrievalLane.FTS_SUMMARY, RetrievalLane.FTS_IMPORT, RetrievalLane.DENSE]),
         }
         required, optional = policies[route]
+        fts_lanes = {RetrievalLane.FTS_MANUSCRIPT, RetrievalLane.FTS_CHAT, RetrievalLane.FTS_SUMMARY, RetrievalLane.FTS_IMPORT}
+        if not self.config.fts_enabled:
+            required = [lane for lane in required if lane not in fts_lanes]
+            optional = [lane for lane in optional if lane not in fts_lanes]
         if not self.config.dense_enabled:
+            required = [lane for lane in required if lane != RetrievalLane.DENSE]
             optional = [lane for lane in optional if lane != RetrievalLane.DENSE]
         budget = max(8, self.config.max_candidates // max(1, len(required) + len(optional)))
         return QueryPlan(
@@ -119,6 +134,7 @@ class QueryCompiler:
             forbidden_lanes=[],
             per_lane_candidate_budget={lane.value: budget for lane in required + optional},
             final_candidate_budget=self.config.final_k,
+            trace=self.config.trace_enabled,
             normalized_query=" ".join(query.split()),
         )
 
@@ -150,7 +166,7 @@ class MemoryQueryEngine:
             trust_level=row.get("trust_level") or TrustLevel.TRUSTED_LOCAL.value,
             importance=float(row.get("importance") or 0.5), extraction_confidence=float(row.get("extraction_confidence") or 1.0),
             identity_confidence=float(row.get("identity_confidence") or 1.0), ranks=ranks,
-            metadata={"domain": row.get("domain"), "snippet": row.get("snippet"), "checksum": row.get("checksum")},
+            metadata={"domain": row.get("domain"), "snippet": row.get("snippet"), "checksum": row.get("checksum"), "source_recorded_at": row.get("source_recorded_at")},
         )
 
     @staticmethod
@@ -238,7 +254,7 @@ class MemoryQueryEngine:
                 world_id=event.get("world_id"), branch_id=event.get("branch_id"), story_order=order,
                 authority=Authority.ACCEPTED_EVENT.value if event.get("status") in {"accepted", "canon"} else Authority.USER_EXPLICIT_NOTE.value,
                 trust_level=TrustLevel.TRUSTED_LOCAL.value, importance=0.85,
-                metadata={"event": event},
+                metadata={"event": event, "source_recorded_at": event.get("updated_at") or event.get("created_at")},
             ))
         output.sort(key=lambda item: (item.story_order is None, -(item.story_order or 0)))
         return output[:plan.per_lane_candidate_budget.get(RetrievalLane.EVENTS.value, 20)]
@@ -307,6 +323,8 @@ class MemoryQueryEngine:
         return output
 
     def _fts(self, query: str, lane: RetrievalLane, budget: int) -> list[MemoryCandidate]:
+        if not self.config.fts_enabled:
+            return []
         domain = {
             RetrievalLane.FTS_MANUSCRIPT: "manuscript",
             RetrievalLane.FTS_CHAT: "chat",
@@ -378,6 +396,26 @@ class MemoryQueryEngine:
         return selected
 
     @staticmethod
+    def _fit_token_budget(candidates: list[MemoryCandidate], token_budget: int | None) -> list[MemoryCandidate]:
+        if token_budget is None:
+            return candidates
+        remaining = max(0, int(token_budget) - 48)  # Memory header/section overhead.
+        if remaining <= 0:
+            return []
+        fitted: list[MemoryCandidate] = []
+        for item in candidates:
+            cost = max(16, len(item.text) // 4 + 20)
+            if cost <= remaining:
+                fitted.append(item)
+                remaining -= cost
+                continue
+            if not fitted and remaining > 36:
+                item.text = item.text[: max(40, (remaining - 20) * 4)].rstrip() + "…"
+                fitted.append(item)
+            break
+        return fitted
+
+    @staticmethod
     def _pack(plan: QueryPlan, selected: list[MemoryCandidate], excluded: list[dict[str, Any]]) -> str:
         if not selected:
             return ""
@@ -418,23 +456,34 @@ class MemoryQueryEngine:
             excluded.extend(rejected)
         raw = self._rrf(gated_lane_results)
         selected = self._diversify(raw, plan.final_candidate_budget)
-        if self.reranker.available() and len(selected) > 1:
+        if self.config.reranker.enabled and self.reranker.available() and len(selected) > 1:
             payloads = [item.to_dict() for item in selected]
             reranked = self.reranker.rerank(query, payloads, plan.final_candidate_budget)
             order = {item["id"]: i for i, item in enumerate(reranked)}
             selected.sort(key=lambda item: order.get(item.id, 10_000))
         diagnostics = []
-        if self.config.dense_enabled and RetrievalLane.DENSE in lanes and not lane_results.get(RetrievalLane.DENSE):
-            diagnostics.append("Dense retrieval unavailable; structured lookup and FTS remained active.")
-        required_count = sum(len(lane_results.get(lane) or []) for lane in plan.required_lanes)
-        abstain = not selected and plan.require_abstention
-        reason = "No allowed evidence was found in the active scope." if abstain else ""
+        if self.config.dense_enabled and RetrievalLane.DENSE in lanes and not gated_lane_results.get(RetrievalLane.DENSE):
+            diagnostics.append("Dense retrieval unavailable; other enabled lanes remained active.")
+        missing_required = [lane for lane in plan.required_lanes if not gated_lane_results.get(lane)]
+        if missing_required:
+            diagnostics.append("Required evidence lane(s) empty after Scope Gate: " + ", ".join(lane.value for lane in missing_required))
+            if plan.require_abstention:
+                selected = []
+        selected = self._fit_token_budget(selected, scope.token_budget)
+        abstain = bool(plan.require_abstention and (missing_required or not selected))
+        if missing_required:
+            reason = "Required structured evidence was not available in the active scope."
+        elif abstain:
+            reason = "No allowed evidence was found in the active scope."
+        else:
+            reason = ""
         run_id = make_id("RETRIEVE")
         result = RetrievalResult(run_id, plan, selected, excluded, self._pack(plan, selected, excluded),
                                  {lane.value: len(items) for lane, items in lane_results.items()}, abstain, reason, diagnostics)
-        self.store.record_retrieval_run(
-            run_id=run_id, query_text=query, route=plan.route.value, scope=scope.to_dict(), plan=plan.to_dict(),
-            selected=[item.to_dict() for item in selected], excluded=excluded, diagnostics=diagnostics,
-            latency_ms=(time.perf_counter() - started) * 1000,
-        )
+        if self.config.trace_enabled and plan.trace:
+            self.store.record_retrieval_run(
+                run_id=run_id, query_text=query, route=plan.route.value, scope=scope.to_dict(), plan=plan.to_dict(),
+                selected=[item.to_dict() for item in selected], excluded=excluded, diagnostics=diagnostics,
+                latency_ms=(time.perf_counter() - started) * 1000,
+            )
         return result

@@ -104,6 +104,7 @@ class MemoryQueryContext:
     explicit_cross_scope_sources: list[dict[str, str]] = field(default_factory=list)
     allow_scratch: bool = False
     allow_future_author_knowledge: bool = False
+    token_budget: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.context_lens, ContextLens):
@@ -125,6 +126,7 @@ class MemoryQueryContext:
             "explicit_cross_scope_sources": self.explicit_cross_scope_sources,
             "allow_scratch": self.allow_scratch,
             "allow_future_author_knowledge": self.allow_future_author_knowledge,
+            "token_budget": self.token_budget,
         }
 
 

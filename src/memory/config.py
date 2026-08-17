@@ -41,6 +41,7 @@ class MemoryConfig:
     max_per_source: int = 2
     rrf_k: int = 60
     trace_enabled: bool = True
+    max_pack_tokens: int = 4096
     embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     reranker: RerankerConfig = field(default_factory=RerankerConfig)
 
@@ -68,6 +69,7 @@ class MemoryConfig:
             max_per_source=max(1, int(memory.get("max_per_source", 2))),
             rrf_k=max(1, int(memory.get("rrf_k", 60))),
             trace_enabled=bool(memory.get("trace_enabled", True)),
+            max_pack_tokens=max(0, int(memory.get("max_pack_tokens", 4096))),
             embedding=EmbeddingConfig(
                 enabled=bool(embedding.get("enabled", dense_enabled)),
                 provider=str(embedding.get("provider", "lmstudio")),
@@ -101,6 +103,7 @@ class MemoryConfig:
             "max_per_source": self.max_per_source,
             "rrf_k": self.rrf_k,
             "trace_enabled": self.trace_enabled,
+            "max_pack_tokens": self.max_pack_tokens,
             "embedding": {
                 "enabled": self.embedding.enabled,
                 "provider": self.embedding.provider,

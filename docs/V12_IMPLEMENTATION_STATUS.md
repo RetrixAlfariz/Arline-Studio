@@ -41,3 +41,15 @@ Dense retrieval remains optional and reranking is not required. Full world-time
 interval reconstruction, mature POV knowledge continuity, autonomous summary
 refresh, consequence simulation, and semantic branch merge remain later
 v1.2.x/v1.3 work according to the research specification.
+
+
+## v1.2.0 correctness hardening
+
+- Memory frontend scope is read through the explicit `ArlineRuntime` bridge; a missing active project can no longer silently turn a UI backfill into a global backfill.
+- Production document/chat chunks carry story-order/world-time metadata when the active Scene Card provides it; parent-chat fork cutoffs and ancestor-branch recorded-time cutoffs are enforced by ScopeGate.
+- Source revision replacement is transactional: old evidence remains active until every new chunk/link/vector is ready and the source revision guard still matches.
+- Dense generation activation verifies vector coverage, including unchanged chunks during generation rollover; dense rebuild generations are global snapshots.
+- Memory receives an explicit remaining-token allocation and packs evidence inside that allocation rather than appending an unbounded block after the v1.1 context boundary.
+- Background refresh failures create a visible issue/activity record, pending refreshes are cancelled on delete, and source guards prevent a late timer from resurrecting deleted/stale evidence.
+- `enabled`, `fts_enabled`, `trace_enabled`, and `reranker.enabled` now control their advertised runtime behavior.
+- Query routing no longer treats the mere words “scene” or “dialogue” as a continuation command; deterministic routes abstain when their required evidence lanes are empty after ScopeGate.

@@ -15,7 +15,7 @@ from uuid import uuid4
 from .models import Authority, SemanticClass, SemanticStatus, TrustLevel
 
 
-MEMORY_SCHEMA_VERSION = 1
+MEMORY_SCHEMA_VERSION = 2
 FTS_DOMAINS = {"manuscript", "chat", "summary", "import"}
 
 
@@ -97,6 +97,7 @@ class MemoryStore:
                     session_id TEXT,
                     source_start_id TEXT,
                     source_end_id TEXT,
+                    source_recorded_at TEXT,
                     world_time_json TEXT,
                     story_order REAL,
                     scope_kind TEXT NOT NULL DEFAULT 'project',
@@ -374,6 +375,9 @@ class MemoryStore:
                 );
                 """
             )
+            chunk_columns = {row[1] for row in con.execute("PRAGMA table_info(memory_chunks)").fetchall()}
+            if "source_recorded_at" not in chunk_columns:
+                con.execute("ALTER TABLE memory_chunks ADD COLUMN source_recorded_at TEXT")
             try:
                 for domain in sorted(FTS_DOMAINS):
                     con.execute(
@@ -409,7 +413,7 @@ class MemoryStore:
                      display_excerpt: str | None = None, project_id: str | None = None,
                      world_id: str | None = None, branch_id: str | None = None,
                      session_id: str | None = None, source_start_id: str | None = None,
-                     source_end_id: str | None = None, world_time: Any = None,
+                     source_end_id: str | None = None, source_recorded_at: str | None = None, world_time: Any = None,
                      story_order: float | None = None, scope_kind: str = "project",
                      semantic_class: str = SemanticClass.EVIDENCE.value,
                      authority: str = Authority.PROJECT_MANUSCRIPT.value,
@@ -433,12 +437,12 @@ class MemoryStore:
             now = utc_now()
             con.execute(
                 "INSERT INTO memory_chunks(id,source_type,source_id,source_revision,project_id,world_id,branch_id,session_id,"
-                "source_start_id,source_end_id,world_time_json,story_order,scope_kind,semantic_class,authority,trust_level,text,"
+                "source_start_id,source_end_id,source_recorded_at,world_time_json,story_order,scope_kind,semantic_class,authority,trust_level,text,"
                 "retrieval_text,display_excerpt,token_count,importance,extraction_confidence,identity_confidence,semantic_status,"
                 "index_state,checksum,chunker_version,index_generation,created_at,updated_at) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'active','ready',?,?,?,?,?)",
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'active','ready',?,?,?,?,?)",
                 (chunk_id, source_type, source_id, source_revision, project_id, world_id, branch_id, session_id,
-                 source_start_id, source_end_id, dumps(world_time) if world_time is not None else None, story_order,
+                 source_start_id, source_end_id, source_recorded_at, dumps(world_time) if world_time is not None else None, story_order,
                  scope_kind, semantic_class, authority, trust_level, clean, retrieval_text or clean,
                  display_excerpt or clean[:500], max(1, len(clean) // 4), float(importance),
                  float(extraction_confidence), float(identity_confidence), digest, int(chunker_version),
@@ -449,6 +453,137 @@ class MemoryStore:
                 con.execute(f"INSERT INTO memory_fts_{domain}(chunk_id,text) VALUES(?,?)", (chunk_id, retrieval_text or clean))
             row = con.execute("SELECT * FROM memory_chunks WHERE id=?", (chunk_id,)).fetchone()
         return self._chunk_row(row)
+
+
+    def replace_source_revision(
+        self,
+        *,
+        source_type: str,
+        source_id: str,
+        prepared: list[dict[str, Any]],
+        source_guard: dict[str, Any] | None = None,
+        generation_id: int | None = None,
+        embedding_model: str | None = None,
+        vectors: list[list[float]] | None = None,
+    ) -> list[dict[str, Any]]:
+        """Atomically replace one derived source revision.
+
+        New chunks, FTS rows, links, and optional vectors are staged inside the
+        same SQLite transaction. The previous active revision is only marked
+        stale immediately before COMMIT, so any failure leaves the old complete
+        revision visible.
+        """
+        if vectors is not None and len(vectors) != len(prepared):
+            raise ValueError("Vector count must match prepared chunk count")
+        domain = self._domain_for_source(source_type)
+        rows_out: list[dict[str, Any]] = []
+        with self._lock, self.connection() as con:
+            con.execute("BEGIN IMMEDIATE")
+            try:
+                if source_guard:
+                    table = str(source_guard.get("table") or "")
+                    if table not in {"workspace_documents", "turns"}:
+                        raise ValueError("Unsupported memory source guard")
+                    row = con.execute(
+                        f"SELECT updated_at FROM {table} WHERE id=?",
+                        (source_guard.get("id"),),
+                    ).fetchone()
+                    if row is None:
+                        raise KeyError(source_guard.get("id"))
+                    expected = source_guard.get("updated_at")
+                    if expected is not None and str(row["updated_at"]) != str(expected):
+                        raise RuntimeError("Source changed while Memory was indexing it")
+
+                old_rows = con.execute(
+                    "SELECT id FROM memory_chunks WHERE source_type=? AND source_id=? AND semantic_status='active'",
+                    (source_type, source_id),
+                ).fetchall()
+                old_ids = [row["id"] for row in old_rows]
+                new_ids: list[str] = []
+                now = utc_now()
+                for index, raw in enumerate(prepared):
+                    clean = str(raw.get("text") or "").strip()
+                    if not clean:
+                        raise ValueError("Prepared memory chunk text cannot be empty")
+                    chunk_id = make_id("MEM")
+                    new_ids.append(chunk_id)
+                    digest = checksum(clean)
+                    con.execute(
+                        "INSERT INTO memory_chunks(id,source_type,source_id,source_revision,project_id,world_id,branch_id,session_id,"
+                        "source_start_id,source_end_id,source_recorded_at,world_time_json,story_order,scope_kind,semantic_class,authority,trust_level,text,"
+                        "retrieval_text,display_excerpt,token_count,importance,extraction_confidence,identity_confidence,semantic_status,"
+                        "index_state,checksum,chunker_version,index_generation,created_at,updated_at) "
+                        "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'active','ready',?,?,?,?,?)",
+                        (
+                            chunk_id, source_type, source_id, raw.get("source_revision"), raw.get("project_id"),
+                            raw.get("world_id"), raw.get("branch_id"), raw.get("session_id"), raw.get("source_start_id"),
+                            raw.get("source_end_id"), raw.get("source_recorded_at"),
+                            dumps(raw.get("world_time")) if raw.get("world_time") is not None else None,
+                            raw.get("story_order"), raw.get("scope_kind", "project"), raw.get("semantic_class", SemanticClass.EVIDENCE.value),
+                            raw.get("authority", Authority.PROJECT_MANUSCRIPT.value), raw.get("trust_level", TrustLevel.TRUSTED_LOCAL.value),
+                            clean, raw.get("retrieval_text") or clean, raw.get("display_excerpt") or clean[:500],
+                            max(1, int(raw.get("token_count") or len(clean) // 4)), float(raw.get("importance", 0.5)),
+                            float(raw.get("extraction_confidence", 1.0)), float(raw.get("identity_confidence", 1.0)),
+                            digest, int(raw.get("chunker_version", 1)), generation_id, now, now,
+                        ),
+                    )
+                    if self.fts_available:
+                        con.execute(
+                            f"INSERT INTO memory_fts_{domain}(chunk_id,text) VALUES(?,?)",
+                            (chunk_id, raw.get("retrieval_text") or clean),
+                        )
+                    for link in raw.get("links") or []:
+                        con.execute(
+                            "INSERT OR IGNORE INTO memory_links(memory_chunk_id,resource_type,resource_id,relation,confidence,resolution_method) "
+                            "VALUES(?,?,?,?,?,?)",
+                            (chunk_id, link["resource_type"], link["resource_id"], link.get("relation", "mentions"),
+                             float(link.get("confidence", 1.0)), link.get("resolution_method", "exact")),
+                        )
+                    if vectors is not None:
+                        if generation_id is None or not embedding_model:
+                            raise ValueError("Dense replacement requires generation_id and embedding_model")
+                        blob, norm = self._vector_blob(vectors[index])
+                        con.execute(
+                            "INSERT INTO memory_vectors(memory_chunk_id,generation_id,model_id,dimension,vector_blob,norm,created_at) "
+                            "VALUES(?,?,?,?,?,?,?)",
+                            (chunk_id, generation_id, embedding_model, len(vectors[index]), blob, norm, now),
+                        )
+
+                if old_ids:
+                    placeholders = ",".join("?" for _ in old_ids)
+                    con.execute(
+                        f"UPDATE memory_chunks SET semantic_status='stale',index_state='stale',updated_at=? WHERE id IN ({placeholders})",
+                        [now, *old_ids],
+                    )
+                    if self.fts_available:
+                        for chunk_id in old_ids:
+                            con.execute(f"DELETE FROM memory_fts_{domain} WHERE chunk_id=?", (chunk_id,))
+                if new_ids:
+                    placeholders = ",".join("?" for _ in new_ids)
+                    rows = con.execute(
+                        f"SELECT * FROM memory_chunks WHERE id IN ({placeholders}) ORDER BY created_at,id",
+                        new_ids,
+                    ).fetchall()
+                    rows_out = [self._chunk_row(row) for row in rows]
+                con.execute("COMMIT")
+            except Exception:
+                con.execute("ROLLBACK")
+                raise
+        return rows_out
+
+    def vector_coverage(self, generation_id: int, chunk_ids: Iterable[str]) -> dict[str, Any]:
+        ids = list(dict.fromkeys(str(item) for item in chunk_ids if item))
+        if not ids:
+            return {"expected": 0, "covered": 0, "missing": []}
+        placeholders = ",".join("?" for _ in ids)
+        with self.connection() as con:
+            rows = con.execute(
+                f"SELECT memory_chunk_id FROM memory_vectors WHERE generation_id=? AND memory_chunk_id IN ({placeholders})",
+                [generation_id, *ids],
+            ).fetchall()
+        covered = {row["memory_chunk_id"] for row in rows}
+        missing = [chunk_id for chunk_id in ids if chunk_id not in covered]
+        return {"expected": len(ids), "covered": len(covered), "missing": missing}
 
     def replace_links(self, chunk_id: str, links: Iterable[dict[str, Any]]) -> None:
         with self._lock, self.connection() as con:
