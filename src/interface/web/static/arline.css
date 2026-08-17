@@ -114,3 +114,15 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .quick-create-matches{grid-column:1/-1;margin-top:9px;padding-top:8px;border-top:1px solid var(--border)}.quick-create-matches>em{display:block;font-style:normal;color:var(--muted-2);font-size:7.5px;margin-bottom:4px}.qc-existing-match{width:100%;border:0;background:rgba(255,255,255,.02);color:#ccd2ce;border-radius:8px;display:grid;grid-template-columns:22px 1fr;gap:5px;text-align:left;padding:6px;margin-top:3px}.qc-existing-match:hover{background:var(--accent-soft)}.qc-existing-match>span{color:#79bea9}.qc-existing-match b{font-size:8.8px}.qc-existing-match small{font-size:7.5px;color:var(--muted-2)}
 .binder-folder-group{display:block}.binder-folder{width:100%;border:0;background:transparent;color:#cbd0cc;display:grid;grid-template-columns:18px 1fr auto;gap:4px;align-items:center;text-align:left;padding:7px 8px 7px calc(8px + (var(--binder-depth,0) * 12px));border-radius:8px}.binder-folder:hover{background:#303330}.binder-folder>span{color:#737a75}.binder-folder b{font-size:9.5px;font-weight:570}.binder-folder em{font-style:normal;color:var(--muted-2);font-size:7.5px}.binder-folder-body{display:block}.document-item{padding-left:calc(10px + (var(--binder-depth,0) * 12px))}
 .manuscript-proposal{border:1px solid var(--border);background:rgba(255,255,255,.018);border-radius:10px;padding:8px;margin:5px 8px}.manuscript-proposal.active{border-color:rgba(47,155,129,.22);background:var(--accent-soft)}.manuscript-proposal b{display:block;font-size:8.8px}.manuscript-proposal small{display:block;color:var(--muted-2);font-size:7.5px;margin:3px 0 6px}.manuscript-proposal>div{display:flex;gap:4px}
+
+
+/* v1.1 hardening: composer overlay must share the native editor's text metrics. */
+.composer-editor-shell textarea,.composer-editor-shell .prompt-highlight{
+  padding:7px 5px;font-family:inherit;font-size:13px;font-weight:400;line-height:1.58;
+  letter-spacing:normal;white-space:pre-wrap;overflow-wrap:anywhere;tab-size:4
+}
+.composer-editor-shell:not(.has-highlight) .prompt-highlight{display:none}
+.composer-editor-shell.has-highlight .prompt-highlight{display:block}
+.composer-editor-shell:focus-within{filter:drop-shadow(0 0 0 rgba(0,0,0,0))}
+.composer-card:has(#promptInput:focus){border-color:rgba(47,155,129,.28);box-shadow:var(--shadow),0 0 0 3px rgba(47,155,129,.045),inset 0 1px rgba(255,255,255,.025)}
+.generate-btn:disabled,.primary-btn:disabled{opacity:.46;cursor:not-allowed;box-shadow:none}

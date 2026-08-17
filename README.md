@@ -110,3 +110,14 @@ A release pass should also include:
 ```powershell
 python -m compileall -q src
 node --check src/interface/web/static/arline.js
+
+## v1.1 hardening guarantees
+
+- Composer reference highlighting only overlays actual `@references` and `/commands`; plain prose remains a native textarea with native spellcheck.
+- Context-budget UI consumes the same token-breakdown contract returned by the backend, so response MAX is computed from real assembled context rather than prompt length alone.
+- Run Profiles capture and restore the complete generation configuration.
+- Normal deletion is recoverable Trash; permanent project/world/branch deletion uses one cross-store cleanup path so chat history cannot become orphaned.
+- Existing SQLite data is backed up before **any** History/Workspace migration starts, including pre-versioned legacy databases.
+- Context Stack state is browser-tab scoped, preventing two open Studio tabs from overwriting each other.
+- API keys are no longer returned by `/api/config` or sent in model-discovery query strings.
+- CI rejects duplicate top-level frontend functions and frontend/backend context-contract regressions.

@@ -21,7 +21,7 @@ CANON_STATUSES = {
 }
 ENTITY_TYPES = {"character", "location", "item", "organization", "world_rule", "lore"}
 BRANCH_KINDS = {"main", "sandbox", "what_if"}
-DOCUMENT_TYPES = {"draft", "chapter", "scene", "lore", "note", "outline", "research"}
+DOCUMENT_TYPES = {"chapter", "scene", "lore", "note", "outline", "research"}
 STAGED_CHANGE_STATUSES = {"pending", "accepted", "rejected"}
 
 
@@ -72,11 +72,11 @@ class WorkspaceStore:
     names alone.
     """
 
-    def __init__(self, database_path: Path | str):
+    def __init__(self, database_path: Path | str, *, backup_before_migration: bool = True):
         self.path = Path(database_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = RLock()
-        self.last_migration_backup: Path | None = self._backup_before_schema_upgrade()
+        self.last_migration_backup: Path | None = self._backup_before_schema_upgrade() if backup_before_migration else None
         self._init_db()
 
     def _existing_schema_version(self) -> int | None:
@@ -90,7 +90,8 @@ class WorkspaceStore:
                     "SELECT 1 FROM sqlite_master WHERE type='table' AND name='workspace_meta'"
                 ).fetchone()
                 if not has_meta:
-                    return None
+                    has_tables = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' LIMIT 1").fetchone()
+                    return 0 if has_tables else None
                 row = con.execute(
                     "SELECT value FROM workspace_meta WHERE key='schema_version'"
                 ).fetchone()
@@ -299,10 +300,10 @@ class WorkspaceStore:
                     world_id TEXT,
                     branch_id TEXT,
                     folder_id TEXT,
-                    document_type TEXT NOT NULL DEFAULT 'draft',
+                    document_type TEXT NOT NULL DEFAULT 'scene',
                     title TEXT NOT NULL,
                     content TEXT NOT NULL DEFAULT '',
-                    status TEXT NOT NULL DEFAULT 'draft',
+                    status TEXT NOT NULL DEFAULT 'planned',
                     sort_order INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,

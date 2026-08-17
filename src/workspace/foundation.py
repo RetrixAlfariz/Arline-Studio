@@ -269,7 +269,14 @@ class FoundationStore:
                 "visible_output_tokens": 1024, "temperature": 1.0, "generation_mode": "single",
             }),
         ]
+        profile_defaults = {
+            "projection_mode": "balanced", "reasoning_reserve_tokens": 4096,
+            "top_p": 0.95, "top_k": 40, "min_p": 0.0, "repeat_penalty": 1.05,
+            "generation_mode": "single", "beat_count": 4, "beat_tokens": 2048,
+            "total_story_target_tokens": 8192,
+        }
         for profile_id, name, description, data in profiles:
+            data = {**profile_defaults, **data}
             con.execute(
                 "INSERT OR IGNORE INTO run_profiles(id,project_id,name,description,profile_json,builtin,created_at,updated_at) "
                 "VALUES(?,NULL,?,?,?,1,?,?)",

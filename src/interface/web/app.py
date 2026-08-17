@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version as package_version
 from difflib import SequenceMatcher
 import json
 import re
@@ -19,10 +20,13 @@ import uvicorn
 from src.context import TraceResolver
 from src.eval import AblationRunner
 from src.history import HistoryStore, VALID_FEEDBACK
+from src.history.store import SCHEMA_VERSION as HISTORY_SCHEMA_VERSION
 from src.inference import LMStudioError, LMStudioModelManager
 from src.pipeline import ArlineAnalyticalPipeline
 from src.runtime_config import DEFAULT_CONFIG_PATH, RuntimeConfig, VALID_INPUT_MODES, VALID_REASONING, VALID_PROJECTION_MODES
 from src.service import ArlineService, ArtifactStore, make_run_id
+from src.storage_backup import backup_sqlite_before_migrations
+from src.workspace.store import WORKSPACE_SCHEMA_VERSION
 from src.workspace import (
     BRANCH_KINDS,
     CANON_STATUSES,
@@ -38,7 +42,10 @@ from src.workspace import (
 )
 
 
-STUDIO_VERSION = "1.1.0"
+try:
+    STUDIO_VERSION = package_version("arline-studio")
+except PackageNotFoundError:
+    STUDIO_VERSION = "1.1.0"
 
 MODE_LABELS = {
     "smart_hybrid": "Smart Hybrid",
@@ -51,7 +58,7 @@ MODE_LABELS = {
 
 class RuntimePayload(BaseModel):
     server_url: str = "http://127.0.0.1:1234"
-    api_key: str = ""
+    api_key: str | None = None
     model: str = ""
     gpu_ratio: float = Field(1.0, ge=0.0, le=1.0)
     context_length: int = Field(32768, gt=0)
@@ -89,6 +96,11 @@ class PromptPayload(RuntimePayload):
     references: list[ReferencePayload] = Field(default_factory=list)
     context_recipe_id: str | None = None
     scratch_mode: bool = False
+
+
+class ModelsPayload(BaseModel):
+    server_url: str | None = None
+    api_key: str | None = None
 
 
 class SavePayload(BaseModel):
@@ -464,6 +476,7 @@ class IssuePayload(BaseModel):
 
 
 class ContextStackPayload(BaseModel):
+    stack_id: str = "default"
     project_id: str | None = None
     world_id: str | None = None
     branch_id: str | None = None
@@ -649,7 +662,8 @@ def _apply_payload(cfg: RuntimeConfig, payload: RuntimePayload) -> RuntimeConfig
         raise ValueError(f"Unsupported projection mode: {payload.projection_mode}")
 
     cfg.lmstudio.base_url = RuntimeConfig.normalize_server_url(payload.server_url)
-    cfg.lmstudio.api_key = payload.api_key or ""
+    if payload.api_key is not None:
+        cfg.lmstudio.api_key = payload.api_key
     cfg.lmstudio.model = payload.model or ""
     cfg.model_load.gpu_ratio = float(payload.gpu_ratio)
     cfg.model_load.context_length = int(payload.context_length)
@@ -737,7 +751,7 @@ def _public_config(cfg: RuntimeConfig) -> dict[str, Any]:
     return {
         "studio_version": STUDIO_VERSION,
         "server_url": cfg.lmstudio.base_url,
-        "api_key": cfg.lmstudio.api_key,
+        "api_key_configured": bool(cfg.lmstudio.api_key),
         "model": cfg.lmstudio.model,
         "gpu_ratio": cfg.model_load.gpu_ratio,
         "context_length": cfg.model_load.context_length,
@@ -801,14 +815,25 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     saved_cache = RunCache(max_items=20)
     analysis_cache = AnalysisCache(max_items=20)
     initial_cfg = RuntimeConfig.load(config_path)
-    history = HistoryStore(initial_cfg.history.database_path)
-    workspace = WorkspaceStore(initial_cfg.workspace.database_path)
+    migration_targets: dict[Path, dict[str, int]] = {}
+    history_path = Path(initial_cfg.history.database_path).resolve()
+    workspace_path = Path(initial_cfg.workspace.database_path).resolve()
+    migration_targets.setdefault(history_path, {})["meta"] = HISTORY_SCHEMA_VERSION
+    migration_targets.setdefault(workspace_path, {})["workspace_meta"] = max(WORKSPACE_SCHEMA_VERSION, FoundationStore.SCHEMA_VERSION)
+    migration_backups = []
+    for database_path, targets in migration_targets.items():
+        backup = backup_sqlite_before_migrations(database_path, targets)
+        if backup is not None:
+            migration_backups.append(backup)
+
+    history = HistoryStore(initial_cfg.history.database_path, backup_before_migration=False)
+    workspace = WorkspaceStore(initial_cfg.workspace.database_path, backup_before_migration=False)
     foundation = FoundationStore(initial_cfg.workspace.database_path)
-    if workspace.last_migration_backup is not None:
+    for backup in migration_backups:
         foundation.log_activity(
             None, "schema_backup", "database", None,
-            label=f"Backup before schema v{WORKSPACE_SCHEMA_VERSION}",
-            detail={"path": str(workspace.last_migration_backup), "schema_version": WORKSPACE_SCHEMA_VERSION},
+            label="Backup before database migration",
+            detail={"path": str(backup), "workspace_schema_version": WORKSPACE_SCHEMA_VERSION, "history_schema_version": HISTORY_SCHEMA_VERSION},
         )
     workspace_context = WorkspaceContextResolver(
         workspace, max_items=initial_cfg.workspace.pinned_context_limit
@@ -866,6 +891,32 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         cfg = RuntimeConfig.load(config_path)
         cfg.lmstudio.base_url = RuntimeConfig.normalize_server_url(server_url)
         cfg.lmstudio.api_key = api_key
+        service = ArlineService(cfg)
+        try:
+            models = service.list_models()
+        except Exception as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return {
+            "models": [
+                {
+                    "key": item.get("key"),
+                    "display_name": item.get("display_name") or item.get("key"),
+                    "loaded": bool(item.get("loaded_instances")),
+                    "max_context_length": item.get("max_context_length"),
+                    "reasoning": (item.get("capabilities") or {}).get("reasoning") or item.get("reasoning") or {},
+                    "format": item.get("format"),
+                }
+                for item in models
+            ]
+        }
+
+    @app.post("/api/models/query")
+    def query_models(payload: ModelsPayload):
+        cfg = RuntimeConfig.load(config_path)
+        if payload.server_url:
+            cfg.lmstudio.base_url = RuntimeConfig.normalize_server_url(payload.server_url)
+        if payload.api_key is not None:
+            cfg.lmstudio.api_key = payload.api_key
         service = ArlineService(cfg)
         try:
             models = service.list_models()
@@ -1009,7 +1060,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     # ------------------------------------------------------------------
 
     @app.get("/api/workspace/bootstrap")
-    def workspace_bootstrap(create_default: bool = Query(True)):
+    def workspace_bootstrap(create_default: bool = Query(True), stack_id: str = Query("default")):
         projects = foundation.filter_visible("project", workspace.list_projects())
         if not projects and create_default:
             workspace.create_project(
@@ -1038,7 +1089,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                 )
                 branches = foundation.filter_visible("branch", workspace.list_branches(active_world["id"]))
                 active_branch = next((x for x in branches if x["kind"] == "main"), branches[0] if branches else None)
-        stack = foundation.get_context_stack()
+        stack = foundation.get_context_stack(stack_id)
         return {
             "projects": projects,
             "worlds": foundation.filter_visible("world", workspace.list_worlds()),
@@ -1098,8 +1149,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     @app.delete("/api/projects/{project_id}")
     def delete_project(project_id: str):
         try:
-            workspace.delete_project(project_id)
-            history.delete_sessions_by_scope(project_id=project_id)
+            _permanent_delete("project", project_id)
         except KeyError as exc:
             raise HTTPException(404, "Project not found") from exc
         return {"ok": True}
@@ -1198,27 +1248,34 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         return getter(resource_id)
 
     def _permanent_delete(resource_type: str, resource_id: str) -> None:
-        deleters = {
-            "project": workspace.delete_project,
-            "world": workspace.delete_world,
-            "branch": workspace.delete_branch,
-            "folder": workspace.delete_folder,
-            "document": workspace.delete_document,
-            "entity_family": workspace.delete_entity_family,
-            "entity_variant": workspace.delete_variant,
-            "relationship": workspace.delete_relationship,
-            "fact": workspace.delete_fact,
-            "tag": workspace.delete_tag,
-            "snapshot": workspace.delete_snapshot,
-        }
         if resource_type == "session":
             history.delete_session(resource_id)
             foundation.forget_resource(resource_type, resource_id)
             return
-        delete = deleters.get(resource_type)
-        if not delete:
-            raise ValueError(f"Permanent delete is not supported for {resource_type}")
-        delete(resource_id)
+        if resource_type == "project":
+            history.delete_sessions_by_scope(project_id=resource_id)
+            workspace.delete_project(resource_id)
+        elif resource_type == "world":
+            history.delete_sessions_by_scope(world_id=resource_id)
+            workspace.delete_world(resource_id)
+        elif resource_type == "branch":
+            history.delete_sessions_by_scope(branch_id=resource_id)
+            workspace.delete_branch(resource_id)
+        else:
+            deleters = {
+                "folder": workspace.delete_folder,
+                "document": workspace.delete_document,
+                "entity_family": workspace.delete_entity_family,
+                "entity_variant": workspace.delete_variant,
+                "relationship": workspace.delete_relationship,
+                "fact": workspace.delete_fact,
+                "tag": workspace.delete_tag,
+                "snapshot": workspace.delete_snapshot,
+            }
+            delete = deleters.get(resource_type)
+            if not delete:
+                raise ValueError(f"Permanent delete is not supported for {resource_type}")
+            delete(resource_id)
         foundation.forget_resource(resource_type, resource_id)
 
     @app.post("/api/lifecycle/trash")
@@ -1396,8 +1453,8 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             raise HTTPException(400, str(exc)) from exc
 
     @app.get("/api/context-stack")
-    def get_context_stack():
-        return foundation.get_context_stack()
+    def get_context_stack(stack_id: str = Query("default")):
+        return foundation.get_context_stack(stack_id)
 
     @app.put("/api/context-stack")
     def set_context_stack(payload: ContextStackPayload):
@@ -1816,8 +1873,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     @app.delete("/api/worlds/{world_id}")
     def delete_world(world_id: str):
         try:
-            workspace.delete_world(world_id)
-            history.delete_sessions_by_scope(world_id=world_id)
+            _permanent_delete("world", world_id)
         except KeyError as exc:
             raise HTTPException(404, "World not found") from exc
         except ValueError as exc:
@@ -1894,8 +1950,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     @app.delete("/api/branches/{branch_id}")
     def delete_branch(branch_id: str):
         try:
-            workspace.delete_branch(branch_id)
-            history.delete_sessions_by_scope(branch_id=branch_id)
+            _permanent_delete("branch", branch_id)
         except KeyError as exc:
             raise HTTPException(404, "Branch not found") from exc
         except ValueError as exc:
