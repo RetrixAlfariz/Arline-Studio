@@ -110,28 +110,7 @@ const MODE_NOTES = {
   aif_core: "Internal AIF-Core projection for ablation and teacher-model tests.",
 };
 
-const COMMANDS = [
-  { id: "continue", label: "/continue", description: "Continue the active scene", action: "insert", text: "/continue " },
-  { id: "rewrite", label: "/rewrite", description: "Rewrite selected/current material", action: "insert", text: "/rewrite " },
-  { id: "analyze", label: "/analyze", description: "Analyze the current prompt without generation", action: "analyze" },
-  { id: "new-scene", label: "Create scene", description: "Create a new scene document", action: "new-document" },
-  { id: "new-character", label: "Create character", description: "Create a character family and current-world variant", action: "new-character" },
-  { id: "new-template", label: "Create entity template", description: "Create a reusable character/location/item sheet structure", action: "new-template" },
-  { id: "conflicts", label: "Resolve conflicts", description: "Review contradictory facts in the active scope", action: "conflicts" },
-  { id: "sandbox", label: "Open sandbox branch", description: "Create a non-canonical what-if branch", action: "sandbox" },
-  { id: "snapshot", label: "Save world snapshot", description: "Checkpoint current world/branch state", action: "snapshot" },
-  { id: "switch-world", label: "Switch world", description: "Choose another world or AU", action: "world-picker" },
-  { id: "dataset", label: "Open Feedback Lab", description: "Review generated prose, comparisons, and advanced exports", action: "data" },
-  { id: "inspector", label: "Open context/runtime inspector", description: "Inspect context assembly, trace, validator, and model runtime", action: "inspector" },
-  { id: "new-any", label: "/new", description: "Create an entity, world, folder, document, or project from natural text", action: "quick-create" },
-  { id: "scratch", label: "/scratch", description: "Toggle scratch mode; exploration does not enter canon staging", action: "scratch" },
-  { id: "fork", label: "/fork", description: "Fork the active chat from its latest turn", action: "fork-chat" },
-  { id: "context", label: "/context", description: "Open explainable context assembly", action: "context" },
-  { id: "continuity", label: "/continuity", description: "Run continuity lint for this project and world", action: "continuity" },
-  { id: "scene", label: "/scene", description: "Set or inspect the active narrative scene", action: "active-scene" },
-  { id: "import", label: "Import manuscript", description: "Import Markdown/text into the current Project binder", action: "import-manuscript" },
-  { id: "activity", label: "Open Activity Center", description: "Review issues, recover Trash, and inspect recent actions", action: "activity" },
-];
+const COMMANDS = window.ARLINE_COMMANDS || [];
 
 function escapeHTML(value) {
   return String(value ?? "")
@@ -258,14 +237,6 @@ function closeContextMenu() {
   byId("contextMenu")?.remove();
 }
 
-function setView(view) {
-  state.activeView = view;
-  $$("[data-view-panel]").forEach((panel) => panel.classList.toggle("active", panel.dataset.viewPanel === view));
-  $$("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
-  if (view === "draft") renderDocuments();
-  if (view === "world") renderWorldGrid();
-  if (view === "data") loadDatasetStats();
-}
 
 function openInspector(tab = null) {
   byId("inspector").classList.add("open");
@@ -297,44 +268,14 @@ function closeSheet() {
   byId("sheetScrim").classList.add("hidden");
 }
 
-function updateBreadcrumbs() {
-  const project = state.activeProject?.name || "No project";
-  const world = state.activeWorld?.name || "No world";
-  const branch = state.activeBranch?.name || "No branch";
-  const buttons = $$("#breadcrumbs button");
-  buttons[0].textContent = project;
-  buttons[1].textContent = world;
-  buttons[2].textContent = branch;
-  const sandbox = ["sandbox", "what_if"].includes(state.activeBranch?.kind);
-  byId("sandboxBadge").classList.toggle("hidden", !sandbox);
-  byId("scopeStatus").innerHTML = `<span class="status-dot"></span><span>${escapeHTML(world)} · ${escapeHTML(branch)}</span>`;
-  byId("worldTitle").textContent = world;
-  byId("worldDescription").textContent = state.activeWorld?.description || "Canonical entities, variants, relationships, timeline, and lore.";
-}
 
-function updateContextChipUI() {
-  const container = byId("contextChips");
-  container.innerHTML = state.selectedReferences.map((ref) => `
-    <span class="context-chip" data-ref-id="${escapeHTML(ref.id)}">
-      ${escapeHTML(ENTITY_ICONS[ref.type] || "@")} <b>@${escapeHTML(ref.label)}</b>
-      <button title="Remove context">×</button>
-    </span>`).join("");
-  container.classList.toggle("hidden", state.selectedReferences.length === 0);
-  $$(".context-chip", container).forEach((chip) => {
-    $("button", chip).addEventListener("click", () => {
-      state.selectedReferences = state.selectedReferences.filter((ref) => ref.id !== chip.dataset.refId);
-      updateContextChipUI();
-      updateScopeVisualization();
-    });
-  });
-  byId("contextScopeLabel").textContent = `${state.selectedReferences.length} refs`;
-}
 
 function runtimePayload() {
   const visible = Number(byId("visibleTokens").value || 4096);
+  const apiKey = byId("apiKey").value.trim();
   return {
     server_url: byId("serverUrl").value.trim(),
-    api_key: byId("apiKey").value,
+    api_key: apiKey || null,
     model: byId("modelSelect").value,
     gpu_ratio: Number(byId("gpuRatio").value),
     context_length: Number(byId("contextLength").value),
@@ -355,56 +296,15 @@ function runtimePayload() {
   };
 }
 
-function dynamicVisibleMaximum() {
-  const model = state.modelMap.get(byId("modelSelect").value);
-  const modelLimit = Number(model?.max_context_length || byId("contextLength").value || 32768);
-  const estimatedInput = Number(state.contextCache.contextBreakdown?.estimated_total_tokens || Math.ceil(byId("promptInput").value.length / 4));
-  const reasoning = byId("reasoningSelect").value === "off" ? 0 : Number(byId("reasoningReserve").value || 0);
-  const safety = Number(byId("safetyReserve").value || 0);
-  return Math.max(256, Math.floor((modelLimit - estimatedInput - reasoning - safety) / 256) * 256);
-}
 
-function syncDynamicLength() {
-  const maximum = dynamicVisibleMaximum();
-  const option = $('#lengthPreset option[value="maximum"]');
-  if (option) option.textContent = `Maximum · ${maximum.toLocaleString()} tokens`;
-  byId("visibleTokens").max = maximum;
-  if (byId("lengthPreset").value === "maximum") byId("visibleTokens").value = maximum;
-}
 
-function promptPayload() {
-  return {
-    ...runtimePayload(),
-    prompt: byId("promptInput").value,
-    timezone: timezoneName(),
-    session_id: state.activeSession?.id || null,
-    project_id: state.activeProject?.id || null,
-    world_id: state.activeWorld?.id || null,
-    branch_id: state.activeBranch?.id || null,
-    folder_id: state.activeSession?.folder_id || null,
-    references: state.selectedReferences,
-  };
-}
 
-function updateBudgetUI() {
-  syncDynamicLength();
-  const runtime = runtimePayload();
-  const total = runtime.visible_output_tokens + (runtime.reasoning === "off" ? 0 : runtime.reasoning_reserve_tokens);
-  byId("totalBudget").textContent = total.toLocaleString();
-  byId("modeNote").textContent = MODE_NOTES[runtime.input_mode] || "";
-  byId("beatControls").classList.toggle("hidden", runtime.generation_mode !== "beats");
-  const estimatedInput = state.contextCache.contextBreakdown?.estimated_total_tokens || Math.ceil(byId("promptInput").value.length / 4);
-  const contextMax = runtime.context_length || 32768;
-  const pct = Math.min(100, ((estimatedInput + total) / contextMax) * 100);
-  $("i", byId("contextBudgetBar")).style.width = `${pct}%`;
-  $("i", byId("contextBudgetBar")).style.background = pct > 90 ? "var(--danger)" : pct > 75 ? "var(--warning)" : "var(--accent)";
-  byId("tokenEstimate").textContent = `${estimatedInput.toLocaleString()} input est. · ${total.toLocaleString()} output ceiling`;
-}
 
 function applyConfig(config) {
   state.config = config;
   byId("serverUrl").value = config.server_url || "http://127.0.0.1:1234";
-  byId("apiKey").value = config.api_key || "";
+  byId("apiKey").value = "";
+  byId("apiKey").placeholder = config.api_key_configured ? "Configured — leave blank to keep" : "Optional API key";
   byId("gpuRatio").value = config.gpu_ratio ?? 1;
   byId("contextLength").value = config.context_length ?? 32768;
   byId("modeSelect").value = config.input_mode || "smart_hybrid";
@@ -432,9 +332,9 @@ function syncRangeOutputs() {
 }
 
 async function refreshModels() {
-  const params = new URLSearchParams({ server_url: byId("serverUrl").value.trim(), api_key: byId("apiKey").value });
   try {
-    const payload = await api(`/api/models?${params}`);
+    const apiKey = byId("apiKey").value.trim();
+    const payload = await api("/api/models/query", { method: "POST", body: { server_url: byId("serverUrl").value.trim() || null, api_key: apiKey || null } });
     state.modelMap.clear();
     const select = byId("modelSelect");
     const previous = select.value || state.config?.model || "";
@@ -452,35 +352,10 @@ async function refreshModels() {
     updateModelInfo();
   } catch (error) {
     setConnection(false, "offline");
-    byId("modelInfo").textContent = error.message;
+    if (byId("modelInfo")) byId("modelInfo").textContent = error.message;
   }
 }
 
-function updateModelInfo() {
-  const model = state.modelMap.get(byId("modelSelect").value);
-  const reasoning = byId("reasoningSelect");
-  const previous = reasoning.value;
-  reasoning.innerHTML = "";
-  const allowed = model?.reasoning_options?.length ? model.reasoning_options : ["off", "on"];
-  for (const mode of allowed) {
-    const option = document.createElement("option");
-    option.value = mode;
-    option.textContent = mode === "off" ? "Thinking Off" : `Thinking ${mode[0].toUpperCase()}${mode.slice(1)}`;
-    reasoning.appendChild(option);
-  }
-  reasoning.value = allowed.includes(previous) ? previous : allowed.includes(state.config?.reasoning) ? state.config.reasoning : allowed[0];
-  if (!model) {
-    byId("modelInfo").textContent = "Select a model to inspect its capabilities.";
-  } else {
-    if (model.max_context_length) {
-      byId("contextLength").value = model.max_context_length;
-      byId("contextLength").max = model.max_context_length;
-    }
-    byId("modelInfo").innerHTML = `<b>${escapeHTML(model.display_name)}</b><br>Loaded: ${model.loaded ? "yes" : "no"}<br>Max context: ${(model.max_context_length || 0).toLocaleString()}<br>Reasoning: ${escapeHTML(allowed.join(", "))}`;
-  }
-  updateReasoningWarning();
-  updateBudgetUI();
-}
 
 function updateReasoningWarning() {
   const mode = byId("reasoningSelect").value;
@@ -510,45 +385,6 @@ async function reloadModel() {
   finally { loading(false); }
 }
 
-async function loadWorkspaceBootstrap() {
-  const bootstrap = await api("/api/workspace/bootstrap");
-  state.bootstrap = bootstrap;
-  state.projects = bootstrap.projects || [];
-  const active = bootstrap.active || {};
-  const nextProjectId = active.project?.id || state.projects[0]?.id;
-  if (nextProjectId) {
-    await selectScope(nextProjectId, active.world?.id, active.branch?.id);
-    return;
-  }
-
-  state.activeProject = null;
-  state.activeWorld = null;
-  state.activeBranch = null;
-  state.activeDocument = null;
-  state.activeSession = null;
-  state.projectTree = { folders: [] };
-  state.families = [];
-  state.variants = [];
-  state.relationships = [];
-  state.documents = [];
-  state.tags = [];
-  state.facts = [];
-  state.snapshots = [];
-  state.templates = [];
-  state.conflicts = [];
-  state.sessions = [];
-  state.selectedReferences = [];
-  renderScopeSelectors();
-  updateBreadcrumbs();
-  updateContextChipUI();
-  renderProjectTree();
-  renderLibraryCounts();
-  renderTags();
-  renderDocuments();
-  renderSessions();
-  renderWorldGrid();
-  updateScopeVisualization();
-}
 
 function applyProjectDefaults(project) {
   const settings = project?.settings || {};
@@ -559,39 +395,7 @@ function applyProjectDefaults(project) {
   document.body.classList.toggle("advanced-mode", Boolean(settings.advanced));
 }
 
-async function selectScope(projectId, worldId = null, branchId = null) {
-  if (!projectId) return;
-  loading(true, "Opening workspace…", "Resolving world variants and folders");
-  try {
-    const project = await api(`/api/projects/${encodeURIComponent(projectId)}`);
-    state.activeProject = project;
-    applyProjectDefaults(project);
-    state.projects = (await api("/api/projects")).projects || state.projects;
-    const worlds = project.worlds || [];
-    const world = worlds.find((item) => item.id === worldId) || worlds.find((item) => item.id === project.default_world_id) || worlds[0];
-    state.activeWorld = world ? await api(`/api/worlds/${encodeURIComponent(world.id)}`) : null;
-    const branches = state.activeWorld?.branches || [];
-    state.activeBranch = branches.find((item) => item.id === branchId) || branches.find((item) => item.kind === "main") || branches[0] || null;
-    state.selectedReferences = [];
-    updateContextChipUI();
-    renderScopeSelectors();
-    updateBreadcrumbs();
-    await Promise.all([loadProjectData(), loadSessions()]);
-  } catch (error) { toast(`Workspace error: ${error.message}`, 5000); }
-  finally { loading(false); }
-}
 
-function renderScopeSelectors() {
-  const projectSelect = byId("projectSelect");
-  projectSelect.innerHTML = state.projects.map((item) => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name)}</option>`).join("");
-  if (state.activeProject) projectSelect.value = state.activeProject.id;
-  const worldSelect = byId("worldSelect");
-  worldSelect.innerHTML = (state.activeProject?.worlds || []).map((item) => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name)} · ${escapeHTML(item.canon_status)}</option>`).join("");
-  if (state.activeWorld) worldSelect.value = state.activeWorld.id;
-  const branchSelect = byId("branchSelect");
-  branchSelect.innerHTML = (state.activeWorld?.branches || []).map((item) => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name)} · ${escapeHTML(item.kind)}</option>`).join("");
-  if (state.activeBranch) branchSelect.value = state.activeBranch.id;
-}
 
 function scopeQuery(extra = {}) {
   return new URLSearchParams({
@@ -602,35 +406,6 @@ function scopeQuery(extra = {}) {
   });
 }
 
-async function loadProjectData() {
-  if (!state.activeProject) return;
-  const q = scopeQuery();
-  const [tree, variants, relationships, documents, tags, facts, snapshots] = await Promise.all([
-    api(`/api/projects/${state.activeProject.id}/tree?${q}`),
-    state.activeWorld ? api(`/api/entities/variants?${q}`) : { variants: [] },
-    state.activeWorld ? api(`/api/relationships?${q}`) : { relationships: [] },
-    api(`/api/documents?${q}`),
-    api(`/api/tags?project_id=${state.activeProject.id}`),
-    api(`/api/facts?${q}`),
-    state.activeWorld ? api(`/api/snapshots?world_id=${state.activeWorld.id}`) : { snapshots: [] },
-  ]);
-  state.projectTree = tree;
-  state.families = tree.families || [];
-  state.variants = variants.variants || [];
-  state.relationships = relationships.relationships || [];
-  state.documents = documents.documents || [];
-  state.tags = tags.tags || [];
-  state.facts = facts.facts || [];
-  state.snapshots = snapshots.snapshots || [];
-  state.templates = tree.templates || [];
-  state.conflicts = tree.conflicts || [];
-  renderProjectTree();
-  renderLibraryCounts();
-  renderTags();
-  renderDocuments();
-  renderWorldGrid();
-  updateScopeVisualization();
-}
 
 function renderLibraryCounts() {
   const count = (type) => state.families.filter((item) => item.entity_type === type).length;
@@ -641,69 +416,6 @@ function renderLibraryCounts() {
   byId("loreCount").textContent = count("lore") + count("world_rule") + state.documents.filter((item) => item.document_type === "lore").length;
 }
 
-function renderProjectTree() {
-  const root = byId("projectTree");
-  root.innerHTML = "";
-  const documentsByFolder = new Map();
-  const familiesByFolder = new Map();
-  for (const doc of state.documents) {
-    const key = doc.folder_id || "root";
-    if (!documentsByFolder.has(key)) documentsByFolder.set(key, []);
-    documentsByFolder.get(key).push(doc);
-  }
-  for (const family of state.families) {
-    const key = family.folder_id || "root";
-    if (!familiesByFolder.has(key)) familiesByFolder.set(key, []);
-    familiesByFolder.get(key).push(family);
-  }
-
-  const appendDocuments = (container, folderId, depth) => {
-    for (const doc of documentsByFolder.get(folderId || "root") || []) {
-      container.appendChild(documentTreeNode(doc, depth));
-    }
-  };
-
-  const appendEntities = (container, folderId, depth) => {
-    for (const family of familiesByFolder.get(folderId || "root") || []) {
-      container.appendChild(entityTreeNode(family, depth));
-    }
-  };
-
-  const appendFolder = (container, folder, depth = 0) => {
-    const wrapper = document.createElement("div");
-    wrapper.className = "tree-folder-group";
-    const row = document.createElement("div");
-    row.className = "tree-node";
-    row.style.paddingLeft = `${depth * 13}px`;
-    row.innerHTML = `<button class="tree-toggle">⌄</button><span class="tree-icon">▱</span><button class="tree-main">${escapeHTML(folder.name)}</button><button class="row-menu">•••</button>`;
-    const children = document.createElement("div");
-    children.className = "tree-children";
-    wrapper.append(row, children);
-    container.appendChild(wrapper);
-
-    $(".tree-toggle", row).addEventListener("click", () => {
-      children.classList.toggle("hidden");
-      $(".tree-toggle", row).textContent = children.classList.contains("hidden") ? "›" : "⌄";
-    });
-    $(".tree-main", row).addEventListener("click", () => { setView("draft"); filterDocumentsByFolder(folder.id); });
-    $(".row-menu", row).addEventListener("click", (event) => contextMenu(event.clientX, event.clientY, [
-      { label: "New document here", action: () => openDocumentForm(folder.id) },
-      { label: "New character/entity here", action: () => openEntityForm("character", folder.id) },
-      { label: "New subfolder", action: () => openFolderForm(folder.id) },
-      { label: "Rename", action: () => renameFolder(folder) },
-      { label: "Delete", danger: true, action: () => deleteFolder(folder) },
-    ]));
-
-    appendDocuments(children, folder.id, depth + 1);
-    appendEntities(children, folder.id, depth + 1);
-    for (const child of folder.children || []) appendFolder(children, child, depth + 1);
-  };
-
-  appendDocuments(root, null, 0);
-  appendEntities(root, null, 0);
-  for (const folder of state.projectTree?.folders || []) appendFolder(root, folder, 0);
-  byId("projectTreeEmpty").classList.toggle("hidden", root.children.length > 0);
-}
 
 function entityTreeNode(family, depth) {
   const row = document.createElement("div");
@@ -761,13 +473,6 @@ function renderTags() {
   }));
 }
 
-async function loadSessions(tag = "") {
-  if (!state.activeProject) return;
-  const q = scopeQuery({ limit: "150", ...(tag ? { tag } : {}) });
-  const payload = await api(`/api/sessions?${q}`);
-  state.sessions = payload.sessions || [];
-  renderSessions();
-}
 
 function sessionGroups(sessions) {
   const groups = { Today: [], Yesterday: [], "Previous 7 days": [], "Previous 30 days": [], Older: [] };
@@ -799,39 +504,7 @@ function sessionRowHTML(item) {
   return `<div class="session-row ${state.activeSession?.id === item.id ? "active" : ""}" data-session-id="${item.id}"><button class="session-main" title="${escapeHTML(item.title)}">${escapeHTML(item.title)}</button>${item.tags?.slice(0, 1).map((tag) => `<span class="tag-chip">#${escapeHTML(tag)}</span>`).join("") || ""}<button class="row-menu">•••</button></div>`;
 }
 
-function bindSessionRows() {
-  $$(".session-row").forEach((row) => {
-    const id = row.dataset.sessionId;
-    $(".session-main", row).addEventListener("click", () => openSession(id));
-    $(".row-menu", row).addEventListener("click", (event) => {
-      const session = state.sessions.find((item) => item.id === id);
-      contextMenu(event.clientX, event.clientY, [
-        { label: "Rename", action: () => renameSession(session) },
-        { label: session.pinned ? "Unpin" : "Pin", action: () => patchSession(id, { pinned: !session.pinned }) },
-        { label: "Fork chat", action: () => forkSession(id) },
-        { label: "Edit tags", action: () => editSessionTags(session) },
-        { label: "Delete", danger: true, action: () => deleteSession(id) },
-      ]);
-    });
-  });
-}
 
-async function openSession(id) {
-  loading(true, "Opening chat…", "Loading history and feedback");
-  try {
-    const session = await api(`/api/sessions/${id}`);
-    state.activeSession = session;
-    byId("activeChatTitle").textContent = session.title || "Current chat";
-    state.selectedReferences = session.workspace_refs || [];
-    updateContextChipUI();
-    byId("chatLanding").classList.add("hidden");
-    byId("conversationSection").classList.remove("hidden");
-    renderConversation(session.turns || []);
-    setView("chat");
-    renderSessions();
-  } catch (error) { toast(error.message); }
-  finally { loading(false); }
-}
 
 function renderConversation(turns) {
   const feed = byId("conversationFeed");
@@ -840,34 +513,7 @@ function renderConversation(turns) {
   feed.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "end" });
 }
 
-function turnHTML(turn) {
-  const story = turn.feedback_status === "edited_accept" && turn.edited_story ? turn.edited_story : turn.story;
-  const stats = turn.stats || {};
-  const total = stats.total_output_tokens || 0;
-  const reason = stats.reasoning_output_tokens || 0;
-  const visible = Math.max(0, total - reason);
-  return `<article class="turn" data-turn-id="${turn.id}">
-    <div class="turn-user"><div class="user-bubble">${escapeHTML(turn.user_prompt)}</div></div>
-    <div class="turn-assistant"><div class="assistant-head"><div class="assistant-meta"><span class="run-chip">${escapeHTML(turn.run_id)}</span><span>${escapeHTML(turn.model || "model")}</span><span>${escapeHTML(turn.mode)} · ${escapeHTML(turn.reasoning)}</span>${turn.feedback_status && turn.feedback_status !== "unreviewed" ? `<span class="feedback-badge ${turn.feedback_status}">${escapeHTML(turn.feedback_status)}</span>` : ""}</div><div class="assistant-actions"><button class="tiny-btn copy-turn">Copy</button><button class="tiny-btn inspect-turn">Inspect</button><button class="tiny-btn save-turn">Save run</button></div></div>
-    ${turn.feedback_status === "edited_accept" ? `<div class="edited-marker">Human-edited accepted version</div>` : ""}
-    <div class="story-output">${storyHTML(story)}</div>
-    <div class="usage-strip">${stats.input_tokens ? `<span class="usage-pill">${stats.input_tokens} in</span>` : ""}${visible ? `<span class="usage-pill">${visible} story</span>` : ""}${reason ? `<span class="usage-pill warning">${reason} reasoning</span>` : ""}${stats.tokens_per_second ? `<span class="usage-pill">${Number(stats.tokens_per_second).toFixed(1)} tok/s</span>` : ""}</div>
-    <div class="feedback-row"><button class="accept">✓ Accept</button><button class="edit-accept">✎ Edit & Accept</button><button class="reject">✕ Reject</button><button class="promote">＋ Promote line to canon</button></div></div>
-  </article>`;
-}
 
-function bindTurnActions() {
-  $$(".turn").forEach((node) => {
-    const turnId = node.dataset.turnId;
-    $(".copy-turn", node).addEventListener("click", () => navigator.clipboard.writeText($(".story-output", node).innerText).then(() => toast("Copied")));
-    $(".inspect-turn", node).addEventListener("click", () => inspectTurn(turnId));
-    $(".save-turn", node).addEventListener("click", () => saveRunFromTurn(turnId));
-    $(".accept", node).addEventListener("click", () => openFeedback(turnId, "accepted"));
-    $(".edit-accept", node).addEventListener("click", () => openFeedback(turnId, "edited_accept", $(".story-output", node).innerText));
-    $(".reject", node).addEventListener("click", () => openFeedback(turnId, "rejected"));
-    $(".promote", node).addEventListener("click", () => promoteStorySelection(turnId, $(".story-output", node).innerText));
-  });
-}
 
 async function inspectTurn(turnId) {
   const turn = await api(`/api/turns/${turnId}`);
@@ -906,12 +552,6 @@ function renameSession(session) {
   openForm({ title: "Rename chat", eyebrow: "History", fields: [{ name: "title", label: "Title", value: session.title, full: true }], onSubmit: async (values) => { await patchSession(session.id, { title: values.title }); } });
 }
 
-async function forkSession(id) {
-  const fork = await api(`/api/sessions/${id}/fork`, { method: "POST", body: {} });
-  await loadSessions();
-  await openSession(fork.id);
-  toast("Chat forked");
-}
 
 function moveSession(session) {
   const folders = flattenFolders(state.projectTree?.folders || []);
@@ -922,13 +562,6 @@ function editSessionTags(session) {
   openForm({ title: "Chat tags", eyebrow: "Organize", fields: [{ name: "tags", label: "Comma-separated tags", value: (session.tags || []).join(", "), full: true }], onSubmit: async (values) => { await patchSession(session.id, { tags: values.tags.split(",").map((x) => x.trim()).filter(Boolean) }); } });
 }
 
-async function deleteSession(id) {
-  if (!confirm("Delete this chat and all turns?")) return;
-  await api(`/api/sessions/${id}`, { method: "DELETE" });
-  if (state.activeSession?.id === id) newChat();
-  await loadSessions();
-  toast("Chat deleted");
-}
 
 function newChat() {
   state.activeSession = null;
@@ -960,27 +593,6 @@ async function analyzePrompt() {
   finally { loading(false); }
 }
 
-function loadContextResult(result) {
-  state.contextCache.wcf = result.wcf || "";
-  state.contextCache.aif = result.aif_core || "";
-  state.contextCache.brief = result.narrative_brief || null;
-  state.contextCache.workspace = result.workspace_context || null;
-  state.contextCache.projections = result.projections || [];
-  state.contextCache.traceChoices = result.trace_choices || [];
-  state.contextCache.contextBreakdown = result.context_breakdown || null;
-  byId("wcfOutput").textContent = result.wcf || "No WCF.";
-  byId("aifOutput").textContent = result.aif_core || "No AIF-Core.";
-  byId("briefOutput").textContent = result.narrative_brief?.text || pretty(result.narrative_brief || {});
-  byId("workspaceContextOutput").textContent = result.workspace_context?.text || "No workspace context.";
-  byId("projectionOutput").textContent = pretty(result.projections || []);
-  byId("wcfValidation").textContent = pretty(result.wcf_validation || {});
-  byId("postValidation").textContent = "Generate to validate prose.";
-  renderAnalysisSummary(result.summary || {});
-  renderTraceChoices(result.trace_choices || [], result.analysis_id || result.run_id);
-  renderContextBreakdown(result.context_breakdown || {});
-  updateScopeVisualization();
-  updateBudgetUI();
-}
 
 function renderAnalysisSummary(summary) {
   byId("analysisStrip").classList.remove("hidden");
@@ -1006,35 +618,7 @@ function renderContextBreakdown(breakdown) {
   byId("contextBreakdown").innerHTML = rows.map(([key, value]) => `<div><span>${escapeHTML(key.replaceAll("_", " "))}</span><b>${Number(value).toLocaleString()}</b></div>`).join("");
 }
 
-function updateScopeVisualization() {
-  const ws = state.contextCache.workspace;
-  const explicit = state.selectedReferences;
-  const auto = ws?.auto_selected || [];
-  const pinned = ws?.pinned || [];
-  byId("scopeVisualization").innerHTML = `<div class="scope-path"><span>${escapeHTML(state.activeProject?.name || "Project")}</span><b>›</b><span>${escapeHTML(state.activeWorld?.name || "World")}</span><b>›</b><span>${escapeHTML(state.activeBranch?.name || "Branch")}</span></div><div class="scope-list"><b>Explicit</b>: ${explicit.length ? explicit.map((x) => `@${escapeHTML(x.label)}`).join(", ") : "none"}<br><b>Auto-selected</b>: ${auto.length}<br><b>Pinned</b>: ${pinned.length}</div>`;
-}
 
-async function generateStory() {
-  const payload = promptPayload();
-  if (!payload.prompt.trim()) return toast("Write a prompt first");
-  if (!payload.model) return toast("Select a model first");
-  loading(true, payload.generation_mode === "beats" ? "Writing story beats…" : "Writing story…", payload.generation_mode === "beats" ? `Planning ${payload.beat_count} bounded continuations` : "Compiling context and calling LM Studio");
-  try {
-    const result = await api("/api/generate", { method: "POST", body: payload });
-    state.activeRunId = result.run_id;
-    state.activeSession = { id: result.session_id, title: result.session_title, workspace_refs: state.selectedReferences };
-    state.activeTurn = { id: result.turn_id };
-    loadContextResult(result);
-    byId("postValidation").textContent = pretty(result.post_validation || {});
-    byId("reasoningOutput").textContent = result.reasoning || "No separate reasoning output.";
-    byId("statsOutput").textContent = pretty(result.stats || {});
-    await Promise.all([loadSessions(), openSession(result.session_id), loadDatasetStats()]);
-    byId("promptInput").value = "";
-    updateBudgetUI();
-    toast(`Generated ${result.run_id}`);
-  } catch (error) { toast(`Generation failed: ${error.message}`, 6000); }
-  finally { loading(false); }
-}
 
 async function loadTrace() {
   const select = byId("traceSelect");
@@ -1093,22 +677,6 @@ function renderMentionPopup() {
   $$(".autocomplete-item", popup).forEach((button) => button.addEventListener("click", () => chooseMention(Number(button.dataset.index))));
 }
 
-function chooseMention(index) {
-  const item = state.mentionResults[index];
-  if (!item) return;
-  const input = byId("promptInput");
-  const cursor = input.selectionStart;
-  const before = input.value.slice(0, cursor);
-  const match = before.match(/@([^@\n]{0,50})$/);
-  if (!match) return;
-  const start = cursor - match[0].length;
-  input.value = `${input.value.slice(0, start)}@${item.label} ${input.value.slice(cursor)}`;
-  const next = start + item.label.length + 2;
-  input.setSelectionRange(next, next);
-  addReference({ type: item.type, id: item.id, label: item.label });
-  hideAutocomplete();
-  input.focus();
-}
 
 function renderSlashPopup() {
   const popup = byId("slashPopup");
@@ -1125,23 +693,6 @@ function chooseSlash(index) {
   executeCommand(item);
 }
 
-async function executeCommand(command) {
-  if (command.action === "insert") {
-    const input = byId("promptInput");
-    input.value = input.value.replace(/(?:^|\n)\/[\w-]*$/, command.text);
-    input.focus();
-  } else if (command.action === "analyze") analyzePrompt();
-  else if (command.action === "new-document") openDocumentForm();
-  else if (command.action === "new-character") openEntityForm("character");
-  else if (command.action === "new-template") openTemplateForm();
-  else if (command.action === "conflicts") { setView("world"); state.activeWorldTab = "canon"; renderWorldGrid(); }
-  else if (command.action === "sandbox") createSandbox();
-  else if (command.action === "snapshot") createSnapshot();
-  else if (command.action === "world-picker") byId("worldSelect").focus();
-  else if (command.action === "data") setView("data");
-  else if (command.action === "inspector") openInspector();
-  byId("commandDialog").close();
-}
 
 function handleComposerKey(event) {
   const mentionVisible = !byId("mentionPopup").classList.contains("hidden");
@@ -1166,41 +717,12 @@ function openCommandPalette(query = "") {
   setTimeout(() => byId("commandSearch").focus(), 0);
 }
 
-async function searchCommands(query) {
-  const q = query.trim();
-  let remote = [];
-  if (q && state.activeProject) {
-    try { remote = (await api(`/api/commands?project_id=${state.activeProject.id}&q=${encodeURIComponent(q)}`)).results || []; }
-    catch (_) {}
-  }
-  const local = COMMANDS.filter((item) => !q || item.label.toLowerCase().includes(q.toLowerCase()) || item.description.toLowerCase().includes(q.toLowerCase()));
-  state.commandResults = [
-    ...local.map((item) => ({ ...item, kind: "command" })),
-    ...remote.map((item) => ({ ...item, kind: item.type || "resource", action: "resource" })),
-    ...state.sessions.filter((item) => !q || item.title.toLowerCase().includes(q.toLowerCase())).slice(0, 8).map((item) => ({ id: item.id, label: item.title, description: item.prompt_preview || "Chat", kind: "session", action: "session" })),
-  ];
-  state.commandIndex = 0;
-  renderCommandResults();
-}
 
 function renderCommandResults() {
   byId("commandResults").innerHTML = state.commandResults.map((item, index) => `<button class="command-item ${index === state.commandIndex ? "active" : ""}" data-index="${index}"><span class="command-item-icon">${escapeHTML(ENTITY_ICONS[item.kind] || "⌘")}</span><span><b>${escapeHTML(item.label || item.name)}</b><small>${escapeHTML(item.description || item.subtitle || item.kind)}</small></span>${item.action === "insert" ? "<kbd>insert</kbd>" : ""}</button>`).join("") || `<div class="empty-state small">No results.</div>`;
   $$(".command-item").forEach((button) => button.addEventListener("click", () => chooseCommand(Number(button.dataset.index))));
 }
 
-async function chooseCommand(index) {
-  const item = state.commandResults[index];
-  if (!item) return;
-  if (item.action === "session") { byId("commandDialog").close(); return openSession(item.id); }
-  if (item.action === "resource") {
-    byId("commandDialog").close();
-    if (item.type === "entity_family" || item.type === "entity_variant") return openEntitySheet(item.family_id || item.id, item.type === "entity_variant" ? item.id : null);
-    if (item.type === "document") return openDocument(item.id);
-    if (item.type === "relationship") return openRelationshipSheet(item.id);
-    if (item.type === "world") return selectScope(state.activeProject.id, item.id, null);
-  }
-  await executeCommand(item);
-}
 
 function commandKey(event) {
   if (event.key === "ArrowDown") { event.preventDefault(); state.commandIndex = Math.min(state.commandResults.length - 1, state.commandIndex + 1); renderCommandResults(); }
@@ -1208,55 +730,6 @@ function commandKey(event) {
   else if (event.key === "Enter") { event.preventDefault(); chooseCommand(state.commandIndex); }
 }
 
-function openForm({ title, eyebrow = "Create", description = "", fields = [], submit = "Save", onSubmit }) {
-  byId("formEyebrow").textContent = eyebrow;
-  byId("formTitle").textContent = title;
-  byId("formDescription").textContent = description;
-  byId("formSubmitBtn").textContent = submit;
-  const container = byId("formFields");
-  container.innerHTML = "";
-  for (const field of fields) {
-    const label = document.createElement("label");
-    if (field.full) label.classList.add("full");
-    label.textContent = field.label;
-    let control;
-    if (field.type === "textarea" || field.type === "json") {
-      control = document.createElement("textarea");
-      control.rows = field.rows || (field.type === "json" ? 7 : 4);
-      control.value = field.type === "json" && typeof field.value !== "string" ? pretty(field.value || {}) : field.value || "";
-    } else if (field.type === "select") {
-      control = document.createElement("select");
-      control.innerHTML = (field.options || []).map((option) => `<option value="${escapeHTML(option.value)}">${escapeHTML(option.label)}</option>`).join("");
-      control.value = field.value ?? "";
-    } else if (field.type === "checkbox") {
-      control = document.createElement("input");
-      control.type = "checkbox";
-      control.checked = Boolean(field.value);
-    } else {
-      control = document.createElement("input");
-      control.type = field.type || "text";
-      control.value = field.value ?? "";
-      if (field.placeholder) control.placeholder = field.placeholder;
-    }
-    control.name = field.name;
-    control.dataset.fieldType = field.type || "text";
-    if (field.required) control.required = true;
-    label.appendChild(control);
-    container.appendChild(label);
-  }
-  state.formHandler = async () => {
-    const values = {};
-    for (const control of $$('[name]', container)) {
-      if (control.type === "checkbox") values[control.name] = control.checked;
-      else if (control.dataset.fieldType === "json") values[control.name] = parseJSON(control.value, {});
-      else values[control.name] = control.value;
-      if (control.required && !String(values[control.name]).trim()) throw new Error(`${control.name} is required`);
-    }
-    await onSubmit(values);
-  };
-  byId("formDialog").showModal();
-  setTimeout(() => $("input,textarea,select", container)?.focus(), 0);
-}
 
 async function submitForm(event) {
   event.preventDefault();
@@ -1282,71 +755,9 @@ function flattenFolders(folders, prefix = "") {
   return result;
 }
 
-function projectActions(event) {
-  contextMenu(event.clientX, event.clientY, [
-    { label: "New project", action: openProjectForm },
-    { label: "New world / AU", action: openWorldForm },
-    { label: "Fork current world", action: openForkWorldForm },
-    { label: "Edit project", action: editProject },
-    { label: "Compare worlds", action: openWorldCompare },
-    { label: "New entity template", action: openTemplateForm },
-    { label: "Delete custom template", danger: true, hidden: !state.templates.some((item) => item.project_id === state.activeProject?.id), action: deleteCustomTemplate },
-    { label: `Resolve conflicts (${state.conflicts.length})`, action: () => { setView("world"); state.activeWorldTab = "canon"; renderWorldGrid(); } },
-    { label: "Delete current branch", danger: true, hidden: !state.activeBranch || state.activeBranch.kind === "main", action: () => deleteBranch(state.activeBranch) },
-    { label: "Delete current world", danger: true, hidden: !state.activeWorld, action: () => deleteWorld(state.activeWorld) },
-    { label: "Delete project", danger: true, hidden: !state.activeProject, action: () => deleteProject(state.activeProject) },
-  ]);
-}
 
-async function deleteProject(project) {
-  if (!project) return;
-  const ok = confirm(`Permanently delete project “${project.name}”?\n\nThis removes the project workspace: folders, documents, manifest references, project overlays, active-scene metadata, and project-scoped chats. Shared Library worlds, sheets, relationships, and canon remain available. This cannot be undone.`);
-  if (!ok) return;
-  loading(true, "Deleting project…", "Cleaning workspace lineage and chat scope");
-  try {
-    await api(`/api/projects/${project.id}`, { method: "DELETE" });
-    closeSheet();
-    state.activeSession = null;
-    state.activeDocument = null;
-    await loadWorkspaceBootstrap();
-    toast(`Deleted project “${project.name}”`);
-  } catch (error) { toast(error.message, 5000); }
-  finally { loading(false); }
-}
 
-async function deleteWorld(world) {
-  if (!world) return;
-  const ok = confirm(`Delete world “${world.name}”?\n\nWorld-specific variants, relationships, documents, facts, snapshots, branches, and chats are deleted. Shared entity families remain available to other worlds.`);
-  if (!ok) return;
-  loading(true, "Deleting world…", "Removing world-scoped data");
-  try {
-    const projectId = state.activeProject.id;
-    await api(`/api/worlds/${world.id}`, { method: "DELETE" });
-    closeSheet();
-    state.activeDocument = null;
-    state.activeSession = null;
-    await selectScope(projectId);
-    toast(`Deleted world “${world.name}”`);
-  } catch (error) { toast(error.message, 5000); }
-  finally { loading(false); }
-}
 
-async function deleteBranch(branch) {
-  if (!branch) return;
-  if (branch.kind === "main") return toast("The main branch is protected; delete the world instead");
-  const ok = confirm(`Delete branch “${branch.name}”?\n\nBranch-only variants, relationships, documents, facts, and chats will be removed. The main world remains unchanged.`);
-  if (!ok) return;
-  try {
-    const projectId = state.activeProject.id;
-    const worldId = state.activeWorld.id;
-    await api(`/api/branches/${branch.id}`, { method: "DELETE" });
-    closeSheet();
-    state.activeDocument = null;
-    state.activeSession = null;
-    await selectScope(projectId, worldId, null);
-    toast(`Deleted branch “${branch.name}”`);
-  } catch (error) { toast(error.message, 5000); }
-}
 
 function openProjectForm() {
   openForm({ title: "New project", eyebrow: "Workspace", description: "A project is a focused story workspace: manuscript, folders, notes, research, assets, and references. Library sheets/canon stay shared and are linked through the project context manifest.", fields: [
@@ -1441,9 +852,6 @@ async function createSandbox() {
   toast("Sandbox created; changes remain non-canonical until promoted");
 }
 
-function openFolderForm(parentId = null) {
-  openForm({ title: "New folder", eyebrow: "Project files", description: "Folders can organize chats, documents, and character/entity families together or separately.", fields: [{ name: "name", label: "Folder name", required: true }, { name: "kind", label: "Content kind", type: "select", options: ["mixed", "entity", "chat", "draft", "lore"].map((x) => ({ value: x, label: x === "entity" ? "character / entity" : x })), value: "mixed" }], onSubmit: async (values) => { await api("/api/folders", { method: "POST", body: { project_id: state.activeProject.id, world_id: state.activeWorld?.id, branch_id: state.activeBranch?.id, parent_id: parentId, ...values } }); await loadProjectData(); } });
-}
 
 function renameFolder(folder) {
   openForm({ title: "Rename folder", eyebrow: "Project files", fields: [{ name: "name", label: "Name", value: folder.name, required: true }], onSubmit: async (values) => { await api(`/api/folders/${folder.id}`, { method: "PATCH", body: values }); await loadProjectData(); } });
@@ -1454,14 +862,6 @@ async function deleteFolder(folder) {
   await trashResource("folder", folder.id, folder.name);
 }
 
-function openDocumentForm(folderId = null, type = "scene") {
-  openForm({ title: "New document", eyebrow: "Draft", fields: [
-    { name: "title", label: "Title", required: true },
-    { name: "document_type", label: "Type", type: "select", options: (state.bootstrap?.document_types || ["draft", "scene", "lore", "note", "outline"]).map((x) => ({ value: x, label: x })), value: type },
-    { name: "status", label: "Status", type: "select", options: [{ value: "draft", label: "draft" }, { value: "provisional", label: "provisional" }, { value: "canon", label: "canon" }], value: "draft" },
-    { name: "content", label: "Initial content", type: "textarea", full: true },
-  ], onSubmit: async (values) => { const doc = await api("/api/documents", { method: "POST", body: { project_id: state.activeProject.id, world_id: state.activeWorld?.id, branch_id: state.activeBranch?.id, folder_id: folderId, ...values } }); await loadProjectData(); await openDocument(doc.id); } });
-}
 
 function draftRecoveryKey(id) { return `arline:draft-recovery:${id}`; }
 function storeDraftRecovery() {
@@ -1508,13 +908,6 @@ async function openDocument(id) {
   recordNavigation();
 }
 
-function renderDocuments(filter = null) {
-  const activeFilter = filter || $(".document-filters button.active")?.dataset.docFilter || "all";
-  const docs = state.documents.filter((doc) => activeFilter === "all" || doc.document_type === activeFilter);
-  byId("documentList").innerHTML = docs.map((doc) => `<button class="document-item ${state.activeDocument?.id === doc.id ? "active" : ""}" data-doc-id="${doc.id}"><b>${escapeHTML(doc.title)}</b><span>${escapeHTML(doc.document_type)} · ${formatRelative(doc.updated_at)}</span></button>`).join("");
-  byId("documentEmpty").classList.toggle("hidden", docs.length > 0);
-  $$(".document-item").forEach((button) => button.addEventListener("click", () => openDocument(button.dataset.docId)));
-}
 
 function filterDocumentsByFolder(folderId) {
   const docs = state.documents.filter((doc) => doc.folder_id === folderId);
@@ -1522,22 +915,7 @@ function filterDocumentsByFolder(folderId) {
   $$(".document-item").forEach((button) => button.addEventListener("click", () => openDocument(button.dataset.docId)));
 }
 
-async function saveDraft(note = "manual save") {
-  if (!state.activeDocument) return toast("Select or create a document first");
-  const payload = { title: byId("draftTitle").value || "Untitled", content: byId("draftEditor").value, status: byId("draftStatus").value, note };
-  const doc = await api(`/api/documents/${state.activeDocument.id}`, { method: "PATCH", body: payload });
-  state.activeDocument = { ...state.activeDocument, ...doc };
-  byId("draftSaveStatus").textContent = "Saved now";
-  await loadProjectData();
-}
 
-function scheduleDraftAutosave() {
-  byId("draftStats").textContent = `${wordCount(byId("draftEditor").value)} words`;
-  byId("draftSaveStatus").textContent = "Unsaved changes";
-  if (!state.config?.workspace?.autosave_drafts || !state.activeDocument) return;
-  clearTimeout(state.draftTimer);
-  state.draftTimer = setTimeout(() => saveDraft("autosave").catch((error) => toast(error.message)), 1200);
-}
 
 function renderRevisions(revisions) {
   byId("revisionList").innerHTML = revisions.map((rev) => `<div class="revision-item"><div><b>v${rev.version} · ${escapeHTML(rev.note || "revision")}</b><small>${formatDate(rev.created_at)}</small></div><button class="tiny-btn restore-revision" data-revision-id="${rev.id}">Restore</button></div>`).join("") || `<div class="empty-note">No revisions yet.</div>`;
@@ -1554,58 +932,10 @@ async function restoreResourceRevision(revisionId, reopenId = null, reopenType =
   toast("Revision restored non-destructively");
 }
 
-async function deleteDocument(doc) {
-  if (!confirm(`Delete “${doc.title}”?`)) return;
-  await api(`/api/documents/${doc.id}`, { method: "DELETE" });
-  if (state.activeDocument?.id === doc.id) state.activeDocument = null;
-  await loadProjectData();
-}
 
-async function deleteEntityFamily(family) {
-  if (!family) return;
-  const variantCount = family.variants?.length ?? state.variants.filter((item) => item.family_id === family.id).length;
-  const ok = confirm(`Delete entity family “${family.name}”?\n\nThis removes ${variantCount} variant(s), connected relationships, owned canon facts, revisions, pins, and tags. This cannot be undone.`);
-  if (!ok) return;
-  await api(`/api/entities/families/${family.id}`, { method: "DELETE" });
-  closeSheet();
-  state.selectedReferences = state.selectedReferences.filter((ref) => ref.id !== family.id);
-  updateContextChipUI();
-  await loadProjectData();
-  toast(`Deleted “${family.name}”`);
-}
 
-async function deleteVariant(variant, family) {
-  if (!variant) return;
-  const ok = confirm(`Delete variant “${variant.display_name}” from ${worldName(variant.world_id)}?\n\nRelationships and facts owned by this variant are also removed. Other variants in the family stay intact.`);
-  if (!ok) return;
-  await api(`/api/entities/variants/${variant.id}`, { method: "DELETE" });
-  closeSheet();
-  state.selectedReferences = state.selectedReferences.filter((ref) => ref.id !== variant.id);
-  updateContextChipUI();
-  await loadProjectData();
-  if (family) await openEntitySheet(family.id);
-  toast(`Deleted variant “${variant.display_name}”`);
-}
 
-async function deleteRelationship(rel) {
-  if (!rel) return;
-  if (!confirm(`Delete relationship “${rel.subject_name} ↔ ${rel.object_name}” (${rel.relation_type})?`)) return;
-  await api(`/api/relationships/${rel.id}`, { method: "DELETE" });
-  closeSheet();
-  state.selectedReferences = state.selectedReferences.filter((ref) => ref.id !== rel.id);
-  updateContextChipUI();
-  await loadProjectData();
-  toast("Relationship deleted");
-}
 
-async function deleteFact(fact) {
-  if (!fact) return;
-  if (!confirm(`Delete canon fact “${fact.path}”?\n\nThis removes the fact itself and dependency references to it. Use retcon instead if you want to preserve semantic history.`)) return;
-  await api(`/api/facts/${fact.id}`, { method: "DELETE" });
-  closeSheet();
-  await loadProjectData();
-  toast("Fact deleted");
-}
 
 async function deleteTag(tag) {
   if (!tag) return;
@@ -1629,102 +959,6 @@ function moveDocument(doc) {
   openForm({ title: "Move document", eyebrow: "Folder", fields: [{ name: "folder_id", label: "Folder", type: "select", options: [{ value: "", label: "No folder" }, ...folders.map((f) => ({ value: f.id, label: f.path }))], value: doc.folder_id || "", full: true }], onSubmit: async (values) => { await api(`/api/documents/${doc.id}`, { method: "PATCH", body: { folder_id: values.folder_id || "", note: "moved" } }); await loadProjectData(); } });
 }
 
-function openEntityForm(defaultType = "character", folderId = null) {
-  const typeOptions = (state.bootstrap?.entity_types || ["character", "location", "item", "organization", "world_rule", "lore"]).map((x) => ({ value: x, label: x.replaceAll("_", " ") }));
-  const familyOptions = () => state.families
-    .filter((item) => item.entity_type === ($('[name="entity_type"]', byId("formFields"))?.value || defaultType))
-    .map((item) => ({ value: item.id, label: `${item.name} · ${item.entity_type}` }));
-
-  openForm({ title: "New entity / variant", eyebrow: "Library", description: "Create an independent identity family or attach a new world/branch variant to an existing conceptual identity. Names never act as IDs.", fields: [
-    { name: "identity_mode", label: "Identity", type: "select", options: [{ value: "independent", label: "New independent entity family" }, { value: "variant_existing", label: "Variant of existing family" }], value: "independent" },
-    { name: "existing_family_id", label: "Existing family (variant mode)", type: "select", options: [{ value: "", label: "Select family…" }, ...familyOptions()], value: "" },
-    { name: "name", label: "Name / display name", required: true },
-    { name: "folder_id", label: "Folder", type: "select", options: [{ value: "", label: "No folder" }, ...flattenFolders(state.projectTree?.folders || []).map((folder) => ({ value: folder.id, label: folder.path }))], value: folderId || "" },
-    { name: "entity_type", label: "Type", type: "select", options: typeOptions, value: defaultType },
-    { name: "template_id", label: "Template", type: "select", options: [{ value: "", label: "Blank" }, ...state.templates.filter((t) => t.entity_type === defaultType).map((t) => ({ value: t.id, label: t.name }))], value: state.templates.find((t) => t.entity_type === defaultType)?.id || "" },
-    { name: "canon_status", label: "Variant status", type: "select", options: (state.bootstrap?.canon_statuses || []).map((x) => ({ value: x, label: x })), value: state.activeBranch?.kind === "main" ? "draft" : "what_if" },
-    { name: "description", label: "Family description (new family only)", type: "textarea", full: true },
-    { name: "shared_core", label: "Shared core across worlds (new family only, JSON)", type: "json", value: {}, full: true },
-    { name: "summary", label: "Current-world/branch summary", type: "textarea", full: true },
-    { name: "inherit_attributes", label: "Inherit source attributes for variant", type: "checkbox", value: false },
-    { name: "inherit_voice", label: "Inherit source voice for variant", type: "checkbox", value: true },
-    { name: "attributes", label: "World-specific attributes (JSON)", type: "json", value: {}, full: true },
-    { name: "voice", label: "Voice sheet (JSON)", type: "json", value: {}, full: true },
-  ], onSubmit: async (values) => {
-    const template = state.templates.find((t) => t.id === values.template_id)?.template || {};
-    const attributes = Object.keys(values.attributes || {}).length ? values.attributes : (template.attributes || {});
-    const voice = Object.keys(values.voice || {}).length ? values.voice : (template.voice || {});
-
-    if (values.identity_mode === "variant_existing") {
-      if (!values.existing_family_id) throw new Error("Choose an existing family for variant mode");
-      const family = await api(`/api/entities/families/${values.existing_family_id}`);
-      if (family.entity_type !== values.entity_type) throw new Error("Entity type must match the selected family");
-      const branchId = state.activeBranch?.kind === "main" ? null : state.activeBranch?.id;
-      const already = (family.variants || []).find((item) => item.world_id === state.activeWorld.id && (item.branch_id || null) === branchId);
-      if (already) throw new Error("This family already has a variant in the active world/branch. Open it and edit the existing variant instead.");
-      const source = (family.variants || []).find((item) => item.world_id === state.activeWorld.id && item.branch_id == null) || family.variants?.[0] || null;
-      const inheritSections = [];
-      if (values.inherit_attributes) inheritSections.push("attributes");
-      if (values.inherit_voice) inheritSections.push("voice");
-      const variant = await api("/api/entities/variants", { method: "POST", body: {
-        family_id: family.id,
-        world_id: state.activeWorld.id,
-        branch_id: branchId,
-        display_name: values.name,
-        summary: values.summary,
-        canon_status: values.canon_status,
-        inherit_from_variant_id: source?.id || null,
-        inherit_sections: inheritSections,
-        attributes,
-        voice,
-        knowledge: template.knowledge || {},
-        beliefs: template.beliefs || {},
-        current_state: template.current_state || {},
-      } });
-      await loadProjectData();
-      await openEntitySheet(family.id, variant.id);
-      return;
-    }
-
-    const sharedCore = Object.keys(values.shared_core || {}).length ? values.shared_core : (template.shared_core || {});
-    const family = await api("/api/entities/families", { method: "POST", body: {
-      project_id: state.activeProject.id,
-      folder_id: values.folder_id || null,
-      name: values.name,
-      entity_type: values.entity_type,
-      description: values.description,
-      shared_core: sharedCore,
-      create_variant_in_world: state.activeWorld.id,
-      branch_id: state.activeBranch?.kind === "main" ? null : state.activeBranch?.id,
-    } });
-    const current = family.variants?.find((variant) => variant.world_id === state.activeWorld.id) || family.variants?.[0];
-    if (current) await api(`/api/entities/variants/${current.id}`, { method: "PATCH", body: {
-      summary: values.summary,
-      canon_status: values.canon_status,
-      attributes,
-      voice,
-      knowledge: template.knowledge || {},
-      beliefs: template.beliefs || {},
-      current_state: template.current_state || {},
-      note: "created from Studio template",
-    } });
-    await loadProjectData();
-    await openEntitySheet(family.id, current?.id);
-  } });
-
-  const typeControl = $('[name="entity_type"]', byId("formFields"));
-  const templateControl = $('[name="template_id"]', byId("formFields"));
-  const familyControl = $('[name="existing_family_id"]', byId("formFields"));
-  const refreshDependentOptions = () => {
-    const type = typeControl.value;
-    const matchingTemplates = state.templates.filter((item) => item.entity_type === type);
-    templateControl.innerHTML = `<option value="">Blank</option>${matchingTemplates.map((item) => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name)}</option>`).join("")}`;
-    templateControl.value = matchingTemplates[0]?.id || "";
-    const matchingFamilies = state.families.filter((item) => item.entity_type === type);
-    familyControl.innerHTML = `<option value="">Select family…</option>${matchingFamilies.map((item) => `<option value="${escapeHTML(item.id)}">${escapeHTML(item.name)} · ${escapeHTML(item.entity_type)}</option>`).join("")}`;
-  };
-  typeControl?.addEventListener("change", refreshDependentOptions);
-}
 
 async function openEntitySheet(familyId, variantId = null) {
   const family = await api(`/api/entities/families/${familyId}`);
@@ -1779,12 +1013,8 @@ function jsonSheetSection(title, value) {
   return `<section class="sheet-section"><div class="sheet-section-head"><h3>${escapeHTML(title)}</h3></div><pre class="json-block">${escapeHTML(pretty(value || {}))}</pre></section>`;
 }
 
-function worldName(id) { return state.activeProject?.worlds?.find((item) => item.id === id)?.name || id || ""; }
 function branchName(id) { return state.activeWorld?.branches?.find((item) => item.id === id)?.name || id || ""; }
 
-function editFamily(family) {
-  openForm({ title: `Edit ${family.name} family`, eyebrow: "Shared identity", fields: [{ name: "name", label: "Family name", value: family.name, required: true }, { name: "folder_id", label: "Folder", type: "select", options: [{ value: "", label: "No folder" }, ...flattenFolders(state.projectTree?.folders || []).map((folder) => ({ value: folder.id, label: folder.path }))], value: family.folder_id || "" }, { name: "description", label: "Description", type: "textarea", value: family.description, full: true }, { name: "shared_core", label: "Shared core (JSON)", type: "json", value: family.shared_core, full: true }], onSubmit: async (values) => { await api(`/api/entities/families/${family.id}`, { method: "PATCH", body: values }); await loadProjectData(); await openEntitySheet(family.id); } });
-}
 
 function moveEntityFamily(family) {
   const folders = flattenFolders(state.projectTree?.folders || []);
@@ -1804,16 +1034,6 @@ function editVariant(variant, family) {
   ], onSubmit: async (values) => { await api(`/api/entities/variants/${variant.id}`, { method: "PATCH", body: { ...values, note: "edited in Studio" } }); await loadProjectData(); await openEntitySheet(family.id, variant.id); } });
 }
 
-function openVariantForm(family, sourceVariant = null) {
-  openForm({ title: `New ${family.name} variant`, eyebrow: "World identity", description: "Only explicitly selected sections are inherited. Knowledge, memories, relationships, and current state remain variant-specific by default.", fields: [
-    { name: "world_id", label: "Target world", type: "select", options: (state.activeProject?.worlds || []).map((x) => ({ value: x.id, label: x.name })), value: state.activeWorld.id },
-    { name: "display_name", label: "Display name", value: family.name, required: true },
-    { name: "canon_status", label: "Status", type: "select", options: (state.bootstrap?.canon_statuses || []).map((x) => ({ value: x, label: x })), value: "draft" },
-    { name: "inherit_attributes", label: "Inherit attributes", type: "checkbox", value: true },
-    { name: "inherit_voice", label: "Inherit voice", type: "checkbox", value: true },
-    { name: "summary", label: "Variant summary", type: "textarea", full: true },
-  ], onSubmit: async (values) => { const sections = []; if (values.inherit_attributes) sections.push("attributes"); if (values.inherit_voice) sections.push("voice"); const variant = await api("/api/entities/variants", { method: "POST", body: { family_id: family.id, world_id: values.world_id, branch_id: null, display_name: values.display_name, summary: values.summary, canon_status: values.canon_status, inherit_from_variant_id: sourceVariant?.id || null, inherit_sections: sections, attributes: {}, voice: {}, knowledge: {}, beliefs: {}, current_state: {} } }); await selectScope(state.activeProject.id, values.world_id, null); await openEntitySheet(family.id, variant.id); } });
-}
 
 function openVariantCompare(family, current) {
   const variants = (family.variants || []).filter((item) => item.id !== current?.id);
@@ -1865,25 +1085,7 @@ function editRelationship(rel) {
   openForm({ title: "Edit relationship", eyebrow: `${rel.subject_name} ↔ ${rel.object_name}`, fields: [{ name: "relation_type", label: "Type", value: rel.relation_type, required: true }, { name: "status", label: "Status", type: "select", options: ["current", "historical", "future", "conditional"].map((x) => ({ value: x, label: x })), value: rel.status }, { name: "canon_status", label: "Canon", type: "select", options: (state.bootstrap?.canon_statuses || []).map((x) => ({ value: x, label: x })), value: rel.canon_status }, { name: "attributes", label: "Details (JSON)", type: "json", value: rel.attributes, full: true }], onSubmit: async (values) => { await api(`/api/relationships/${rel.id}`, { method: "PATCH", body: { ...values, note: "edited in Studio" } }); await loadProjectData(); await openRelationshipSheet(rel.id); } });
 }
 
-function addCanonFact(ownerType, ownerId, selectedText = "") {
-  openForm({ title: "Add canon fact", eyebrow: state.activeBranch?.kind === "main" ? "Canon workflow" : "Sandbox fact", description: state.activeBranch?.kind === "main" ? "Facts remain draft until explicitly marked canon." : "This fact belongs to a non-canonical branch until promoted.", fields: [
-    { name: "path", label: "Semantic path", placeholder: "habits.knocks_twice", required: true },
-    { name: "status", label: "Canon status", type: "select", options: (state.bootstrap?.canon_statuses || []).map((x) => ({ value: x, label: x })), value: state.activeBranch?.kind === "main" ? "draft" : "what_if" },
-    { name: "value", label: "Value (JSON or text)", type: "textarea", value: selectedText || "", full: true },
-  ], onSubmit: async (values) => { let value; try { value = JSON.parse(values.value); } catch (_) { value = values.value; } await api("/api/facts", { method: "POST", body: { project_id: state.activeProject.id, world_id: state.activeWorld.id, branch_id: state.activeBranch?.kind === "main" ? null : state.activeBranch?.id, owner_type: ownerType, owner_id: ownerId, path: values.path, value, status: values.status, authority: "user_explicit", source_type: selectedText ? "accepted_generated_prose" : "manual", source_id: state.activeTurn?.id || null } }); await loadProjectData(); toast("Fact saved"); } });
-}
 
-function promoteStorySelection(turnId, story) {
-  const selected = window.getSelection()?.toString().trim() || "";
-  const text = selected || story.slice(0, 240);
-  openForm({ title: "Promote to canon", eyebrow: "Generated discovery", description: "Generated prose never becomes canon automatically. Choose a stable semantic owner and path.", fields: [
-    { name: "owner_type", label: "Owner type", type: "select", options: [{ value: "world", label: "World" }, { value: "entity_variant", label: "Character/entity" }, { value: "relationship", label: "Relationship" }], value: "world" },
-    { name: "owner_id", label: "Owner ID", value: state.activeWorld.id, required: true },
-    { name: "path", label: "Semantic path", placeholder: "lore.generated_discovery", required: true },
-    { name: "value", label: "Proposed canon content", type: "textarea", value: text, full: true },
-    { name: "status", label: "Status", type: "select", options: [{ value: "draft", label: "draft" }, { value: "provisional", label: "provisional" }, { value: "canon", label: "canon" }], value: "draft" },
-  ], onSubmit: async (values) => { await api("/api/canon/promote", { method: "POST", body: { project_id: state.activeProject.id, world_id: state.activeWorld.id, branch_id: state.activeBranch?.kind === "main" ? null : state.activeBranch?.id, owner_type: values.owner_type, owner_id: values.owner_id, path: values.path, value: values.value, status: values.status, authority: "user_explicit", source_type: "accepted_generated_prose", source_id: turnId } }); await loadProjectData(); } });
-}
 
 async function pinContext(ref) {
   await api("/api/context/pins", { method: "POST", body: { project_id: state.activeProject.id, world_id: state.activeWorld.id, branch_id: state.activeBranch?.kind === "main" ? null : state.activeBranch?.id, resource_type: ref.type, resource_id: ref.id, scope: state.activeBranch?.kind === "main" ? "world" : "branch", priority: 1 } });
@@ -1904,32 +1106,7 @@ function createSnapshot() {
   openForm({ title: "Save world snapshot", eyebrow: "Checkpoint", description: "Snapshots capture world/branch entities, relationships, facts, and documents. Restores create a new sandbox branch rather than overwriting history.", fields: [{ name: "name", label: "Snapshot name", value: `Before ${new Date().toLocaleDateString()}`, required: true }, { name: "description", label: "Description", type: "textarea", full: true }], onSubmit: async (values) => { await api("/api/snapshots", { method: "POST", body: { project_id: state.activeProject.id, world_id: state.activeWorld.id, branch_id: state.activeBranch?.id, ...values } }); await loadProjectData(); } });
 }
 
-function openWorldCompare() {
-  const worlds = state.activeProject?.worlds || [];
-  if (worlds.length < 2) return toast("Create another world first");
-  openForm({ title: "Compare worlds", eyebrow: "Canon diff", fields: [{ name: "other", label: "Compare current world with", type: "select", options: worlds.filter((x) => x.id !== state.activeWorld.id).map((x) => ({ value: x.id, label: x.name })), full: true }], submit: "Compare", onSubmit: async (values) => { const diff = await api(`/api/worlds/compare/${state.activeWorld.id}/${values.other}`); showCompare("World canon diff", diff); } });
-}
 
-function openWorldSheet(world) {
-  byId("sheetEyebrow").textContent = "World";
-  byId("sheetTitle").textContent = world.name;
-  byId("sheetSubtitle").textContent = `${world.canon_status} · ${world.inheritance_mode}`;
-  const lineage = world.lineage || [];
-  byId("sheetBody").innerHTML = `<section class="sheet-section"><p>${escapeHTML(world.description || "No description")}</p><div class="sheet-grid"><div class="sheet-field"><span>Canon status</span><b>${escapeHTML(world.canon_status)}</b></div><div class="sheet-field"><span>Inheritance</span><b>${escapeHTML(world.inheritance_mode)}</b></div></div></section><section class="sheet-section"><div class="sheet-section-head"><h3>World lineage</h3></div><div class="variant-switcher">${lineage.map((x) => `<button data-world-id="${x.id}">${escapeHTML(x.name)}</button>`).join(" → ")}</div></section><section class="sheet-section"><div class="sheet-section-head"><h3>Branches</h3></div>${(world.branches || []).map((branch) => `<div class="resource-inline-row"><button class="relationship-mini" data-branch-id="${branch.id}">${escapeHTML(branch.name)} · ${escapeHTML(branch.kind)} · ${escapeHTML(branch.canon_status)}</button>${branch.kind !== "main" ? `<button class="tiny-danger-btn delete-branch" data-delete-branch-id="${branch.id}">Delete</button>` : `<span class="protected-note">protected</span>`}</div>`).join("")}</section><section class="sheet-section"><div class="sheet-section-head"><h3>Snapshots</h3></div>${state.snapshots.map((snap) => `<div class="revision-item resource-inline-row"><div><b>${escapeHTML(snap.name)}</b><small>${formatDate(snap.created_at)}</small></div><div class="inline-actions"><button class="tiny-btn restore-snapshot" data-snapshot-id="${snap.id}">Restore</button><button class="tiny-danger-btn delete-snapshot" data-snapshot-id="${snap.id}">Delete</button></div></div>`).join("") || `<div class="empty-note">No snapshots.</div>`}</section>`;
-  byId("sheetFooter").innerHTML = `<button id="deleteWorldBtn" class="danger-text-btn">Delete world</button><button id="editWorldBtn" class="primary-btn">Edit world</button>`;
-  byId("deleteWorldBtn").addEventListener("click", () => deleteWorld(world));
-  byId("editWorldBtn").addEventListener("click", () => editWorld(world));
-  $$('[data-world-id]', byId("sheetBody")).forEach((button) => button.addEventListener("click", () => selectScope(state.activeProject.id, button.dataset.worldId, null)));
-  $$('[data-branch-id]', byId("sheetBody")).forEach((button) => button.addEventListener("click", () => selectScope(state.activeProject.id, world.id, button.dataset.branchId)));
-  $$(".delete-branch", byId("sheetBody")).forEach((button) => button.addEventListener("click", (event) => {
-    event.stopPropagation();
-    const branch = (world.branches || []).find((item) => item.id === button.dataset.deleteBranchId);
-    if (branch) deleteBranch(branch);
-  }));
-  $$(".restore-snapshot", byId("sheetBody")).forEach((button) => button.addEventListener("click", () => restoreSnapshot(button.dataset.snapshotId)));
-  $$(".delete-snapshot", byId("sheetBody")).forEach((button) => button.addEventListener("click", () => deleteSnapshot(button.dataset.snapshotId)));
-  openSheet();
-}
 
 function editWorld(world) {
   openForm({ title: "Edit world", eyebrow: "World settings", fields: [{ name: "name", label: "Name", value: world.name, required: true }, { name: "canon_status", label: "Status", type: "select", options: (state.bootstrap?.canon_statuses || []).map((x) => ({ value: x, label: x })), value: world.canon_status }, { name: "description", label: "Description", type: "textarea", value: world.description, full: true }, { name: "settings", label: "World model/style defaults (JSON)", type: "json", value: world.settings || {}, full: true }], onSubmit: async (values) => { await api(`/api/worlds/${world.id}`, { method: "PATCH", body: values }); await selectScope(state.activeProject.id, world.id, state.activeBranch?.id); } });
@@ -1942,38 +1119,6 @@ async function restoreSnapshot(id) {
   await selectScope(state.activeProject.id, state.activeWorld.id, result.branch_id);
 }
 
-function renderWorldGrid() {
-  if (state.activeView !== "world") return;
-  const tab = state.activeWorldTab;
-  let cards = [];
-  if (["character", "location", "item", "organization", "lore"].includes(tab)) {
-    const types = tab === "lore" ? ["lore", "world_rule"] : [tab];
-    cards = state.families.filter((family) => types.includes(family.entity_type)).map((family) => {
-      const variant = state.variants.find((v) => v.family_id === family.id && (v.branch_id === state.activeBranch?.id || v.branch_id == null));
-      return { type: "entity", family, variant, label: variant?.display_name || family.name, summary: variant?.summary || family.description, status: variant?.canon_status || "no variant" };
-    });
-  } else if (tab === "relationship") cards = state.relationships.map((rel) => ({ type: "relationship", id: rel.id, label: `${rel.subject_name} ↔ ${rel.object_name}`, summary: rel.relation_type, status: rel.canon_status }));
-  else if (tab === "canon") cards = [
-    ...state.conflicts.map((conflict) => ({type:"conflict",id:conflict.id,label:`Conflict: ${conflict.path}`,summary:`${JSON.stringify(conflict.left)} ↔ ${JSON.stringify(conflict.right)}`,status:"open",conflict})),
-    ...state.facts.map((fact) => ({ type: "fact", id: fact.id, label: fact.path, summary: JSON.stringify(fact.value), status: fact.status, fact })),
-  ];
-  else if (tab === "timeline") cards = state.documents.filter((doc) => ["scene", "outline"].includes(doc.document_type)).map((doc) => ({ type: "document", id: doc.id, label: doc.title, summary: doc.content.slice(0, 130), status: doc.status }));
-  else if (tab === "worlds") cards = (state.activeProject?.worlds || []).map((world) => ({ type: "world", id: world.id, label: world.name, summary: world.description, status: world.canon_status, world }));
-  const search = byId("worldSearch").value.trim().toLowerCase();
-  if (search) cards = cards.filter((card) => `${card.label} ${card.summary}`.toLowerCase().includes(search));
-  byId("worldGrid").innerHTML = cards.map(worldCardHTML).join("");
-  byId("worldEmpty").classList.toggle("hidden", cards.length > 0);
-  $$(".world-card").forEach((card) => card.addEventListener("click", async () => {
-    const index = Number(card.dataset.index);
-    const item = cards[index];
-    if (item.type === "entity") openEntitySheet(item.family.id, item.variant?.id);
-    else if (item.type === "relationship") openRelationshipSheet(item.id);
-    else if (item.type === "document") openDocument(item.id);
-    else if (item.type === "world") openWorldSheet(await api(`/api/worlds/${item.id}`));
-    else if (item.type === "fact") openFactSheet(item.fact);
-    else if (item.type === "conflict") openConflictSheet(item.conflict);
-  }));
-}
 
 function worldCardHTML(item, index) {
   const iconType = item.type === "entity" ? item.family.entity_type : item.type;
@@ -1991,9 +1136,6 @@ function openFactSheet(fact) {
   openSheet();
 }
 
-function retconFact(fact) {
-  openForm({ title: "Retcon fact", eyebrow: "Impact preview", description: "Arline previews affected facts, relationships, documents, chats, and feedback lineage before applying a retcon.", fields: [{ name: "new_value", label: "New value (JSON or text)", type: "textarea", value: pretty(fact.value), full: true }, { name: "note", label: "Reason", type: "textarea", full: true }], submit: "Preview impact", onSubmit: async (values) => { let value; try { value = JSON.parse(values.new_value); } catch (_) { value = values.new_value; } const payload = { project_id: state.activeProject.id, world_id: state.activeWorld.id, branch_id: state.activeBranch?.kind === "main" ? null : state.activeBranch?.id, owner_type: fact.owner_type, owner_id: fact.owner_id, path: fact.path, new_value: value, note: values.note }; const preview = await api("/api/retcon/preview", { method: "POST", body: payload }); showRetconPreview(payload, preview); } });
-}
 
 function showRetconPreview(payload, preview) {
   byId("compareTitle").textContent = "Retcon impact";
@@ -2080,16 +1222,6 @@ async function resolveConflict(conflict,resolutionType,chosenValue=null,note="")
   closeSheet(); await loadProjectData(); toast("Conflict resolution recorded");
 }
 
-async function loadDatasetStats() {
-  try {
-    const stats = await api("/api/dataset/stats");
-    const reviewed = (stats.accepted || 0) + (stats.edited_accept || 0) + (stats.rejected || 0);
-    byId("datasetMiniCount").textContent = `${reviewed} reviewed`;
-    byId("datasetCards").innerHTML = [
-      ["All runs", stats.total || 0], ["Unreviewed", stats.unreviewed || 0], ["SFT ready", stats.sft_ready || 0], ["Preferences", stats.preference_ready || 0],
-    ].map(([label, value]) => `<div class="metric-card"><span>${label}</span><strong>${value}</strong></div>`).join("");
-  } catch (_) {}
-}
 
 async function exportDataset(kind) {
   loading(true, "Compiling dataset…", kind);
@@ -2112,26 +1244,7 @@ function openFeedback(turnId, mode, story = "") {
   byId("feedbackDialog").showModal();
 }
 
-async function submitFeedback(event) {
-  event.preventDefault();
-  const issues = $$('#issueGrid input:checked').map((node) => node.value);
-  const payload = { status: state.feedbackMode, issues, note: byId("feedbackNote").value, edited_story: state.feedbackMode === "edited_accept" ? byId("editedStory").value : "" };
-  try {
-    await api(`/api/turns/${state.feedbackTurnId}/feedback`, { method: "POST", body: payload });
-    byId("feedbackDialog").close();
-    if (state.activeSession) await openSession(state.activeSession.id);
-    await loadDatasetStats();
-    toast("Feedback saved to feedback lineage");
-  } catch (error) { toast(error.message); }
-}
 
-function openWorldActionsForTab() {
-  if (state.activeWorldTab === "relationship") return openRelationshipForm();
-  if (["character", "location", "item", "organization", "lore"].includes(state.activeWorldTab)) return openEntityForm(state.activeWorldTab === "lore" ? "lore" : state.activeWorldTab);
-  if (state.activeWorldTab === "worlds") return openWorldForm();
-  if (state.activeWorldTab === "timeline") return openDocumentForm(null, "scene");
-  return addCanonFact("world", state.activeWorld.id);
-}
 
 async function openContract() {
   try { byId("contractEditor").value = (await api("/api/contract")).content || ""; }
@@ -2178,13 +1291,29 @@ function formatTokenCount(value) {
   return String(Math.round(n));
 }
 
+function estimatedComposerInputTokens() {
+  const text = byId("promptInput")?.value || "";
+  const promptEstimate = Math.max(1, Math.ceil(text.length / 4));
+  const breakdown = state.contextCache.contextBreakdown;
+  if (!breakdown) return promptEstimate;
+  if (state.contextCache.promptText === text && Number.isFinite(Number(breakdown.estimated_input_tokens))) {
+    return Math.max(promptEstimate, Number(breakdown.estimated_input_tokens));
+  }
+  const items = breakdown.items || {};
+  const stableBase = Number(items.system_contract || 0) + Number(items.workspace || 0) + Number(items.session_continuity || 0);
+  return Math.max(promptEstimate, stableBase + promptEstimate);
+}
+
 function dynamicVisibleMaximum() {
   const model = state.modelMap.get(byId("modelSelect")?.value);
   const modelLimit = Number(model?.max_context_length || byId("contextLength")?.value || 32768);
-  const estimatedInput = Number(state.contextCache.contextBreakdown?.estimated_total_tokens || Math.max(1, Math.ceil((byId("promptInput")?.value || "").length / 4)));
+  const estimatedInput = estimatedComposerInputTokens();
   const reasoning = byId("reasoningSelect")?.value === "off" ? 0 : Number(byId("reasoningReserve")?.value || 0);
-  const safety = Number(byId("safetyReserve")?.value || 2048);
-  return Math.max(256, Math.floor((modelLimit - estimatedInput - reasoning - safety) / 256) * 256);
+  const breakdownSafety = Number(state.contextCache.contextBreakdown?.items?.safety_margin || 0);
+  const configuredSafety = Number(byId("safetyReserve")?.value || 0);
+  const safety = Math.max(1536, breakdownSafety, configuredSafety);
+  const available = Math.max(256, modelLimit - estimatedInput - reasoning - safety);
+  return Math.max(256, Math.floor(available / 256) * 256);
 }
 
 function buildLengthSteps() {
@@ -2267,20 +1396,28 @@ function updateBudgetUI() {
   const runtime = runtimePayload();
   const reasoning = runtime.reasoning === "off" ? 0 : runtime.reasoning_reserve_tokens;
   const totalOutput = runtime.visible_output_tokens + reasoning;
-  const estimatedInput = Number(state.contextCache.contextBreakdown?.estimated_total_tokens || Math.max(1, Math.ceil((byId("promptInput")?.value || "").length / 4)));
+  const estimatedInput = estimatedComposerInputTokens();
   const model = state.modelMap.get(runtime.model);
   const contextMax = Number(model?.max_context_length || runtime.context_length || 32768);
-  const free = Math.max(0, contextMax - estimatedInput - totalOutput);
-  const pct = Math.min(100, ((estimatedInput + totalOutput) / Math.max(contextMax, 1)) * 100);
-  byId("totalBudget").textContent = totalOutput.toLocaleString();
-  byId("modeNote").textContent = state.scratchMode ? "Scratch mode · generated discoveries stay outside canon staging." : (MODE_NOTES[runtime.input_mode] || "");
-  byId("beatControls").classList.toggle("hidden", runtime.generation_mode !== "beats");
-  const inspectorBar = $("i", byId("contextBudgetBar"));
-  if (inspectorBar) inspectorBar.style.width = `${pct}%`;
+  const safety = Math.max(0, Number(state.contextCache.contextBreakdown?.items?.safety_margin || 0));
+  const used = estimatedInput + totalOutput + safety;
+  const free = Math.max(0, contextMax - used);
+  const pct = Math.min(100, (used / Math.max(contextMax, 1)) * 100);
+  if (byId("totalBudget")) byId("totalBudget").textContent = totalOutput.toLocaleString();
+  if (byId("modeNote")) byId("modeNote").textContent = state.scratchMode ? "Scratch mode · generated discoveries stay outside canon staging." : (MODE_NOTES[runtime.input_mode] || "");
+  byId("beatControls")?.classList.toggle("hidden", runtime.generation_mode !== "beats");
+  const inspectorBar = byId("contextBudgetBar") ? $("i", byId("contextBudgetBar")) : null;
+  if (inspectorBar) {
+    inspectorBar.style.width = `${pct}%`;
+    inspectorBar.style.background = pct > 90 ? "var(--danger)" : pct > 75 ? "var(--warning)" : "var(--accent)";
+  }
   const composerFill = byId("composerBudgetFill");
-  if (composerFill) composerFill.style.width = `${pct}%`;
-  byId("tokenEstimate").textContent = `${formatTokenCount(estimatedInput)} input · ${formatTokenCount(totalOutput)} output ceiling`;
-  byId("composerBudgetText").textContent = `${formatTokenCount(estimatedInput)} context · ${formatTokenCount(runtime.visible_output_tokens)} response · ${formatTokenCount(free)} free`;
+  if (composerFill) {
+    composerFill.style.width = `${pct}%`;
+    composerFill.style.background = pct > 90 ? "var(--danger)" : pct > 75 ? "var(--warning)" : "var(--accent)";
+  }
+  if (byId("tokenEstimate")) byId("tokenEstimate").textContent = `${formatTokenCount(estimatedInput)} input · ${formatTokenCount(totalOutput)} output ceiling`;
+  if (byId("composerBudgetText")) byId("composerBudgetText").textContent = `${formatTokenCount(estimatedInput)} context · ${formatTokenCount(runtime.visible_output_tokens)} response · ${formatTokenCount(free)} free`;
 }
 
 function updateModelInfo() {
@@ -2310,57 +1447,7 @@ function updateModelInfo() {
   updateBudgetUI();
 }
 
-async function loadWorkspaceBootstrap() {
-  const bootstrap = await api("/api/workspace/bootstrap");
-  state.bootstrap = bootstrap;
-  state.projects = bootstrap.projects || [];
-  state.worlds = bootstrap.worlds || [];
-  const active = bootstrap.active || {};
-  const nextProjectId = active.project?.id || state.projects[0]?.id;
-  if (nextProjectId) {
-    await selectScope(nextProjectId, active.world?.id || bootstrap.world_bible?.default_world_id, active.branch?.id || bootstrap.world_bible?.default_branch_id);
-    return;
-  }
-  state.activeProject = null;
-  state.activeWorld = state.worlds[0] || null;
-  state.activeBranch = state.activeWorld?.branches?.find((b) => b.kind === "main") || null;
-  state.projectTree = { folders: [] };
-  state.families = []; state.variants = []; state.relationships = []; state.documents = [];
-  state.tags = []; state.facts = []; state.snapshots = []; state.templates = []; state.conflicts = [];
-  state.sessions = []; state.selectedReferences = [];
-  renderScopeSelectors(); updateBreadcrumbs(); updateContextChipUI(); renderProjectTree();
-  renderLibraryCounts(); renderTags(); renderDocuments(); renderSessions(); renderWorldGrid(); updateScopeVisualization();
-}
 
-async function selectScope(projectId, worldId = null, branchId = null) {
-  if (!projectId) return;
-  loading(true, "Opening workspace…", "Resolving project workspace and shared Library");
-  try {
-    const [project, projectList, bootstrap] = await Promise.all([
-      api(`/api/projects/${encodeURIComponent(projectId)}`),
-      api("/api/projects"),
-      api("/api/workspace/bootstrap"),
-    ]);
-    state.activeProject = project;
-    state.projects = projectList.projects || state.projects;
-    state.worlds = bootstrap.worlds || state.worlds;
-    state.bootstrap = { ...state.bootstrap, ...bootstrap };
-    applyProjectDefaults(project);
-    const linked = project.worlds || [];
-    const preferredId = worldId || project.default_world_id || linked[0]?.id || bootstrap.world_bible?.default_world_id;
-    let worldMeta = state.worlds.find((item) => item.id === preferredId) || linked.find((item) => item.id === preferredId) || state.worlds[0];
-    state.activeWorld = worldMeta ? await api(`/api/worlds/${encodeURIComponent(worldMeta.id)}`) : null;
-    if (state.activeWorld && !state.worlds.some((item) => item.id === state.activeWorld.id)) state.worlds.push(state.activeWorld);
-    const branches = state.activeWorld?.branches || [];
-    state.activeBranch = branches.find((item) => item.id === branchId) || branches.find((item) => item.kind === "main") || branches[0] || null;
-    state.selectedReferences = [];
-    updateContextChipUI();
-    renderScopeSelectors();
-    updateBreadcrumbs();
-    await Promise.all([loadProjectData(), loadSessions()]);
-  } catch (error) { toast(`Workspace error: ${error.message}`, 6000); }
-  finally { loading(false); }
-}
 
 function renderScopeSelectors() {
   const projectSelect = byId("projectSelect");
@@ -2382,83 +1469,7 @@ function populateContextRecipes() {
   select.value = preferred;
 }
 
-async function loadProjectData() {
-  if (!state.activeProject) return;
-  const worldId = state.activeWorld?.id || "";
-  const branchId = state.activeBranch?.id || "";
-  const branchForFacts = state.activeBranch?.kind === "main" ? "" : branchId;
-  const qTree = new URLSearchParams({ ...(worldId ? { world_id: worldId } : {}), ...(branchId ? { branch_id: branchId } : {}) });
-  const qBible = new URLSearchParams({ ...(worldId ? { world_id: worldId } : {}), ...(branchId ? { branch_id: branchId } : {}), project_id: state.activeProject.id });
-  const factQ = new URLSearchParams({ ...(worldId ? { world_id: worldId } : {}), ...(branchForFacts ? { branch_id: branchForFacts } : {}) });
-  const stagedQ = new URLSearchParams({ ...(worldId ? { world_id: worldId } : {}), ...(branchForFacts ? { branch_id: branchForFacts } : {}) });
-  const [tree, bible, documents, tags, facts, snapshots, staged, continuity] = await Promise.all([
-    api(`/api/projects/${state.activeProject.id}/tree?${qTree}`),
-    api(`/api/world-bible?${qBible}`),
-    api(`/api/documents?${new URLSearchParams({ project_id: state.activeProject.id })}`),
-    api(`/api/tags?project_id=${state.activeProject.id}`),
-    worldId ? api(`/api/facts?${factQ}`) : { facts: [] },
-    worldId ? api(`/api/snapshots?world_id=${encodeURIComponent(worldId)}`) : { snapshots: [] },
-    api(`/api/projects/${state.activeProject.id}/staged-changes?${stagedQ}`),
-    api(`/api/projects/${state.activeProject.id}/continuity?${qTree}`),
-  ]);
-  state.projectTree = tree;
-  state.worlds = bible.worlds || state.worlds;
-  state.families = bible.families || [];
-  state.variants = bible.variants || [];
-  state.relationships = bible.relationships || [];
-  state.timelineEvents = bible.timeline || [];
-  state.contextRecipes = bible.recipes || [];
-  state.documents = documents.documents || tree.documents || [];
-  state.tags = tags.tags || [];
-  state.facts = facts.facts || [];
-  state.snapshots = snapshots.snapshots || [];
-  state.templates = tree.templates || [];
-  state.conflicts = tree.conflicts || [];
-  state.manifestRefs = tree.manifest_refs || [];
-  state.activeScene = tree.active_scene || null;
-  state.sceneCards = tree.scene_cards || [];
-  state.overlays = tree.overlays || [];
-  state.stagedChanges = staged.changes || [];
-  state.continuity = continuity || null;
-  populateContextRecipes();
-  renderScopeSelectors(); renderProjectTree(); renderLibraryCounts(); renderTags(); renderDocuments(); renderWorldGrid(); updateScopeVisualization(); updateActiveSceneUI();
-  refreshPromptHighlight();
-}
 
-function renderProjectTree() {
-  const root = byId("projectTree");
-  root.innerHTML = "";
-  const documentsByFolder = new Map();
-  for (const doc of state.documents) {
-    const key = doc.folder_id || "root";
-    if (!documentsByFolder.has(key)) documentsByFolder.set(key, []);
-    documentsByFolder.get(key).push(doc);
-  }
-  const appendDocuments = (container, folderId, depth) => {
-    for (const doc of documentsByFolder.get(folderId || "root") || []) container.appendChild(documentTreeNode(doc, depth));
-  };
-  const appendFolder = (container, folder, depth = 0) => {
-    const wrapper = document.createElement("div");
-    wrapper.className = "tree-folder-group";
-    const row = document.createElement("div"); row.className = "tree-node"; row.style.paddingLeft = `${depth * 13}px`;
-    row.innerHTML = `<button class="tree-toggle">⌄</button><span class="tree-icon">▱</span><button class="tree-main">${escapeHTML(folder.name)}</button><button class="row-menu">•••</button>`;
-    const children = document.createElement("div"); children.className = "tree-children";
-    wrapper.append(row, children); container.appendChild(wrapper);
-    $(".tree-toggle", row).addEventListener("click", () => { children.classList.toggle("hidden"); $(".tree-toggle", row).textContent = children.classList.contains("hidden") ? "›" : "⌄"; });
-    $(".tree-main", row).addEventListener("click", () => { setView("draft"); filterDocumentsByFolder(folder.id); });
-    $(".row-menu", row).addEventListener("click", (event) => contextMenu(event.clientX, event.clientY, [
-      { label: "New document here", action: () => openDocumentForm(folder.id) },
-      { label: "New subfolder", action: () => openFolderForm(folder.id) },
-      { label: "Rename", action: () => renameFolder(folder) },
-      { label: "Delete", danger: true, action: () => deleteFolder(folder) },
-    ]));
-    appendDocuments(children, folder.id, depth + 1);
-    for (const child of folder.children || []) appendFolder(children, child, depth + 1);
-  };
-  appendDocuments(root, null, 0);
-  for (const folder of state.projectTree?.folders || []) appendFolder(root, folder, 0);
-  byId("projectTreeEmpty").classList.toggle("hidden", root.children.length > 0);
-}
 
 async function loadSessions(tag = "") {
   if (!state.activeProject) return;
@@ -2584,36 +1595,72 @@ function referenceRegistry() {
 }
 
 function refreshPromptHighlight() {
-  const input = byId("promptInput"); const overlay = byId("promptHighlight"); const preview = byId("referencePreviewBar");
-  if (!input || !overlay) return;
-  const text = input.value || ""; const registry = referenceRegistry().sort((a, b) => b.label.length - a.label.length);
-  const found = []; const tokenRegex = /(@[^\s@,;:()\[\]{}]+(?:\s+[^\s@,;:()\[\]{}]+){0,4}|\/[\w-]+)/g;
-  let cursor = 0, html = "", match;
-  while ((match = tokenRegex.exec(text))) {
-    html += escapeHTML(text.slice(cursor, match.index));
-    const token = match[0];
-    if (token.startsWith("/")) {
-      const known = COMMANDS.some((c) => c.label === token || c.label.startsWith(token));
-      html += `<span class="command-token ${known ? "" : "unresolved"}">${escapeHTML(token)}</span>`;
-    } else {
-      const raw = token.slice(1).trim();
-      let resolved = registry.find((r) => raw === r.label) || registry.find((r) => raw.startsWith(`${r.label} `));
-      if (!resolved) resolved = registry.find((r) => r.label.toLowerCase() === raw.toLowerCase());
+  const input = byId("promptInput");
+  const overlay = byId("promptHighlight");
+  const preview = byId("referencePreviewBar");
+  if (!input || !overlay || !preview) return;
+  const text = input.value || "";
+  const registry = referenceRegistry().sort((a, b) => b.label.length - a.label.length);
+  const lower = text.toLocaleLowerCase();
+  const found = [];
+  let html = "";
+  let cursor = 0;
+  let i = 0;
+  let decorated = false;
+  const boundary = (ch) => !ch || /\s/.test(ch) || ".,;:!?()[]{}<>/\\\\|+=*~—–-".includes(ch) || ch === '"' || ch === "'" || ch === "\\x60";
+
+  while (i < text.length) {
+    if (text[i] === "@") {
+      const after = i + 1;
+      let resolved = null;
+      for (const ref of registry) {
+        const label = String(ref.label || "");
+        if (!label) continue;
+        const end = after + label.length;
+        if (lower.slice(after, end) === label.toLocaleLowerCase() && boundary(text[end])) {
+          resolved = ref;
+          break;
+        }
+      }
+      let end;
+      let rendered;
       if (resolved) {
+        end = after + resolved.label.length;
         found.push({ ...resolved, resolved: true });
-        html += `<span class="ref-known">${escapeHTML(token)}</span>`;
+        rendered = `<span class="ref-known">${escapeHTML(text.slice(i, end))}</span>`;
       } else {
-        found.push({ type: "unresolved", id: `unresolved:${raw}`, label: raw, resolved: false });
-        html += `<span class="ref-unresolved">${escapeHTML(token)}</span>`;
+        end = after;
+        while (end < text.length && text[end] !== "@" && !boundary(text[end])) end += 1;
+        if (end === after) { i += 1; continue; }
+        const unresolved = text.slice(after, end);
+        found.push({ type: "unresolved", id: `unresolved:${unresolved}`, label: unresolved, resolved: false });
+        rendered = `<span class="ref-unresolved">${escapeHTML(text.slice(i, end))}</span>`;
+      }
+      html += escapeHTML(text.slice(cursor, i)) + rendered;
+      cursor = end; i = end; decorated = true; continue;
+    }
+    if (text[i] === "/" && (i === 0 || boundary(text[i - 1]))) {
+      const match = text.slice(i).match(/^\/[\w-]+/);
+      if (match) {
+        const end = i + match[0].length;
+        const known = COMMANDS.some((c) => c.label === match[0] || c.label.startsWith(match[0]));
+        html += escapeHTML(text.slice(cursor, i)) + `<span class="command-token ${known ? "" : "unresolved"}">${escapeHTML(match[0])}</span>`;
+        cursor = end; i = end; decorated = true; continue;
       }
     }
-    cursor = match.index + token.length;
+    i += 1;
   }
   html += escapeHTML(text.slice(cursor));
-  overlay.innerHTML = html + (text.endsWith("\n") ? "\n " : "");
-  overlay.scrollTop = input.scrollTop; overlay.scrollLeft = input.scrollLeft;
-  input.closest(".composer-editor-shell")?.classList.toggle("has-highlight", Boolean(text));
-  const unique = new Map(); found.forEach((r) => unique.set(`${r.type}:${r.id}`, r)); state.detectedReferences = [...unique.values()];
+  overlay.innerHTML = decorated ? html + (text.endsWith("\n") ? "\n " : "") : "";
+  overlay.scrollTop = input.scrollTop;
+  overlay.scrollLeft = input.scrollLeft;
+  const shell = input.closest(".composer-editor-shell");
+  shell?.classList.toggle("has-highlight", decorated);
+  input.spellcheck = !decorated;
+
+  const unique = new Map();
+  found.forEach((ref) => unique.set(`${ref.type}:${ref.id}`, ref));
+  state.detectedReferences = [...unique.values()];
   preview.innerHTML = state.detectedReferences.map((ref) => `<button class="reference-preview-chip ${ref.resolved ? "resolved" : "unresolved"}" data-preview-key="${escapeHTML(`${ref.type}:${ref.id}`)}">${ref.resolved ? escapeHTML(ENTITY_ICONS[ref.type] || "@") : "?"} @${escapeHTML(ref.label)}</button>`).join("");
   preview.classList.toggle("hidden", !state.detectedReferences.length);
   $$(".reference-preview-chip", preview).forEach((button) => {
@@ -2690,12 +1737,47 @@ function updateScopeVisualization() {
 
 function loadContextResult(result) {
   state.activeAnalysisId = result.analysis_id || state.activeAnalysisId;
-  state.contextCache.wcf = result.wcf || ""; state.contextCache.aif = result.aif_core || ""; state.contextCache.brief = result.narrative_brief || null; state.contextCache.workspace = result.workspace_context || null; state.contextCache.projections = result.projections || []; state.contextCache.traceChoices = result.trace_choices || []; state.contextCache.contextBreakdown = result.context_breakdown || null;
-  byId("wcfOutput").textContent = state.contextCache.wcf || "No WCF available."; byId("aifOutput").textContent = state.contextCache.aif || "No AIF-Core available."; byId("briefOutput").textContent = pretty(state.contextCache.brief); byId("workspaceContextOutput").textContent = state.contextCache.workspace?.text || "No workspace context."; byId("projectionOutput").textContent = pretty(state.contextCache.projections); byId("wcfValidation").textContent = pretty(result.wcf_validation || {});
-  const summary = result.summary || {}; byId("coverageValue").textContent = summary.coverage ?? "—"; byId("factsValue").textContent = summary.facts ?? "—"; byId("transitionsValue").textContent = summary.transitions ?? "—"; byId("projectionsValue").textContent = summary.projections ?? "—"; byId("wcfTokenValue").textContent = result.context_breakdown?.estimated_total_tokens?.toLocaleString?.() || "—"; byId("analysisStrip").classList.remove("hidden");
-  byId("contextBreakdown").innerHTML = Object.entries(result.context_breakdown || {}).map(([key, value]) => `<div><span>${escapeHTML(key.replaceAll("_", " "))}</span><b>${typeof value === "number" ? value.toLocaleString() : escapeHTML(String(value))}</b></div>`).join("");
-  const trace = byId("traceSelect"); trace.dataset.cacheId = result.run_id || result.analysis_id || ""; trace.innerHTML = `<option value="">Choose a fact…</option>` + (result.trace_choices || []).map((x) => `<option value="${escapeHTML(x.trace_id)}">${escapeHTML(x.label || x.trace_id)}</option>`).join("");
-  updateScopeVisualization(); updateBudgetUI();
+  state.contextCache.wcf = result.wcf || "";
+  state.contextCache.aif = result.aif_core || "";
+  state.contextCache.brief = result.narrative_brief || null;
+  state.contextCache.workspace = result.workspace_context || null;
+  state.contextCache.projections = result.projections || [];
+  state.contextCache.traceChoices = result.trace_choices || [];
+  state.contextCache.contextBreakdown = result.context_breakdown || null;
+  state.contextCache.promptText = byId("promptInput")?.value || "";
+
+  if (byId("wcfOutput")) byId("wcfOutput").textContent = state.contextCache.wcf || "No WCF available.";
+  if (byId("aifOutput")) byId("aifOutput").textContent = state.contextCache.aif || "No AIF-Core available.";
+  if (byId("briefOutput")) byId("briefOutput").textContent = pretty(state.contextCache.brief);
+  if (byId("workspaceContextOutput")) byId("workspaceContextOutput").textContent = state.contextCache.workspace?.text || "No workspace context.";
+  if (byId("projectionOutput")) byId("projectionOutput").textContent = pretty(state.contextCache.projections);
+  if (byId("wcfValidation")) byId("wcfValidation").textContent = pretty(result.wcf_validation || {});
+
+  const summary = result.summary || {};
+  if (byId("coverageValue")) byId("coverageValue").textContent = summary.semantic_coverage ?? summary.coverage ?? "—";
+  if (byId("factsValue")) byId("factsValue").textContent = summary.facts ?? "—";
+  if (byId("transitionsValue")) byId("transitionsValue").textContent = summary.transitions ?? "—";
+  if (byId("projectionsValue")) byId("projectionsValue").textContent = summary.projections ?? "—";
+  const breakdown = result.context_breakdown || {};
+  const contextTokens = breakdown.estimated_input_tokens ?? summary.wcf_tokens ?? breakdown.items?.wcf;
+  if (byId("wcfTokenValue")) byId("wcfTokenValue").textContent = Number.isFinite(Number(contextTokens)) ? Number(contextTokens).toLocaleString() : "—";
+  byId("analysisStrip")?.classList.remove("hidden");
+
+  if (byId("contextBreakdown")) {
+    const rows = [];
+    for (const [key, value] of Object.entries(breakdown.items || {})) rows.push([key, value]);
+    for (const key of ["estimated_input_tokens", "estimated_total_reserved", "remaining_tokens", "model_context_length"]) {
+      if (breakdown[key] != null) rows.push([key, breakdown[key]]);
+    }
+    byId("contextBreakdown").innerHTML = rows.map(([key, value]) => `<div><span>${escapeHTML(key.replaceAll("_", " "))}</span><b>${typeof value === "number" ? value.toLocaleString() : escapeHTML(String(value))}</b></div>`).join("");
+  }
+  const trace = byId("traceSelect");
+  if (trace) {
+    trace.dataset.cacheId = result.run_id || result.analysis_id || "";
+    trace.innerHTML = `<option value="">Choose a fact…</option>` + (result.trace_choices || []).map((x) => `<option value="${escapeHTML(x.id || x.trace_id || "")}">${escapeHTML(x.label || x.id || x.trace_id || "trace")}</option>`).join("");
+  }
+  updateScopeVisualization();
+  updateBudgetUI();
 }
 
 function openQuickCreate(prefill = "", forcedKind = "") {
@@ -2721,18 +1803,6 @@ async function previewQuickCreate() {
   } catch (error) { byId("quickCreatePreview").innerHTML = `<span class="preview-icon">!</span><div><b>Could not infer structure</b><small>${escapeHTML(error.message)}</small></div>`; }
 }
 
-async function submitQuickCreate(event) {
-  event.preventDefault(); if (event.submitter?.value === "cancel") return byId("quickCreateDialog").close();
-  const text = byId("quickCreateInput").value.trim(); if (!text) return toast("Describe what you want to create");
-  try {
-    const result = await api("/api/quick-create", { method: "POST", body: { text, forced_kind: byId("quickCreateKind").value || null, project_id: state.activeProject?.id || null, world_id: state.activeWorld?.id || null, branch_id: state.activeBranch?.id || null } });
-    byId("quickCreateDialog").close();
-    if (result.kind === "project") await loadWorkspaceBootstrap();
-    else if (result.kind === "world") { await loadWorkspaceBootstrap(); if (state.activeProject) await selectScope(state.activeProject.id, result.resource.id); }
-    else { await loadProjectData(); if (result.kind === "entity" && result.resource?.id) await openEntitySheet(result.resource.id, result.variant?.id); }
-    toast(`Created ${result.kind}: ${result.resource?.name || result.resource?.title || state.quickCreatePreview?.name || "resource"}`);
-  } catch (error) { toast(error.message, 5000); }
-}
 
 function quickCreateAdvanced() {
   const preview = state.quickCreatePreview || {}; const kind = byId("quickCreateKind").value || preview.kind;
@@ -2849,11 +1919,11 @@ function openSceneCardForm(doc) {
 
 function openStoryOutline() {
   if(!state.activeProject)return;
-  const docs=state.documents.filter((d)=>["chapter","scene","draft","outline"].includes(d.document_type));
+  const docs=state.documents.filter((d)=>["chapter","scene","outline"].includes(d.document_type));
   const rows=docs.map((doc)=>({doc,card:state.sceneCards.find((c)=>c.document_id===doc.id)||null})).sort((a,b)=>Number(a.card?.sort_order??a.doc.sort_order??0)-Number(b.card?.sort_order??b.doc.sort_order??0));
   const variantName=(id)=>state.variants.find((v)=>v.id===id)?.display_name||"—";
   byId("sheetEyebrow").textContent="Project story outline";byId("sheetTitle").textContent=state.activeProject.name;byId("sheetSubtitle").textContent="Narrative plan linked to Library state, without moving sheets into the project";
-  byId("sheetBody").innerHTML=`<section class="sheet-section"><div class="sheet-section-head"><h3>Story sequence</h3><span>${rows.length} documents</span></div><div class="story-outline-list">${rows.map(({doc,card},i)=>`<article class="story-outline-row ${state.activeScene?.document_id===doc.id?"active":""}" data-doc-id="${escapeHTML(doc.id)}"><div class="story-outline-order">${escapeHTML(String(card?.sort_order??doc.sort_order??i+1))}</div><div class="story-outline-main"><div><b>${escapeHTML(doc.title)}</b><span class="canon-badge ${escapeHTML(card?.status||doc.status||"planned")}">${escapeHTML(card?.status||doc.status||"planned")}</span></div><small>${escapeHTML(doc.document_type)}${card?.narrative_time?` · ${escapeHTML(card.narrative_time)}`:""}${card?.pov_variant_id?` · POV ${escapeHTML(variantName(card.pov_variant_id))}`:""}${card?.location_variant_id?` · @${escapeHTML(variantName(card.location_variant_id))}`:""}</small>${card?.target_outcome?`<p>${escapeHTML(card.target_outcome)}</p>`:""}</div><div class="story-outline-actions"><button class="tiny-btn outline-open">Open</button><button class="tiny-btn outline-edit">Plan</button><button class="tiny-btn outline-active">${state.activeScene?.document_id===doc.id?"Active":"Set active"}</button></div></article>`).join("")||`<div class="empty-note">No chapter/scene/draft documents yet.</div>`}</div></section>`;
+  byId("sheetBody").innerHTML=`<section class="sheet-section"><div class="sheet-section-head"><h3>Story sequence</h3><span>${rows.length} documents</span></div><div class="story-outline-list">${rows.map(({doc,card},i)=>`<article class="story-outline-row ${state.activeScene?.document_id===doc.id?"active":""}" data-doc-id="${escapeHTML(doc.id)}"><div class="story-outline-order">${escapeHTML(String(card?.sort_order??doc.sort_order??i+1))}</div><div class="story-outline-main"><div><b>${escapeHTML(doc.title)}</b><span class="canon-badge ${escapeHTML(card?.status||doc.status||"planned")}">${escapeHTML(card?.status||doc.status||"planned")}</span></div><small>${escapeHTML(doc.document_type)}${card?.narrative_time?` · ${escapeHTML(card.narrative_time)}`:""}${card?.pov_variant_id?` · POV ${escapeHTML(variantName(card.pov_variant_id))}`:""}${card?.location_variant_id?` · @${escapeHTML(variantName(card.location_variant_id))}`:""}</small>${card?.target_outcome?`<p>${escapeHTML(card.target_outcome)}</p>`:""}</div><div class="story-outline-actions"><button class="tiny-btn outline-open">Open</button><button class="tiny-btn outline-edit">Plan</button><button class="tiny-btn outline-active">${state.activeScene?.document_id===doc.id?"Active":"Set active"}</button></div></article>`).join("")||`<div class="empty-note">No chapter or scene documents yet.</div>`}</div></section>`;
   byId("sheetFooter").innerHTML=`<button id="outlineNewDocBtn" class="secondary-btn">＋ Story document</button><button id="outlineSceneBtn" class="primary-btn">Set narrative cursor</button>`;
   $$('.story-outline-row',byId("sheetBody")).forEach((row)=>{const doc=state.documents.find((d)=>d.id===row.dataset.docId);$('.outline-open',row).addEventListener('click',()=>openDocument(doc.id));$('.outline-edit',row).addEventListener('click',()=>openSceneCardForm(doc));$('.outline-active',row).addEventListener('click',()=>openActiveSceneForm(doc.id));});
   byId("outlineNewDocBtn").addEventListener("click",()=>openDocumentForm());byId("outlineSceneBtn").addEventListener("click",()=>openActiveSceneForm());openSheet();
@@ -2929,16 +1999,6 @@ async function openEntityTimelineState(variant, family) {
 
 function openTimelineEventForm() {if(!state.activeWorld)return;openForm({title:"New timeline event",eyebrow:"Library timeline",fields:[{name:"time_label",label:"Time label",placeholder:"17 Aug 2026 · 21:32"},{name:"order_key",label:"Sort order",type:"number",step:0.01,value:state.timelineEvents.length+1},{name:"summary",label:"Event",type:"textarea",required:true,full:true},{name:"event_type",label:"Type",value:"event"},{name:"state_patch",label:"Optional state patch (JSON)",type:"json",value:{},full:true}],onSubmit:async(values)=>{await api("/api/timeline",{method:"POST",body:{world_id:state.activeWorld.id,branch_id:state.activeBranch?.kind==="main"?null:state.activeBranch?.id,time_label:values.time_label,order_key:Number(values.order_key||0),summary:values.summary,event_type:values.event_type,state_patch:values.state_patch,status:state.activeBranch?.kind==="main"?"canon":"what_if"}});await loadProjectData();}});}
 
-function renderWorldGrid() {
-  if(state.activeView!=="world")return;const tab=state.activeWorldTab;let cards=[];
-  if(["character","location","item","organization","lore"].includes(tab)){const types=tab==="lore"?["lore","world_rule"]:[tab];cards=state.families.filter((f)=>types.includes(f.entity_type)).map((family)=>{const variant=state.variants.find((v)=>v.family_id===family.id&&(v.branch_id===state.activeBranch?.id||v.branch_id==null));return{type:"entity",family,variant,label:variant?.display_name||family.name,summary:variant?.summary||family.description,status:variant?.canon_status||"no variant"};});}
-  else if(tab==="relationship")cards=state.relationships.map((rel)=>({type:"relationship",id:rel.id,label:`${rel.subject_name} ↔ ${rel.object_name}`,summary:rel.relation_type,status:rel.canon_status}));
-  else if(tab==="canon")cards=[...state.conflicts.map((conflict)=>({type:"conflict",id:conflict.id,label:`Conflict: ${conflict.path}`,summary:`${JSON.stringify(conflict.left)} ↔ ${JSON.stringify(conflict.right)}`,status:"open",conflict})),...state.facts.map((fact)=>({type:"fact",id:fact.id,label:fact.path,summary:JSON.stringify(fact.value),status:fact.status,fact}))];
-  else if(tab==="timeline")cards=state.timelineEvents.map((event)=>({type:"timeline",id:event.id,label:event.time_label||event.event_type||"Event",summary:event.summary,status:event.status,event}));
-  else if(tab==="worlds")cards=state.worlds.map((world)=>({type:"world",id:world.id,label:world.name,summary:world.description,status:world.canon_status,world}));
-  const search=byId("worldSearch").value.trim().toLowerCase();if(search)cards=cards.filter((c)=>`${c.label} ${c.summary}`.toLowerCase().includes(search));byId("worldGrid").innerHTML=cards.map(worldCardHTML).join("");byId("worldEmpty").classList.toggle("hidden",cards.length>0);
-  $$(".world-card").forEach((card)=>card.addEventListener("click",async()=>{const item=cards[Number(card.dataset.index)];if(item.type==="entity")openEntitySheet(item.family.id,item.variant?.id);else if(item.type==="relationship")openRelationshipSheet(item.id);else if(item.type==="world")openWorldSheet(await api(`/api/worlds/${item.id}`));else if(item.type==="fact")openFactSheet(item.fact);else if(item.type==="conflict")openConflictSheet(item.conflict);else if(item.type==="timeline")showCompare(item.label,item.event);}));
-}
 
 function openWorldActionsForTab() {if(state.activeWorldTab==="relationship")return openRelationshipForm();if(["character","location","item","organization","lore"].includes(state.activeWorldTab))return openQuickCreate("", "entity");if(state.activeWorldTab==="worlds")return openQuickCreate("","world");if(state.activeWorldTab==="timeline")return openTimelineEventForm();return addCanonFact("world",state.activeWorld.id);}
 
@@ -2950,22 +2010,52 @@ function showBranchCompare(diff,sourceId,targetId){byId("compareTitle").textCont
 
 async function promoteChatForkToWorldBranch() {if(!state.activeSession?.parent_session_id)return toast("Fork the chat first");if(state.activeSession.world_fork_id)return toast("This chat fork already has a world branch");openForm({title:"Promote chat fork to world branch",eyebrow:"Separate conversation and canon branches",description:"The chat fork can stay exploratory, or receive its own semantic world branch now.",fields:[{name:"name",label:"Branch name",value:`What-if · ${state.activeSession.title}`,required:true,full:true}],onSubmit:async(values)=>{const branch=await api("/api/branches",{method:"POST",body:{world_id:state.activeWorld.id,name:values.name,parent_branch_id:state.activeBranch?.id||null,kind:"what_if",canon_status:"what_if",description:`Promoted from chat ${state.activeSession.id}`}});await api(`/api/sessions/${state.activeSession.id}`,{method:"PATCH",body:{branch_id:branch.id,world_fork_id:branch.id}});await selectScope(state.activeProject.id,state.activeWorld.id,branch.id);await openSession(state.activeSession.id);toast("Chat fork promoted to a world branch");}});}
 
-function projectActions(event) {contextMenu(event.clientX,event.clientY,[{label:"Project context manifest",action:openProjectContextSheet},{label:"Story outline / scene cards",action:openStoryOutline},{label:"New project",action:openProjectForm},{label:"Link / switch world",action:()=>byId("worldSelect").focus()},{label:"New world / AU",action:()=>openQuickCreate("","world")},{label:"Edit project",action:editProject},{label:"Compare worlds",action:openWorldCompare},{label:`Continuity (${state.continuity?.warning_count||0})`,action:openContinuityReport},{label:"New context recipe",action:openContextRecipeForm},{label:"Delete project",danger:true,hidden:!state.activeProject,action:()=>deleteProject(state.activeProject)}]);}
 
 function openContextRecipeForm(){openForm({title:"Custom context recipe",eyebrow:"Explainable context strategy",description:"Choose what Arline prioritizes for a specific writing workflow.",fields:[{name:"name",label:"Recipe name",required:true},{name:"description",label:"Description",type:"textarea",full:true},{name:"recipe",label:"Recipe policy (JSON)",type:"json",value:{active_scene:true,explicit_refs:true,pins:true,project_manifest:true,project_documents:true,project_overlays:true,relationships:true,recent_turns:5,world_canon:"relevant",timeline:false,conflicts:false},full:true}],onSubmit:async(values)=>{await api(`/api/projects/${state.activeProject.id}/context-recipes`,{method:"POST",body:values});await loadProjectData();}});}
 
-function executeCommand(command){const input=byId("promptInput");if(command.action==="insert"){input.value=input.value.replace(/(?:^|\n)\/[\w-]*$/,command.text);input.focus();refreshPromptHighlight();}else if(command.action==="analyze")analyzePrompt();else if(command.action==="new-document")openDocumentForm();else if(command.action==="new-character")openQuickCreate("","entity");else if(command.action==="new-template")openTemplateForm();else if(command.action==="conflicts"){setView("world");state.activeWorldTab="canon";renderWorldGrid();}else if(command.action==="sandbox")createSandbox();else if(command.action==="snapshot")createSnapshot();else if(command.action==="world-picker")byId("worldSelect").focus();else if(command.action==="data")setView("data");else if(command.action==="inspector")openInspector();else if(command.action==="quick-create"){const raw=input.value.match(/\/new\s+(.+)$/m)?.[1]||"";openQuickCreate(raw); }else if(command.action==="scratch")toggleScratchMode();else if(command.action==="fork-chat"&&state.activeSession)forkSession(state.activeSession.id);else if(command.action==="context")openInspector("context");else if(command.action==="continuity")openContinuityReport();else if(command.action==="active-scene")openActiveSceneForm();else if(command.action==="import-manuscript")openManuscriptImport();else if(command.action==="activity")openActivityCenter();byId("commandDialog").close();}
+const COMMAND_HANDLERS = {
+  analyze: () => analyzePrompt(),
+  "new-document": () => openDocumentForm(),
+  "new-character": () => openQuickCreate("", "entity"),
+  "new-template": () => openTemplateForm(),
+  conflicts: () => { setView("world"); state.activeWorldTab = "canon"; renderWorldGrid(); },
+  sandbox: () => createSandbox(),
+  snapshot: () => createSnapshot(),
+  "world-picker": () => openContextStackEditor(),
+  data: () => setView("data"),
+  inspector: () => openInspector(),
+  scratch: () => toggleScratchMode(),
+  "fork-chat": () => state.activeSession ? forkSession(state.activeSession.id) : toast("Open a chat first"),
+  context: () => openInspector("context"),
+  continuity: () => openContinuityReport(),
+  "active-scene": () => openActiveSceneForm(),
+  "import-manuscript": () => openManuscriptImport(),
+  activity: () => openActivityCenter(),
+};
 
-async function searchCommands(query){const q=query.trim();let remote=[];if(q){try{const params=new URLSearchParams({q,...(state.activeProject?.id?{project_id:state.activeProject.id}:{})});remote=(await api(`/api/commands?${params}`)).results||[];}catch(_){}}const local=COMMANDS.filter((item)=>!q||item.label.toLowerCase().includes(q.toLowerCase())||item.description.toLowerCase().includes(q.toLowerCase()));state.commandResults=[...local.map((item)=>({...item,kind:"command"})),...remote.map((item)=>({...item,kind:item.type||"resource",action:"resource"})),...state.sessions.filter((item)=>!q||item.title.toLowerCase().includes(q.toLowerCase())).slice(0,8).map((item)=>({id:item.id,label:item.title,description:item.prompt_preview||"Chat",kind:"session",action:"session"}))];state.commandIndex=0;renderCommandResults();}
+async function executeCommand(command) {
+  const input = byId("promptInput");
+  if (command.action === "insert") {
+    input.value = input.value.replace(/(?:^|\n)\/[\w-]*$/, command.text);
+    input.focus(); refreshPromptHighlight();
+  } else if (command.action === "quick-create") {
+    const raw = input.value.match(/\/new\s+(.+)$/m)?.[1] || "";
+    openQuickCreate(raw);
+  } else {
+    const handler = COMMAND_HANDLERS[command.action];
+    if (!handler) return toast(`Unknown command action: ${command.action}`);
+    await handler(command);
+  }
+  byId("commandDialog")?.close();
+}
+
 
 function addCanonFact(ownerType,ownerId,selectedText=""){openStagedChangeForm(state.activeTurn?.id||null,selectedText,{path:"",value:selectedText||"",confidence:1});}
 function promoteStorySelection(turnId,story){openStagedChangeForm(turnId,window.getSelection()?.toString().trim()||story.slice(0,300));}
 
 function retconFact(fact){openForm({title:"Retcon fact",eyebrow:"Impact preview",description:"Retcon preserves semantic history and previews downstream effects.",fields:[{name:"new_value",label:"New value (JSON or text)",type:"textarea",value:pretty(fact.value),full:true},{name:"note",label:"Reason",type:"textarea",full:true}],submit:"Preview impact",onSubmit:async(values)=>{let value;try{value=JSON.parse(values.new_value);}catch(_){value=values.new_value;}const payload={project_id:fact.project_id||state.bootstrap?.world_bible?.backing_project_id,world_id:fact.world_id||state.activeWorld.id,branch_id:fact.branch_id||null,owner_type:fact.owner_type,owner_id:fact.owner_id,path:fact.path,new_value:value,note:values.note};showRetconPreview(payload,await api("/api/retcon/preview",{method:"POST",body:payload}));}});}
 
-async function deleteWorld(world){if(!world)return;if(world.id===state.bootstrap?.world_bible?.default_world_id)return toast("The shared Library Main world is protected");if(!confirm(`Delete world “${world.name}”?\n\nWorld-specific variants, relationships, facts, timeline and branches are removed. Project files and shared entity families remain.`))return;loading(true,"Deleting world…","Removing world-scoped state");try{await api(`/api/worlds/${world.id}`,{method:"DELETE"});closeSheet();state.activeSession=null;state.activeDocument=null;await loadWorkspaceBootstrap();if(state.activeProject)await selectScope(state.activeProject.id);toast(`Deleted world “${world.name}”`);}catch(error){toast(error.message,5000);}finally{loading(false);}}
 
-function updateBreadcrumbs(){const project=state.activeProject?.name||"No project";const world=state.activeWorld?.name||"Library";const branch=state.activeBranch?.name||"Main";const buttons=$$("#breadcrumbs button");if(buttons[0])buttons[0].textContent=project;if(buttons[1])buttons[1].textContent=world;if(buttons[2])buttons[2].textContent=branch;const sandbox=["sandbox","what_if"].includes(state.activeBranch?.kind);byId("sandboxBadge").classList.toggle("hidden",!sandbox&&!state.scratchMode);byId("sandboxBadge").textContent=state.scratchMode?"Scratch":sandbox?"What-if":"Sandbox";byId("scopeStatus").innerHTML=`<span class="status-dot"></span><span>${escapeHTML(world)} · ${escapeHTML(branch)}</span>`;byId("worldTitle").textContent=world;byId("worldDescription").textContent=state.activeWorld?.description||"Shared Library: canonical entities, variants, relationships, timeline, and lore.";}
 
 function setDocumentActiveScene(){if(!state.activeDocument)return toast("Open a project document first");openActiveSceneForm(state.activeDocument.id);}
 
@@ -3068,6 +2158,17 @@ function setView(view, options = {}) {
   saveLocalPrefs({ lastView: view });
 }
 
+function contextStackId() {
+  const key = "arline.contextStackId";
+  let value = sessionStorage.getItem(key);
+  if (!value) {
+    const suffix = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    value = `browser-${suffix}`;
+    sessionStorage.setItem(key, value);
+  }
+  return value;
+}
+
 let contextStackTimer = null;
 function scheduleContextStackSync() {
   clearTimeout(contextStackTimer);
@@ -3077,6 +2178,7 @@ function scheduleContextStackSync() {
 async function syncContextStack() {
   if (!state.activeProject) return;
   const payload = {
+    stack_id: contextStackId(),
     project_id: state.activeProject?.id || null,
     world_id: state.activeWorld?.id || null,
     branch_id: state.activeBranch?.id || null,
@@ -3150,12 +2252,25 @@ function applyRunProfile(profileId, { quiet = false } = {}) {
   if (!profile) return;
   state.activeRunProfileId = profileId;
   const data = profile.profile || {};
-  if (data.context_recipe_id && byId("contextRecipeSelect")) byId("contextRecipeSelect").value = data.context_recipe_id;
-  if (data.input_mode && byId("modeSelect")) byId("modeSelect").value = data.input_mode;
-  if (data.reasoning && byId("reasoningSelect") && [...byId("reasoningSelect").options].some((o) => o.value === data.reasoning)) byId("reasoningSelect").value = data.reasoning;
-  if (data.visible_output_tokens && byId("visibleTokens")) byId("visibleTokens").value = data.visible_output_tokens;
-  if (data.temperature != null && byId("temperature")) byId("temperature").value = data.temperature;
-  if (data.generation_mode && byId("generationMode")) byId("generationMode").value = data.generation_mode;
+  const set = (id, value) => { if (value != null && byId(id)) byId(id).value = value; };
+  if (data.model && byId("modelSelect") && [...byId("modelSelect").options].some((o) => o.value === data.model)) set("modelSelect", data.model);
+  set("contextRecipeSelect", data.context_recipe_id);
+  set("modeSelect", data.input_mode);
+  if (data.reasoning && byId("reasoningSelect") && [...byId("reasoningSelect").options].some((o) => o.value === data.reasoning)) set("reasoningSelect", data.reasoning);
+  set("projectionMode", data.projection_mode);
+  set("visibleTokens", data.visible_output_tokens);
+  set("reasoningReserve", data.reasoning_reserve_tokens);
+  set("temperature", data.temperature);
+  set("topP", data.top_p);
+  set("topK", data.top_k);
+  set("minP", data.min_p);
+  set("repeatPenalty", data.repeat_penalty);
+  set("contextLength", data.context_length);
+  set("generationMode", data.generation_mode);
+  set("beatCount", data.beat_count);
+  set("beatTokens", data.beat_tokens);
+  set("totalStoryTokens", data.total_story_target_tokens);
+  updateModelInfo();
   syncDynamicLength({ preserveValue: true });
   syncRangeOutputs();
   updateBudgetUI();
@@ -3179,15 +2294,25 @@ function updateComposerProfileSummary() {
 
 function openRunProfileForm() {
   const current = {
+    model: byId("modelSelect")?.value || "",
     context_recipe_id: byId("contextRecipeSelect")?.value || null,
     input_mode: byId("modeSelect")?.value || "smart_hybrid",
     reasoning: byId("reasoningSelect")?.value || "off",
+    projection_mode: byId("projectionMode")?.value || "balanced",
     visible_output_tokens: Number(byId("visibleTokens")?.value || 4096),
+    reasoning_reserve_tokens: Number(byId("reasoningReserve")?.value || 0),
     temperature: Number(byId("temperature")?.value || 0.8),
+    top_p: Number(byId("topP")?.value || 0.95),
+    top_k: Number(byId("topK")?.value || 40),
+    min_p: Number(byId("minP")?.value || 0),
+    repeat_penalty: Number(byId("repeatPenalty")?.value || 1.05),
+    context_length: Number(byId("contextLength")?.value || 32768),
     generation_mode: byId("generationMode")?.value || "single",
-    model: byId("modelSelect")?.value || "",
+    beat_count: Number(byId("beatCount")?.value || 4),
+    beat_tokens: Number(byId("beatTokens")?.value || 2048),
+    total_story_target_tokens: Number(byId("totalStoryTokens")?.value || 8192),
   };
-  openForm({ title: "Save run profile", eyebrow: "Composer", description: "A profile packages model-facing controls so the composer can stay prompt-first.", fields: [
+  openForm({ title: "Save run profile", eyebrow: "Composer", description: "A profile packages the complete model-facing run configuration so switching profiles is reproducible.", fields: [
     { name: "name", label: "Profile name", required: true },
     { name: "description", label: "Description", type: "textarea", full: true },
   ], onSubmit: async (values) => {
@@ -3222,7 +2347,7 @@ function updateBreadcrumbs() {
 }
 
 async function loadWorkspaceBootstrap() {
-  const bootstrap = await api("/api/workspace/bootstrap");
+  const bootstrap = await api(`/api/workspace/bootstrap?stack_id=${encodeURIComponent(contextStackId())}`);
   state.bootstrap = bootstrap;
   state.projects = bootstrap.projects || [];
   state.worlds = bootstrap.worlds || [];
@@ -3256,7 +2381,7 @@ async function selectScope(projectId, worldId = null, branchId = null, options =
   loading(true, "Opening workspace…", "Resolving project workspace and shared Library");
   try {
     const [project, projectList, bootstrap] = await Promise.all([
-      api(`/api/projects/${encodeURIComponent(projectId)}`), api("/api/projects"), api("/api/workspace/bootstrap"),
+      api(`/api/projects/${encodeURIComponent(projectId)}`), api("/api/projects"), api(`/api/workspace/bootstrap?stack_id=${encodeURIComponent(contextStackId())}`),
     ]);
     state.activeProject = project;
     state.projects = projectList.projects || state.projects;

@@ -9,6 +9,8 @@ import re
 import sqlite3
 from threading import RLock
 from typing import Any, Iterable
+
+from src.storage_backup import backup_sqlite_before_migrations
 from uuid import uuid4
 
 
@@ -71,10 +73,11 @@ class HistoryStore:
     ArtifactStore remains the immutable diagnostic archive path.
     """
 
-    def __init__(self, database_path: Path | str):
+    def __init__(self, database_path: Path | str, *, backup_before_migration: bool = True):
         self.path = Path(database_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = RLock()
+        self.last_migration_backup = backup_sqlite_before_migrations(self.path, {"meta": SCHEMA_VERSION}) if backup_before_migration else None
         self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
@@ -156,19 +159,19 @@ class HistoryStore:
                     edited_story TEXT NOT NULL DEFAULT '',
                     FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
                 );
-
-                CREATE INDEX IF NOT EXISTS idx_sessions_updated
-                    ON sessions(updated_at DESC);
-                CREATE INDEX IF NOT EXISTS idx_sessions_pinned
-                    ON sessions(pinned DESC, updated_at DESC);
-                CREATE INDEX IF NOT EXISTS idx_turns_session
-                    ON turns(session_id, created_at ASC);
-                CREATE INDEX IF NOT EXISTS idx_turns_feedback
-                    ON turns(feedback_status);
                 """
             )
             session_columns = {row[1] for row in con.execute("PRAGMA table_info(sessions)").fetchall()}
             for name, definition in (
+                ("title", "TEXT NOT NULL DEFAULT 'Untitled chat'"),
+                ("created_at", "TEXT NOT NULL DEFAULT ''"),
+                ("updated_at", "TEXT NOT NULL DEFAULT ''"),
+                ("pinned", "INTEGER NOT NULL DEFAULT 0"),
+                ("archived", "INTEGER NOT NULL DEFAULT 0"),
+                ("project", "TEXT"),
+                ("last_model", "TEXT"),
+                ("last_mode", "TEXT"),
+                ("last_reasoning", "TEXT"),
                 ("project_id", "TEXT"),
                 ("world_id", "TEXT"),
                 ("branch_id", "TEXT"),
@@ -186,6 +189,26 @@ class HistoryStore:
 
             columns = {row[1] for row in con.execute("PRAGMA table_info(turns)").fetchall()}
             for name, definition in (
+                ("session_id", "TEXT NOT NULL DEFAULT ''"),
+                ("run_id", "TEXT"),
+                ("created_at", "TEXT NOT NULL DEFAULT ''"),
+                ("updated_at", "TEXT NOT NULL DEFAULT ''"),
+                ("user_prompt", "TEXT NOT NULL DEFAULT ''"),
+                ("story", "TEXT NOT NULL DEFAULT ''"),
+                ("model", "TEXT"),
+                ("mode", "TEXT"),
+                ("reasoning", "TEXT"),
+                ("projection_mode", "TEXT"),
+                ("stats_json", "TEXT NOT NULL DEFAULT '{}'"),
+                ("wcf", "TEXT NOT NULL DEFAULT ''"),
+                ("aif_core", "TEXT NOT NULL DEFAULT ''"),
+                ("projections_json", "TEXT NOT NULL DEFAULT '[]'"),
+                ("post_validation_json", "TEXT NOT NULL DEFAULT '{}'"),
+                ("wcf_validation_json", "TEXT NOT NULL DEFAULT '{}'"),
+                ("feedback_status", "TEXT NOT NULL DEFAULT 'unreviewed'"),
+                ("feedback_issues_json", "TEXT NOT NULL DEFAULT '[]'"),
+                ("feedback_note", "TEXT NOT NULL DEFAULT ''"),
+                ("edited_story", "TEXT NOT NULL DEFAULT ''"),
                 ("session_context", "TEXT NOT NULL DEFAULT ''"),
                 ("reasoning_text", "TEXT NOT NULL DEFAULT ''"),
                 ("workspace_context", "TEXT NOT NULL DEFAULT ''"),
@@ -195,6 +218,16 @@ class HistoryStore:
             ):
                 if name not in columns:
                     con.execute(f"ALTER TABLE turns ADD COLUMN {name} {definition}")
+
+
+            con.executescript(
+                """
+                CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_sessions_pinned ON sessions(pinned DESC, updated_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id, created_at ASC);
+                CREATE INDEX IF NOT EXISTS idx_turns_feedback ON turns(feedback_status);
+                """
+            )
 
             con.execute(
                 "INSERT INTO meta(key,value) VALUES('schema_version',?) "
