@@ -1,4 +1,5 @@
 name: Complete v1.2.0 foundation
+# rerun after repairing the generated test fixture
 
 on:
   push:
