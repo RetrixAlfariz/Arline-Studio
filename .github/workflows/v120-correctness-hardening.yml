@@ -6,6 +6,7 @@ on:
       - develop/v1.2
     paths:
       - tools/v120_correctness_hardening.py
+      - tools/fix_v120_correctness_patcher.py
       - .github/workflows/v120-correctness-hardening.yml
 
 permissions:
@@ -30,6 +31,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Repair hardening patcher
+        run: |
+          python tools/fix_v120_correctness_patcher.py
+          python -m py_compile tools/v120_correctness_hardening.py
       - name: Apply correctness hardening
         run: python tools/v120_correctness_hardening.py
       - name: Install
