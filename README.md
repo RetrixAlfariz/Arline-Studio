@@ -76,7 +76,7 @@ Library sheets can carry local visual references without turning images into a s
 - When a vision-capable local model is selected, **Describe** sends the image through the existing LM Studio inference path and returns a reviewable visual-description proposal.
 - A vision description is saved only after explicit review and remains **media metadata, not canon**. It never silently changes character attributes, facts, relationships, or world state.
 
-Automatic image tagging, visual embeddings/similarity, image-vs-canon contradiction detection, and autonomous multimodal canon extraction are intentionally deferred to v1.2.
+Gallery/visual references are the final v1.1 multimodal foundation. Automatic image tagging, visual embeddings/similarity, image-vs-canon contradiction detection, and autonomous multimodal canon extraction are intentionally deferred to v1.2.
 
 ### Write in Manuscript
 
