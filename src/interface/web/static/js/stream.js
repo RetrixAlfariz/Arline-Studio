@@ -140,7 +140,11 @@
     const script = document.createElement("script");
     script.src = "/static/js/quick-create.js?v=1.1.4-qc";
     script.dataset.arlineQuickCreate = "1";
-    script.addEventListener("load", installQuickCreateProjectScopeBridge, { once: true });
+    if (typeof script.addEventListener === "function") {
+      script.addEventListener("load", installQuickCreateProjectScopeBridge, { once: true });
+    } else if (typeof setTimeout === "function") {
+      setTimeout(installQuickCreateProjectScopeBridge, 0);
+    }
     document.body.appendChild(script);
   }
 
