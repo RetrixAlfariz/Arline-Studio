@@ -21,7 +21,7 @@ class V11QuickCreateFeatureTests(unittest.TestCase):
             'value="relationship"', 'value="document:scene"',
             'value="document:chapter"', 'value="document:note"',
             'value="document:research"', 'value="document:outline"',
-            'id="quickCreateDestination"', 'id="quickCreateProject"',
+            'panel.id = "quickCreateDestination"', 'id="quickCreateProject"',
             'id="quickCreateWorld"', 'id="quickCreateBranch"',
             'id="quickCreateFolder"', 'id="quickCreateRelationSubject"',
             'id="quickCreateRelationType"', 'id="quickCreateRelationObject"',
