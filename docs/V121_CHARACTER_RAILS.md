@@ -10,7 +10,7 @@ The core rule is:
 
 A plain language-model prompt tends to collapse several different concerns into one string: who a character is, what they currently feel or know, what the user wants them to express, how quickly the scene should move, and what counts as a natural stopping point.
 
-v1.2.1 separates those concerns. The Memory Query Engine supplies scoped character/world evidence; Character Rails supply temporary creative intent; the writer combines both.
+v1.2.1 separates those concerns. The Memory Query Engine supplies scoped character/world evidence; Character Rails supply temporary creative intent; the Scene Dynamics Planner supplies a deterministic shape contract; the writer authors the prose.
 
 Conceptually:
 
@@ -21,7 +21,7 @@ Current temporal / relationship context
             +
 Character Rail (generation-only intent)
             ↓
-      Scene Dynamics
+Deterministic Scene Dynamics shape
             ↓
           Writer
 ```
@@ -214,6 +214,41 @@ Delivery is orthogonal to channel. For example, `whisper`, `murmur`, and `mutter
 
 This is why `/dia` can naturally contain an internal thought, a pause, several lines from one speaker, an action, and then a quiet reply without pretending each item is a fixed dialogue turn.
 
+## Deterministic Scene Dynamics shape
+
+The Scene Dynamics Planner does not write dialogue or choreography. It converts rail metadata into a bounded shape contract for the writer.
+
+Each rail receives:
+
+```text
+beat_budget: min / target / max
+allowed_channels
+speaker_order policy
+internal_access policy
+pacing
+intensity
+intensity_curve
+termination
+```
+
+Default pacing budgets are soft ranges, not quotas:
+
+```text
+immediate  ≈ 1 / 2 / 4 beats
+fast       ≈ 2 / 3 / 5 beats
+natural    ≈ 2 / 5 / 8 beats
+slow       ≈ 4 / 7 / 11 beats
+lingering  ≈ 6 / 10 / 16 beats
+```
+
+`length=short` and `length=long` contract or expand those ranges. Monologue and ambience rails receive tighter caps because they usually do not need the same interaction depth as multi-character rails.
+
+A beat exists only when something meaningfully changes: action, information, reaction, tension, interpersonal distance, initiative, or atmosphere. The writer must not add filler merely to hit the target count.
+
+For dialogue/intimacy interactions, `speaker_order=adaptive`. Character state determines initiative. A sulking character may answer once while the other character speaks several times; a talkative angry character may produce several consecutive utterances. This is explicitly valid.
+
+Internal access is `active_pov_only` whenever the plan allows internal thought. The writer cannot use planner visibility as permission to head-hop.
+
 ## Character-aware retrieval
 
 A rail request routes through the ordinary Memory Query Engine as `STORY_CONTINUE`. Character names are resolved against Library identity families and world/branch variants. The structured lane can contribute:
@@ -278,8 +313,10 @@ ISO dates/times and numeric fictional-time axes can be ordered. Opaque labels su
 
 If a non-Timeline authoritative source already controls the same temporal state key, automatic Timeline projection abstains for that key and reports a diagnostic instead of overwriting the stronger source.
 
+A normal Memory backfill refreshes these derived intervals. Targeted refresh is also available through the Memory service/API for one world/branch without rewriting Timeline truth.
+
 ## Current v1.2.1 boundary
 
-The first v1.2.1 implementation provides the rail grammar, writer contract, character/relationship retrieval, temporal dual-axis foundation, Timeline state projection, hybrid routing, and isolation guarantees.
+The current v1.2.1 implementation provides the rail grammar, writer contract, deterministic Scene Dynamics shape planning, character/relationship retrieval, temporal dual-axis foundation, Timeline state projection, hybrid routing, and isolation guarantees.
 
-It intentionally does not yet implement a second autonomous dialogue model or deterministic prose choreography. The generative writer remains responsible for natural prose; Arline supplies scoped evidence and a stable scene-dynamics contract.
+It intentionally does not implement a second autonomous dialogue model or deterministic prose choreography. The generative writer remains responsible for natural prose; Arline supplies scoped evidence and deterministic scene-shape constraints.
