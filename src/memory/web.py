@@ -5,7 +5,9 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from .contracts import SCHEMA_MODELS, schema_document
 from .models import MemoryQueryContext
+from .profiles import TASK_PROFILES
 
 
 class MemoryQueryPayload(BaseModel):
@@ -134,20 +136,18 @@ def create_memory_router(*, service, store, foundation=None) -> APIRouter:
 
     @router.get("/profiles")
     def profiles():
-        # v1.2.0 exposes the task-contract inventory for Developer inspection.
-        # Later milestones can make these user-editable Run Profiles.
-        return {
-            "profiles": {
-                "story_writer": {"output": "prose", "may_commit_canon": False},
-                "dialogue_writer": {"output": "prose", "may_commit_canon": False},
-                "structure_extractor": {"output": "structured", "may_commit_canon": False},
-                "memory_summarizer": {"output": "structured", "may_commit_canon": False},
-                "evidence_analyst": {"output": "analysis", "may_commit_canon": False},
-                "continuity_explainer": {"output": "explanation", "may_commit_canon": False},
-                "branch_comparison": {"output": "analysis", "may_commit_canon": False},
-                "ambiguous_query_router": {"output": "route", "may_commit_canon": False},
-            }
-        }
+        return {"profiles": {key: profile.to_dict() for key, profile in TASK_PROFILES.items()}}
+
+    @router.get("/schemas")
+    def schemas():
+        return {"schemas": sorted(SCHEMA_MODELS)}
+
+    @router.get("/schemas/{schema_id}")
+    def schema(schema_id: str):
+        try:
+            return {"id": schema_id, "schema": schema_document(schema_id)}
+        except KeyError as exc:
+            raise HTTPException(404, str(exc)) from exc
 
     def _run_backfill(job_id: str | None, project_id: str | None) -> None:
         try:
