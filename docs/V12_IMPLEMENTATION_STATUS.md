@@ -66,6 +66,7 @@ Implemented in the current v1.2.1 pass:
 - Timeline projection is idempotent, branch-aware, uses conservative ancestor recorded-time cutoffs, and refuses to overwrite state keys controlled by non-Timeline authoritative projections;
 - normal Memory backfill also refreshes the derived Timeline temporal projection;
 - MemoryService exposes targeted Timeline projection refresh and `/api/memory/refresh` accepts `world_id` + optional `branch_id` without changing Timeline truth;
+- the current Workspace Timeline mutation surface (`add_timeline_event`) is instance-wrapped when the Memory router is created so a successful Timeline add automatically rebuilds the affected derived temporal projection; refresh failure never rolls back authoritative Timeline truth and is surfaced through Memory refresh diagnostics;
 - Character Rails route as story-continuation requests so existing structured + FTS + optional dense hybrid retrieval can provide character context;
 - resolved character variants contribute canonical shared identity, summary, attributes, voice, current/temporal state, and first-class relationship evidence to the structured lane;
 - shared Library character sheets remain usable from story Projects without being misclassified as Project-owned evidence;
@@ -78,24 +79,25 @@ Implemented in the current v1.2.1 pass:
 - prior rail command lines are stripped from session-continuity steering so a one-generation rail does not silently persist;
 - accepted/generated prose remains eligible for the normal extractor/review/Memory path; the command itself never commits canon;
 - dedicated Character Rails documentation records the command grammar and isolation contract;
-- synthetic tests cover rail parsing/isolation, compact `@vian@fano` participants, Scene Dynamics budgets/channels, optional hybrid dense routing, Library profile + relationship retrieval, world-time Scope Gate behavior, dual-axis state reconstruction, Timeline projection/backfill idempotency, supersession, and chat-index rail leakage.
+- synthetic tests cover rail parsing/isolation, compact `@vian@fano` participants, Scene Dynamics budgets/channels, optional hybrid dense routing, Library profile + relationship retrieval, world-time Scope Gate behavior, dual-axis state reconstruction, Timeline projection/backfill idempotency, Timeline add auto-refresh failure isolation, supersession, and chat-index rail leakage.
 
 ### Validation
 
-A temporary validation PR targeting `develop/v1.2` (never `main`) was used only
-to expose PR-triggered CI to the connector. Validation run `32078498720`
-completed successfully across the Python regression suite, Python compilation,
-JavaScript syntax checks, executable Memory runtime scope smoke, and repository
-hygiene. The validation PR was closed without merging. A final validation pass
-is required after the later Scene Dynamics/refresh additions before declaring
-the current head green.
+Temporary validation PRs target `develop/v1.2` only and are never merged; they
+exist solely because the connector exposes PR-triggered workflow runs more
+reliably than push-triggered runs. Validation run `32079202074` completed
+successfully across the Python regression suite, Python compilation, JavaScript
+syntax checks, executable Memory runtime scope smoke, and repository hygiene for
+the current source feature set. The temporary PR was closed without merging.
 
-Still planned before v1.2.1 is considered complete:
+No feature code is merged into `main` by this validation process.
 
-- controlled real LM Studio BGE-M3 smoke/backfill when a local corpus is available;
-- benchmarked hybrid retrieval behavior/diagnostics on a larger synthetic narrative fixture;
-- automatic Timeline-create/edit wiring to trigger the targeted temporal refresh immediately rather than at the current explicit refresh/backfill boundary;
-- package/lock metadata bump when the v1.2.1 milestone is closed rather than during the development pass.
+Still external or deferred before calling the v1.2.1 milestone fully closed:
+
+- controlled real LM Studio BGE-M3 smoke/backfill on a local corpus/model runtime;
+- larger-corpus retrieval quality benchmarking beyond deterministic synthetic regression fixtures;
+- future Timeline update/delete APIs must bind the same derived-refresh rule when those mutation surfaces are introduced (the current Workspace API exposes Timeline add only);
+- package/lock metadata remains on `1.2.0a1` until a synchronized `pyproject.toml` + `uv.lock` version bump is performed at milestone close.
 
 ## Explicit v1.2.0 boundary
 
