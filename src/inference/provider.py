@@ -9,6 +9,7 @@ class ModelCapabilities:
     provider: str
     context_window: int | None = None
     streaming: bool = False
+    vision: bool = False
     separate_reasoning_stream: bool = False
     reasoning_modes: list[str] = field(default_factory=list)
     structured_output: bool = False

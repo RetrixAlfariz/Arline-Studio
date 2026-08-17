@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections import OrderedDict
 import asyncio
+import base64
+import binascii
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version as package_version
 from difflib import SequenceMatcher
@@ -11,6 +13,7 @@ import sqlite3
 from pathlib import Path
 from threading import RLock
 from typing import Any
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, StreamingResponse
@@ -22,7 +25,7 @@ from src.context import TraceResolver
 from src.eval import AblationRunner
 from src.history import HistoryStore, VALID_FEEDBACK
 from src.history.store import SCHEMA_VERSION as HISTORY_SCHEMA_VERSION
-from src.inference import LMStudioError, LMStudioModelManager
+from src.inference import LMStudioClient, LMStudioError, LMStudioModelManager
 from src.pipeline import ArlineAnalyticalPipeline
 from src.runtime_config import DEFAULT_CONFIG_PATH, RuntimeConfig, VALID_INPUT_MODES, VALID_REASONING, VALID_PROJECTION_MODES
 from src.service import ArlineService, ArtifactStore, make_run_id
@@ -57,6 +60,15 @@ MODE_LABELS = {
     "wcf_raw": "WCF + Raw",
     "aif_core": "AIF-Core",
 }
+
+MEDIA_MIME_EXTENSIONS = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+}
+MEDIA_RESOURCE_TYPES = {"entity_family", "entity_variant", "world", "document"}
+MAX_MEDIA_BYTES = 20 * 1024 * 1024
 
 
 class RuntimePayload(BaseModel):
@@ -505,6 +517,34 @@ class ManuscriptImportPayload(BaseModel):
 
 
 
+
+class MediaCreatePayload(BaseModel):
+    resource_type: str
+    resource_id: str
+    filename: str = "image"
+    data_url: str
+    kind: str = "reference"
+    caption: str = ""
+    is_cover: bool = False
+    sort_order: int = 0
+
+
+class MediaPatchPayload(BaseModel):
+    kind: str | None = None
+    caption: str | None = None
+    description: str | None = None
+    description_source: str | None = None
+    is_cover: bool | None = None
+    sort_order: int | None = None
+
+
+class MediaDescribePayload(BaseModel):
+    model: str = ""
+    server_url: str | None = None
+    api_key: str | None = None
+    prompt: str = ""
+
+
 class PreferencePayload(BaseModel):
     scope_type: str = "app"
     scope_id: str = "default"
@@ -837,6 +877,8 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     history = HistoryStore(initial_cfg.history.database_path, backup_before_migration=False)
     workspace = WorkspaceStore(initial_cfg.workspace.database_path, backup_before_migration=False)
     foundation = FoundationStore(initial_cfg.workspace.database_path)
+    media_root = workspace_path.parent / "media"
+    media_root.mkdir(parents=True, exist_ok=True)
     for backup in migration_backups:
         foundation.log_activity(
             None, "schema_backup", "database", None,
@@ -937,6 +979,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                         "streaming": True,
                         "separate_reasoning_stream": bool(((item.get("capabilities") or {}).get("reasoning") or item.get("reasoning") or {}).get("allowed_options")),
                         "reasoning_modes": list((((item.get("capabilities") or {}).get("reasoning") or item.get("reasoning") or {}).get("allowed_options") or [])),
+                        "vision": bool((item.get("capabilities") or {}).get("vision")),
                         "sampling_controls": ["temperature", "top_p", "top_k", "min_p", "repeat_penalty"],
                     },
                 }
@@ -971,6 +1014,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                         "streaming": True,
                         "separate_reasoning_stream": bool(((item.get("capabilities") or {}).get("reasoning") or item.get("reasoning") or {}).get("allowed_options")),
                         "reasoning_modes": list((((item.get("capabilities") or {}).get("reasoning") or item.get("reasoning") or {}).get("allowed_options") or [])),
+                        "vision": bool((item.get("capabilities") or {}).get("vision")),
                         "sampling_controls": ["temperature", "top_p", "top_k", "min_p", "repeat_penalty"],
                     },
                 }
@@ -3071,6 +3115,162 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         if not path.exists() or not path.is_file():
             raise HTTPException(404, "Saved artifact not found")
         return FileResponse(path, filename=path.name, media_type="application/zip")
+
+
+    def _public_media(item: dict[str, Any]) -> dict[str, Any]:
+        result = dict(item)
+        result.pop("storage_path", None)
+        result["content_url"] = f"/api/media/{item['id']}/content"
+        return result
+
+    def _decode_media_data_url(data_url: str) -> tuple[str, bytes]:
+        match = re.fullmatch(r"data:([^;,]+);base64,(.+)", data_url.strip(), flags=re.DOTALL)
+        if not match:
+            raise ValueError("Expected a base64 image data URL")
+        mime = match.group(1).lower()
+        if mime not in MEDIA_MIME_EXTENSIONS:
+            raise ValueError("Supported images: PNG, JPEG, WebP, and GIF")
+        encoded = re.sub(r"\s+", "", match.group(2))
+        if len(encoded) > MAX_MEDIA_BYTES * 2:
+            raise ValueError("Image is too large")
+        try:
+            data = base64.b64decode(encoded, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ValueError("Invalid base64 image payload") from exc
+        if not data or len(data) > MAX_MEDIA_BYTES:
+            raise ValueError(f"Image must be between 1 byte and {MAX_MEDIA_BYTES // (1024 * 1024)} MiB")
+        return mime, data
+
+    @app.get("/api/media")
+    def list_media(
+        resource_type: str | None = Query(None),
+        resource_id: str | None = Query(None),
+        cover_only: bool = Query(False),
+    ):
+        return {"items": [_public_media(item) for item in foundation.list_media(
+            resource_type=resource_type, resource_id=resource_id, cover_only=cover_only
+        )]}
+
+    @app.post("/api/media")
+    def create_media(payload: MediaCreatePayload):
+        if payload.resource_type not in MEDIA_RESOURCE_TYPES:
+            raise HTTPException(400, "Unsupported media resource type")
+        try:
+            _resource_payload(payload.resource_type, payload.resource_id)
+            mime, data = _decode_media_data_url(payload.data_url)
+        except KeyError as exc:
+            raise HTTPException(404, "Media owner not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        suffix = MEDIA_MIME_EXTENSIONS[mime]
+        storage_path = (media_root / f"{uuid4().hex}{suffix}").resolve()
+        storage_path.write_bytes(data)
+        try:
+            item = foundation.create_media(
+                payload.resource_type, payload.resource_id,
+                storage_path=str(storage_path), mime_type=mime,
+                original_name=Path(payload.filename).name[:240], kind=payload.kind,
+                caption=payload.caption, is_cover=payload.is_cover,
+                sort_order=payload.sort_order,
+            )
+        except Exception:
+            storage_path.unlink(missing_ok=True)
+            raise
+        foundation.log_activity(None, "media_added", payload.resource_type, payload.resource_id, label=payload.filename)
+        return _public_media(item)
+
+    @app.get("/api/media/{media_id}/content")
+    def media_content(media_id: str):
+        try:
+            item = foundation.get_media(media_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Media not found") from exc
+        path = Path(item["storage_path"])
+        if not path.exists() or not path.is_file():
+            raise HTTPException(404, "Media file is missing")
+        return FileResponse(path, media_type=item["mime_type"], filename=item.get("original_name") or path.name)
+
+    @app.patch("/api/media/{media_id}")
+    def patch_media(media_id: str, payload: MediaPatchPayload):
+        try:
+            item = foundation.update_media(media_id, **payload.model_dump(exclude_none=True))
+        except KeyError as exc:
+            raise HTTPException(404, "Media not found") from exc
+        return _public_media(item)
+
+    @app.delete("/api/media/{media_id}")
+    def delete_media(media_id: str):
+        try:
+            item = foundation.get_media(media_id)
+            foundation.delete_media(media_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Media not found") from exc
+        foundation.log_activity(None, "media_deleted", item["resource_type"], item["resource_id"], label=item.get("original_name") or media_id)
+        return {"deleted": True, "id": media_id}
+
+    @app.post("/api/media/{media_id}/describe")
+    def describe_media(media_id: str, payload: MediaDescribePayload):
+        try:
+            item = foundation.get_media(media_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Media not found") from exc
+        path = Path(item["storage_path"])
+        if not path.exists() or not path.is_file():
+            raise HTTPException(404, "Media file is missing")
+        cfg = RuntimeConfig.load(config_path)
+        if payload.server_url:
+            cfg.lmstudio.base_url = RuntimeConfig.normalize_server_url(payload.server_url)
+        if payload.api_key is not None:
+            cfg.lmstudio.api_key = payload.api_key
+        if payload.model:
+            cfg.lmstudio.model = payload.model
+        if not cfg.lmstudio.model:
+            raise HTTPException(400, "Select a model first")
+        client = LMStudioClient(
+            base_url=cfg.lmstudio.base_url,
+            api_key=cfg.lmstudio.api_key,
+            timeout_seconds=cfg.lmstudio.timeout_seconds,
+        )
+        try:
+            if not client.vision_supported(cfg.lmstudio.model):
+                raise HTTPException(400, "The selected model does not report vision support in LM Studio")
+            encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+            data_url = f"data:{item['mime_type']};base64,{encoded}"
+            reasoning_cfg = client.reasoning_config(cfg.lmstudio.model)
+            reasoning = "off" if "off" in reasoning_cfg.get("allowed_options", []) else None
+            prompt = payload.prompt.strip() or (
+                "Describe this image precisely for a fiction/worldbuilding reference library. "
+                "Only describe visually observable details. Separate uncertain impressions from facts. "
+                "Do not invent identity, backstory, measurements, relationships, or hidden anatomy."
+            )
+            result = client.chat(
+                model=cfg.lmstudio.model,
+                input_text=prompt,
+                system_prompt=(
+                    "You are Arline's visual reference describer. Return a concise, concrete visual description. "
+                    "This output is a reviewable media-description proposal, not canon."
+                ),
+                images=[data_url],
+                temperature=0.2,
+                top_p=0.9,
+                top_k=20,
+                min_p=0.0,
+                max_tokens=1200,
+                repeat_penalty=1.02,
+                reasoning=reasoning,
+                context_length=min(int(cfg.model_load.context_length), 16384),
+            )
+        except LMStudioError as exc:
+            raise HTTPException(503, str(exc)) from exc
+        return {
+            "media_id": media_id,
+            "model": cfg.lmstudio.model,
+            "description": result.text,
+            "stats": result.stats,
+            "proposal": True,
+            "saved": False,
+            "canon_changed": False,
+        }
 
     return app
 

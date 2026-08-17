@@ -90,6 +90,9 @@ const state = {
   activeGenerationController: null,
   liveRun: null,
   worldSelection: new Set(),
+  mediaCovers: [],
+  libraryViewMode: "grid",
+  conversationRenderLimit: 80,
 };
 
 const ISSUE_LABELS = [
@@ -257,6 +260,7 @@ function closeInspector() {
 function activateInspectorTab(tab) {
   $$("[data-inspector-tab]").forEach((node) => node.classList.toggle("active", node.dataset.inspectorTab === tab));
   $$("[data-inspector-panel]").forEach((node) => node.classList.toggle("active", node.dataset.inspectorPanel === tab));
+  if (tab === "review") loadFeedbackLab();
 }
 
 function openSheet() {
@@ -512,7 +516,15 @@ function sessionRowHTML(item) {
 
 function renderConversation(turns) {
   const feed = byId("conversationFeed");
-  feed.innerHTML = turns.map((turn) => turnHTML(turn)).join("");
+  const total = turns.length;
+  const limit = Math.max(20, Number(state.conversationRenderLimit || 80));
+  const start = Math.max(0, total - limit);
+  const visible = turns.slice(start);
+  feed.innerHTML = `${start > 0 ? `<button class="load-earlier-turns" data-remaining="${start}">Load earlier messages · ${start} hidden</button>` : ""}${visible.map((turn) => turnHTML(turn)).join("")}`;
+  $(".load-earlier-turns", feed)?.addEventListener("click", () => {
+    state.conversationRenderLimit += 80;
+    renderConversation(turns);
+  });
   bindTurnActions();
   feed.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "end" });
 }
@@ -582,7 +594,7 @@ function newChat() {
   setView("chat");
   restoreComposerDraft();
   renderSessions();
-  byId("promptInput").focus();
+  updateComposerSessionMode(); resizeComposerInput(); byId("promptInput").focus();
 }
 
 async function analyzePrompt() {
@@ -911,6 +923,7 @@ async function openDocument(id) {
   renderRevisions(doc.revisions || []);
   renderSceneDependencies(dependencies);
   renderManuscriptSuggestions(doc);
+  saveLocalPrefs({ lastDocumentId:doc.id });
   setView("draft");
   recordNavigation();
 }
@@ -1004,6 +1017,7 @@ async function openEntitySheet(familyId, variantId = null) {
     $$(".relationship-mini[data-rel-id]", byId("sheetBody")).forEach((button) => button.addEventListener("click", () => openRelationshipSheet(button.dataset.relId)));
     $$(".variant-revision-restore", byId("sheetBody")).forEach((button) => button.addEventListener("click", () => restoreResourceRevision(button.dataset.revisionId, variant.id, "entity_variant")));
   }
+  await renderEntityMediaSheet(family, variant);
   openSheet();
 }
 
@@ -1128,11 +1142,166 @@ async function restoreSnapshot(id) {
 }
 
 
+
+function setLibraryViewMode(mode, { persist = true, rerender = false } = {}) {
+  mode = ["list", "grid", "gallery"].includes(mode) ? mode : "grid";
+  state.libraryViewMode = mode;
+  const grid = byId("worldGrid");
+  if (grid) {
+    grid.classList.remove("view-list", "view-grid", "view-gallery");
+    grid.classList.add(`view-${mode}`);
+  }
+  $$('[data-library-view]').forEach((button) => button.classList.toggle("active", button.dataset.libraryView === mode));
+  if (persist) saveLocalPrefs({ libraryViewMode: mode });
+  if (rerender && state.activeView === "world") renderWorldGrid();
+}
+
+function coverForWorldCard(item) {
+  if (item.type === "entity") {
+    return state.mediaCovers.find((media) => media.resource_type === "entity_variant" && media.resource_id === item.variant?.id)
+      || state.mediaCovers.find((media) => media.resource_type === "entity_family" && media.resource_id === item.family?.id)
+      || null;
+  }
+  if (item.type === "world") return state.mediaCovers.find((media) => media.resource_type === "world" && media.resource_id === item.id) || null;
+  return null;
+}
+
+function galleryCoverHTML(item) {
+  const media = coverForWorldCard(item);
+  if (media) return `<div class="world-card-cover"><img loading="lazy" src="${escapeHTML(media.content_url)}" alt="${escapeHTML(media.caption || item.label || "Library image")}"></div>`;
+  const iconType = item.type === "entity" ? item.family?.entity_type : item.type;
+  return `<div class="world-card-cover placeholder"><span>${escapeHTML(ENTITY_ICONS[iconType] || "◇")}</span></div>`;
+}
+
+function selectedModelHasVision() {
+  const model = state.modelMap.get(byId("modelSelect")?.value || "");
+  return Boolean(model?.capabilities?.vision);
+}
+
+function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Could not read image"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function chooseAndUploadMedia(resourceType, resourceId, { refresh, makeCover = false } = {}) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/png,image/jpeg,image/webp,image/gif";
+  input.multiple = true;
+  input.addEventListener("change", async () => {
+    const files = [...(input.files || [])];
+    if (!files.length) return;
+    loading(true, "Adding visual references…", `${files.length} image${files.length === 1 ? "" : "s"}`);
+    try {
+      let first = true;
+      for (const file of files) {
+        if (file.size > 20 * 1024 * 1024) throw new Error(`${file.name} is larger than 20 MiB`);
+        const dataUrl = await fileToDataURL(file);
+        await api("/api/media", { method: "POST", body: {
+          resource_type: resourceType, resource_id: resourceId, filename: file.name,
+          data_url: dataUrl, kind: "reference", caption: "",
+          is_cover: Boolean(makeCover && first), sort_order: 0,
+        }});
+        first = false;
+      }
+      await loadProjectData();
+      if (refresh) await refresh();
+      toast(`Added ${files.length} visual reference${files.length === 1 ? "" : "s"}`);
+    } catch (error) { toast(`Image upload failed: ${error.message}`, 6000); }
+    finally { loading(false); }
+  }, { once: true });
+  input.click();
+}
+
+async function reviewVisionDescription(media, refresh) {
+  if (!selectedModelHasVision()) return toast("The selected LM Studio model does not report vision support");
+  loading(true, "Describing image…", "Using the selected local vision model");
+  try {
+    const apiKey = byId("apiKey")?.value.trim() || null;
+    const result = await api(`/api/media/${encodeURIComponent(media.id)}/describe`, { method: "POST", body: {
+      model: byId("modelSelect")?.value || "",
+      server_url: byId("serverUrl")?.value.trim() || null,
+      api_key: apiKey,
+      prompt: "",
+    }});
+    loading(false);
+    openForm({
+      title: "Review visual description",
+      eyebrow: "Vision proposal · not canon",
+      description: "Arline described only the image. Saving keeps this as media metadata; it does not modify entity canon.",
+      fields: [
+        { name: "caption", label: "Caption", value: media.caption || "", full: true },
+        { name: "description", label: "Visual description", type: "textarea", rows: 10, value: result.description || "", full: true },
+      ],
+      submit: "Save media description",
+      onSubmit: async (values) => {
+        await api(`/api/media/${encodeURIComponent(media.id)}`, { method: "PATCH", body: {
+          caption: values.caption, description: values.description,
+          description_source: `vision:${result.model}`,
+        }});
+        await loadProjectData();
+        if (refresh) await refresh();
+      },
+    });
+  } catch (error) { loading(false); toast(`Vision description failed: ${error.message}`, 6000); }
+}
+
+function editMediaMetadata(media, refresh) {
+  openForm({
+    title: "Edit visual reference",
+    eyebrow: "Media metadata",
+    description: "Media descriptions are reference metadata. Canon remains unchanged unless you explicitly stage a canon fact elsewhere.",
+    fields: [
+      { name: "kind", label: "Kind", type: "select", options: ["reference","portrait","outfit","concept","map","diagram"].map((x)=>({value:x,label:x})), value: media.kind || "reference" },
+      { name: "caption", label: "Caption", value: media.caption || "", full: true },
+      { name: "description", label: "Description", type: "textarea", rows: 8, value: media.description || "", full: true },
+      { name: "sort_order", label: "Order", type: "number", value: Number(media.sort_order || 0) },
+    ],
+    onSubmit: async (values) => {
+      await api(`/api/media/${encodeURIComponent(media.id)}`, { method: "PATCH", body: {
+        kind: values.kind, caption: values.caption, description: values.description,
+        description_source: "manual", sort_order: Number(values.sort_order || 0),
+      }});
+      await loadProjectData(); if (refresh) await refresh();
+    },
+  });
+}
+
+function mediaCardsHTML(items, scopeLabel) {
+  if (!items.length) return `<div class="gallery-empty-media">No ${escapeHTML(scopeLabel.toLowerCase())} images yet.</div>`;
+  const vision = selectedModelHasVision();
+  return items.map((media) => `<article class="entity-media-card" data-media-id="${escapeHTML(media.id)}"><div class="entity-media-thumb"><img loading="lazy" src="${escapeHTML(media.content_url)}" alt="${escapeHTML(media.caption || media.original_name || "Visual reference")}"><span class="entity-media-badge ${media.is_cover ? "cover" : ""}">${media.is_cover ? "Cover" : escapeHTML(scopeLabel)}</span></div><div class="entity-media-body"><b>${escapeHTML(media.caption || media.original_name || media.kind || "Image")}</b><small>${escapeHTML(media.kind || "reference")}${media.description_source?.startsWith("vision:") ? " · vision reviewed" : ""}</small>${media.description ? `<p>${escapeHTML(media.description)}</p>` : ""}<div class="entity-media-card-actions"><button class="tiny-btn media-cover" ${media.is_cover ? "disabled" : ""}>Cover</button><button class="tiny-btn media-describe ${vision ? "" : "vision-unavailable"}" ${vision ? "" : "disabled"} title="${vision ? "Describe with selected local model" : "Selected model has no reported vision support"}">Describe</button><button class="tiny-btn media-edit">Edit</button><button class="tiny-danger-btn media-delete">Delete</button></div></div></article>`).join("");
+}
+
+async function renderEntityMediaSheet(family, variant) {
+  const familyResult = await api(`/api/media?${new URLSearchParams({resource_type:"entity_family",resource_id:family.id})}`);
+  const variantResult = variant ? await api(`/api/media?${new URLSearchParams({resource_type:"entity_variant",resource_id:variant.id})}`) : {items:[]};
+  const familyMedia = familyResult.items || [], variantMedia = variantResult.items || [];
+  const host = document.createElement("section");
+  host.className = "sheet-section entity-media-section";
+  const refresh = () => openEntitySheet(family.id, variant?.id || null);
+  host.innerHTML = `<div class="sheet-section-head"><h3>Gallery & visual references</h3><div class="entity-media-actions"><button class="tiny-btn add-family-media">＋ Shared image</button>${variant ? `<button class="tiny-btn add-variant-media">＋ Variant image</button>` : ""}</div></div><p class="entity-media-note">Cover images power Gallery view. Vision descriptions stay reviewable media metadata and never become canon automatically.</p>${familyMedia.length ? `<div class="section-label">Shared identity</div><div class="entity-media-grid family-media-grid">${mediaCardsHTML(familyMedia,"Shared")}</div>` : `<div class="entity-media-grid family-media-grid">${mediaCardsHTML([],"Shared")}</div>`}${variant ? `<div class="section-label gap">Current variant</div><div class="entity-media-grid variant-media-grid">${mediaCardsHTML(variantMedia,"Variant")}</div>` : ""}`;
+  byId("sheetBody").prepend(host);
+  $(".add-family-media", host)?.addEventListener("click", () => chooseAndUploadMedia("entity_family", family.id, { refresh, makeCover: !familyMedia.some((x)=>x.is_cover) && !variantMedia.some((x)=>x.is_cover) }));
+  $(".add-variant-media", host)?.addEventListener("click", () => chooseAndUploadMedia("entity_variant", variant.id, { refresh, makeCover: !variantMedia.some((x)=>x.is_cover) }));
+  for (const card of $$("[data-media-id]", host)) {
+    const media = [...familyMedia, ...variantMedia].find((x)=>x.id===card.dataset.mediaId); if (!media) continue;
+    $(".media-cover", card)?.addEventListener("click", async()=>{await api(`/api/media/${encodeURIComponent(media.id)}`,{method:"PATCH",body:{is_cover:true}});await loadProjectData();await refresh();});
+    $(".media-describe", card)?.addEventListener("click",()=>reviewVisionDescription(media,refresh));
+    $(".media-edit", card)?.addEventListener("click",()=>editMediaMetadata(media,refresh));
+    $(".media-delete", card)?.addEventListener("click",async()=>{if(!confirm("Delete this image from Arline media storage?"))return;await api(`/api/media/${encodeURIComponent(media.id)}`,{method:"DELETE"});await loadProjectData();await refresh();});
+  }
+}
+
 function worldCardHTML(item, index) {
   const iconType = item.type === "entity" ? item.family.entity_type : item.type;
   const familyId = item.type === "entity" ? item.family.id : "";
   const selected = familyId && state.worldSelection.has(familyId);
-  return `<article class="world-card ${selected ? "selected" : ""}" data-index="${index}" ${familyId ? `data-family-id="${familyId}"` : ""}>${familyId ? `<button class="world-select-toggle" title="Select for bulk organization">${selected ? "✓" : ""}</button>` : ""}<div class="world-card-head"><span class="world-card-icon">${escapeHTML(ENTITY_ICONS[iconType] || "◇")}</span><span class="canon-badge ${escapeHTML(item.status)}">${escapeHTML(item.status)}</span></div><h3>${escapeHTML(item.label)}</h3><p>${escapeHTML(item.summary || "No description")}</p><div class="world-card-meta"><span>${escapeHTML(iconType.replaceAll("_", " "))}</span>${item.variant ? `<span>${escapeHTML(worldName(item.variant.world_id))}</span>` : ""}</div></article>`;
+  return `<article class="world-card ${selected ? "selected" : ""}" data-index="${index}" ${familyId ? `data-family-id="${familyId}"` : ""}>${galleryCoverHTML(item)}${familyId ? `<button class="world-select-toggle" title="Select for bulk organization">${selected ? "✓" : ""}</button>` : ""}<div class="world-card-head"><span class="world-card-icon">${escapeHTML(ENTITY_ICONS[iconType] || "◇")}</span><span class="canon-badge ${escapeHTML(item.status)}">${escapeHTML(item.status)}</span></div><h3>${escapeHTML(item.label)}</h3><p>${escapeHTML(item.summary || "No description")}</p><div class="world-card-meta"><span>${escapeHTML(iconType.replaceAll("_", " "))}</span>${item.variant ? `<span>${escapeHTML(worldName(item.variant.world_id))}</span>` : ""}</div></article>`;
 }
 
 function openFactSheet(fact) {
@@ -1450,7 +1619,7 @@ function updateModelInfo() {
       byId("contextLength").value = model.max_context_length;
       byId("contextLength").max = model.max_context_length;
     }
-    byId("modelInfo").innerHTML = `<b>${escapeHTML(model.display_name)}</b><br>Loaded: ${model.loaded ? "yes" : "no"}<br>Max context: ${(model.max_context_length || 0).toLocaleString()}<br>Reasoning: ${escapeHTML(allowed.join(", "))}`;
+    byId("modelInfo").innerHTML = `<b>${escapeHTML(model.display_name)}</b><br>Loaded: ${model.loaded ? "yes" : "no"}<br>Max context: ${(model.max_context_length || 0).toLocaleString()}<br>Reasoning: ${escapeHTML(allowed.join(", "))}<br>Vision: ${model.capabilities?.vision ? "yes" : "no"}`;
   }
   updateReasoningWarning();
   syncDynamicLength();
@@ -1507,6 +1676,8 @@ function bindSessionRows() {
 }
 
 async function openSession(id) {
+  const switchingSession = state.activeSession?.id !== id;
+  if (switchingSession) state.conversationRenderLimit = 80;
   saveComposerDraft();
   loading(true, "Opening chat…", "Loading turn history and branch lineage");
   try {
@@ -1517,7 +1688,7 @@ async function openSession(id) {
     state.selectedReferences = session.workspace_refs || [];
     updateContextChipUI(); updateScratchUI(); renderForkTrail();
     byId("chatLanding").classList.add("hidden"); byId("conversationSection").classList.remove("hidden");
-    renderConversation(session.turns || []); setView("chat"); renderSessions(); restoreComposerDraft();
+    renderConversation(session.turns || []); setView("chat"); renderSessions(); restoreComposerDraft(); updateComposerSessionMode(); resizeComposerInput(); saveLocalPrefs({ lastSessionId:id });
     scheduleContextStackSync(); recordNavigation();
   } catch (error) { toast(error.message); }
   finally { loading(false); }
@@ -2053,7 +2224,7 @@ const COMMAND_HANDLERS = {
   sandbox: () => createSandbox(),
   snapshot: () => createSnapshot(),
   "world-picker": () => openContextStackEditor(),
-  data: () => setView("data"),
+  data: () => { openInspector("review"); loadFeedbackLab(); },
   inspector: () => openInspector(),
   scratch: () => toggleScratchMode(),
   "fork-chat": () => state.activeSession ? forkSession(state.activeSession.id) : toast("Open a chat first"),
@@ -2103,6 +2274,7 @@ function showQualityReport(turn) {
 function createLiveTurn(payload) {
   byId("chatLanding")?.classList.add("hidden");
   byId("conversationSection")?.classList.remove("hidden");
+  updateComposerSessionMode(true);
   const feed = byId("conversationFeed");
   const node = document.createElement("article");
   node.className = "turn live-turn";
@@ -2243,6 +2415,7 @@ function saveLocalPrefs(patch = {}) {
 function restoreLayoutPrefs() {
   const prefs = localPrefs();
   state.layoutPrefs = prefs;
+  state.libraryViewMode = ["list","grid","gallery"].includes(prefs.libraryViewMode) ? prefs.libraryViewMode : "grid";
   document.body.classList.toggle("sidebar-collapsed", Boolean(prefs.sidebarCollapsed));
   document.body.dataset.density = prefs.density || "comfortable";
 }
@@ -2299,6 +2472,10 @@ async function navigateHistory(delta) {
 }
 
 function setView(view, options = {}) {
+  if (view === "data") {
+    view = "home";
+    queueMicrotask(() => { openInspector("review"); loadFeedbackLab(); });
+  }
   state.activeView = view;
   document.body.dataset.activeView = view;
   const routeName = view === "draft" ? "manuscript" : view === "world" ? "library" : view;
@@ -2308,7 +2485,6 @@ function setView(view, options = {}) {
   if (view === "home") loadHome();
   if (view === "world") { renderWorldLibraryNavigation(); renderWorldGrid(); }
   if (view === "draft") renderDocuments();
-  if (view === "data") loadFeedbackLab();
   if (options.record !== false) recordNavigation();
   saveLocalPrefs({ lastView: view });
 }
@@ -2568,13 +2744,14 @@ async function loadProjectData() {
   const qBible = new URLSearchParams({ ...(worldId ? { world_id: worldId } : {}), ...(branchId ? { branch_id: branchId } : {}), project_id: state.activeProject.id });
   const factQ = new URLSearchParams({ ...(worldId ? { world_id: worldId } : {}), ...(branchForFacts ? { branch_id: branchForFacts } : {}) });
   const stagedQ = new URLSearchParams({ ...(worldId ? { world_id: worldId } : {}), ...(branchForFacts ? { branch_id: branchForFacts } : {}) });
-  const [tree, bible, facts, snapshots, staged, continuity] = await Promise.all([
+  const [tree, bible, facts, snapshots, staged, continuity, media] = await Promise.all([
     api(`/api/projects/${state.activeProject.id}/tree?${qTree}`),
     api(`/api/world-bible?${qBible}`),
     worldId ? api(`/api/facts?${factQ}`) : { facts: [] },
     worldId ? api(`/api/snapshots?world_id=${encodeURIComponent(worldId)}`) : { snapshots: [] },
     api(`/api/projects/${state.activeProject.id}/staged-changes?${stagedQ}`),
     api(`/api/projects/${state.activeProject.id}/continuity?${qTree}`),
+    api("/api/media?cover_only=true"),
   ]);
   state.projectTree = { ...tree, folders: tree.folder_tree || tree.folders || [] };
   state.worlds = bible.worlds || state.worlds;
@@ -2599,6 +2776,7 @@ async function loadProjectData() {
   state.overlays = tree.overlays || [];
   state.stagedChanges = staged.changes || [];
   state.continuity = continuity || null;
+  state.mediaCovers = media.items || [];
   state.activity = tree.activity || [];
   state.issues = tree.issues || [];
   state.favorites = tree.favorites || state.favorites;
@@ -2693,6 +2871,7 @@ function applySavedWorldView(viewId) {
   const view = state.worldSavedViews.find((item) => item.id === viewId);
   if (!view) return;
   state.activeSavedViewId = viewId; state.activeWorldFolderId = null; state.activeCollectionId = null;
+  if (view.query?.layout) setLibraryViewMode(view.query.layout, {persist:false, rerender:false});
   const type = view.resource_type;
   if (["character", "location", "item", "organization", "lore"].includes(type)) state.activeWorldTab = type;
   $$('[data-world-tab]').forEach((tab) => tab.classList.toggle("active", tab.dataset.worldTab === state.activeWorldTab));
@@ -2717,7 +2896,7 @@ function openSavedViewForm() {
   openForm({ title: "Save Library view", eyebrow: "Reusable filter", fields: [
     { name: "name", label: "View name", required: true },
     { name: "resource_type", label: "Entity type", type: "select", value: resourceType, options: ["all","character","location","item","organization","lore"].map((x) => ({ value:x,label:x })) },
-  ], onSubmit: async (values) => { await api("/api/saved-views", { method:"POST", body:{ ...values, scope_type:"world_bible", query:{} } }); await loadProjectData(); }});
+  ], onSubmit: async (values) => { await api("/api/saved-views", { method:"POST", body:{ ...values, scope_type:"world_bible", query:{layout:state.libraryViewMode} } }); await loadProjectData(); }});
 }
 
 function renderWorldGrid() {
@@ -2740,6 +2919,7 @@ function renderWorldGrid() {
   const search = byId("worldSearch")?.value.trim().toLowerCase();
   if (search) cards = cards.filter((card) => `${card.label} ${card.summary}`.toLowerCase().includes(search));
   byId("worldGrid").innerHTML = cards.map(worldCardHTML).join("");
+  setLibraryViewMode(state.libraryViewMode, {persist:false, rerender:false});
   byId("worldEmpty")?.classList.toggle("hidden", cards.length > 0); updateWorldBulkBar();
   $$(".world-card").forEach((card) => {
     const index = Number(card.dataset.index), item = cards[index];
@@ -2934,12 +3114,13 @@ function renderHome() {
   const sceneDoc = scene?.document_id ? state.documents.find((d)=>d.id===scene.document_id) : null;
   byId("homeContinue").innerHTML = scene ? `<button class="home-action-row" data-home-doc="${escapeHTML(scene.document_id||"")}"><span>◎</span><div><b>${escapeHTML(sceneDoc?.title||"Active scene")}</b><small>${escapeHTML(scene.narrative_time||"Narrative cursor")}</small></div><em>Continue →</em></button>` : `<div class="empty-note">No active scene. Set one from Manuscript when you want scene-aware context.</div>`;
   const feedback = data.feedback || {};
-  byId("homeAttention").innerHTML = `<button class="home-action-row" data-home-view="data"><span>◫</span><div><b>${feedback.unreviewed||0} responses to review</b><small>Feedback Lab</small></div><em>Open →</em></button><button class="home-action-row" data-home-activity="1"><span>◌</span><div><b>${(data.issues||[]).length} unresolved issues</b><small>${state.stagedChanges.length} canon changes staged</small></div><em>Inspect →</em></button>`;
+  byId("homeAttention").innerHTML = `<button class="home-action-row" data-home-review="1"><span>◫</span><div><b>${feedback.unreviewed||0} responses to review</b><small>Review & Evals · Settings</small></div><em>Open →</em></button><button class="home-action-row" data-home-activity="1"><span>◌</span><div><b>${(data.issues||[]).length} unresolved issues</b><small>${state.stagedChanges.length} canon changes staged</small></div><em>Inspect →</em></button>`;
   const recentDocs = data.recent_documents || [], recentChats = data.recent_chats || [];
   byId("homeRecent").innerHTML = [...recentDocs.slice(0,4).map((d)=>`<button class="home-action-row" data-home-doc="${d.id}"><span>▤</span><div><b>${escapeHTML(d.title)}</b><small>${escapeHTML(d.document_type)} · ${formatRelative(d.updated_at)}</small></div></button>`),...recentChats.slice(0,4).map((c)=>`<button class="home-action-row" data-home-chat="${c.id}"><span>◉</span><div><b>${escapeHTML(c.title)}</b><small>${formatRelative(c.updated_at)}</small></div></button>`)].join("")||`<div class="empty-note">Start a chat or create your first scene.</div>`;
   const favorites = data.favorites || state.favorites || [];
   byId("homeFavorites").innerHTML = favorites.map((f)=>`<button class="home-action-row" data-home-resource="${escapeHTML(f.resource_type)}:${escapeHTML(f.resource_id)}"><span>★</span><div><b>${escapeHTML(f.label||f.resource_id)}</b><small>${escapeHTML(f.resource_type.replaceAll("_"," "))}</small></div></button>`).join("")||`<div class="empty-note">Pin frequently used sheets, scenes, or worlds here.</div>`;
   $$('[data-home-view]',byId("homeView")).forEach((b)=>b.addEventListener("click",()=>setView(b.dataset.homeView)));
+  $$('[data-home-review]',byId("homeView")).forEach((b)=>b.addEventListener("click",()=>{openInspector("review");loadFeedbackLab();}));
   $$('[data-home-doc]',byId("homeView")).forEach((b)=>b.addEventListener("click",()=>b.dataset.homeDoc&&openDocument(b.dataset.homeDoc)));
   $$('[data-home-chat]',byId("homeView")).forEach((b)=>b.addEventListener("click",()=>openSession(b.dataset.homeChat)));
   $$('[data-home-activity]',byId("homeView")).forEach((b)=>b.addEventListener("click",openActivityCenter));
@@ -3147,9 +3328,17 @@ async function deleteBranch(branch) {
 
 function applySettingsFilter() {
   const query = (byId("settingsSearch")?.value || "").trim().toLowerCase();
-  $$("#inspectorTabs [data-inspector-tab]").forEach((button) => {
-    button.classList.toggle("hidden", Boolean(query) && !button.textContent.toLowerCase().includes(query));
-  });
+  const buttons = $$("#inspectorTabs [data-inspector-tab]");
+  for (const button of buttons) {
+    const panel = document.querySelector(`[data-inspector-panel="${button.dataset.inspectorTab}"]`);
+    const haystack = `${button.textContent} ${panel?.textContent || ""}`.toLowerCase();
+    button.classList.toggle("hidden", Boolean(query) && !haystack.includes(query));
+  }
+  const devLabel = document.querySelector('[data-settings-group="developer"]');
+  if (devLabel) {
+    const devTabs = ["review","trace","validator","contract","debug"];
+    devLabel.classList.toggle("hidden", Boolean(query) && !devTabs.some((id)=>!document.querySelector(`[data-inspector-tab="${id}"]`)?.classList.contains("hidden")));
+  }
 }
 
 async function loadBackups() {
@@ -3219,6 +3408,114 @@ function openEntityMergeForm(family) {
   }});
 }
 
+
+function updateComposerSessionMode(force = null) {
+  const active = force == null
+    ? Boolean(state.activeSession || state.liveRun || !byId("conversationSection")?.classList.contains("hidden"))
+    : Boolean(force);
+  document.body.classList.toggle("chat-session-active", active);
+  if (!active) byId("composerDock")?.querySelector(".composer-card")?.classList.remove("details-open");
+}
+
+function resizeComposerInput() {
+  const input = byId("promptInput");
+  if (!input) return;
+  input.style.height = "auto";
+  const max = document.body.classList.contains("chat-session-active") ? 116 : 210;
+  const min = document.body.classList.contains("chat-session-active") ? 46 : 118;
+  input.style.height = `${Math.max(min, Math.min(max, input.scrollHeight))}px`;
+}
+
+function setDeveloperToolsVisible(enabled) {
+  document.body.classList.toggle("developer-tools-hidden", !enabled);
+  if (byId("developerToolsToggle")) byId("developerToolsToggle").checked = enabled;
+  saveLocalPrefs({ developerTools: enabled });
+  if (!enabled && ["review","trace","validator","contract","debug"].some((tab)=>document.querySelector(`[data-inspector-tab="${tab}"]`)?.classList.contains("active"))) activateInspectorTab("general");
+}
+
+async function loadAboutInfo() {
+  if (!byId("aboutCard")) return;
+  const version = state.config?.studio_version || state.config?.version || "1.1.0";
+  const schema = state.bootstrap?.schema_version || state.bootstrap?.workspace_schema_version || state.bootstrap?.schema?.workspace || "6";
+  byId("aboutVersion").textContent = version;
+  byId("aboutSchema").textContent = String(schema);
+  try {
+    const backups = await api("/api/backups");
+    byId("aboutBackups").textContent = String(backups.backups?.length || 0);
+  } catch (_) { byId("aboutBackups").textContent = "—"; }
+}
+
+function knownResourceIds() {
+  return {
+    project: new Set(state.projects.map((x)=>x.id)),
+    world: new Set(state.worlds.map((x)=>x.id)),
+    document: new Set(state.documents.map((x)=>x.id)),
+    entity_family: new Set(state.families.map((x)=>x.id)),
+    entity_variant: new Set(state.variants.map((x)=>x.id)),
+    relationship: new Set(state.relationships.map((x)=>x.id)),
+    fact: new Set(state.facts.map((x)=>x.id)),
+  };
+}
+
+function runWorkspaceDoctor() {
+  const issues = [];
+  const ids = knownResourceIds();
+  const projectFolders = new Set(flattenFolders(state.projectTree?.folders || []).map((f)=>f.id));
+  const bibleFolders = new Set((state.worldBibleFolders || []).map((f)=>f.id));
+  const familyIds = ids.entity_family;
+  const variantIds = ids.entity_variant;
+  const worldIds = ids.world;
+
+  for (const doc of state.documents) if (doc.folder_id && !projectFolders.has(doc.folder_id)) issues.push({kind:"orphan_document_folder",label:doc.title,detail:`folder ${doc.folder_id} is missing`});
+  for (const family of state.families) if (family.folder_id && !bibleFolders.has(family.folder_id)) issues.push({kind:"orphan_library_folder",label:family.name,detail:`folder ${family.folder_id} is missing`});
+  for (const variant of state.variants) {
+    if (!familyIds.has(variant.family_id)) issues.push({kind:"orphan_variant_family",label:variant.display_name,detail:`family ${variant.family_id} is missing`});
+    if (variant.world_id && !worldIds.has(variant.world_id)) issues.push({kind:"orphan_variant_world",label:variant.display_name,detail:`world ${variant.world_id} is missing`});
+  }
+  for (const rel of state.relationships) {
+    if (!variantIds.has(rel.subject_variant_id)) issues.push({kind:"orphan_relationship_subject",label:rel.relation_type,detail:`subject ${rel.subject_variant_id} is missing`});
+    if (!variantIds.has(rel.object_variant_id)) issues.push({kind:"orphan_relationship_object",label:rel.relation_type,detail:`object ${rel.object_variant_id} is missing`});
+  }
+  const duplicateMap = new Map();
+  for (const family of state.families) {
+    const key = `${family.entity_type}:${String(family.name).trim().toLowerCase()}`;
+    duplicateMap.set(key, [...(duplicateMap.get(key)||[]), family]);
+  }
+  for (const group of duplicateMap.values()) if (group.length > 1) issues.push({kind:"possible_duplicate_identity",label:group.map((x)=>x.name).join(" / "),detail:`${group.length} same-type identities share this normalized name`});
+  if (state.activeScene?.document_id && !ids.document.has(state.activeScene.document_id)) issues.push({kind:"stale_active_scene",label:"Active scene",detail:`document ${state.activeScene.document_id} is missing`});
+  for (const ref of state.selectedReferences || []) if (ids[ref.type] && !ids[ref.type].has(ref.id)) issues.push({kind:"stale_context_reference",label:ref.label || ref.id,detail:`${ref.type} no longer exists`});
+
+  const host = byId("dataDoctorResult");
+  if (!host) return issues;
+  host.classList.toggle("good", issues.length === 0);
+  host.classList.toggle("warn", issues.length > 0);
+  host.innerHTML = issues.length
+    ? `<b>${issues.length} workspace health warning${issues.length===1?"":"s"}</b><small>Read-only report; nothing was changed.</small>${issues.slice(0,20).map((issue)=>`<div class="doctor-issue"><span>!</span><div><b>${escapeHTML(issue.kind.replaceAll("_"," "))} · ${escapeHTML(issue.label)}</b><small>${escapeHTML(issue.detail)}</small></div></div>`).join("")}${issues.length>20?`<small>…and ${issues.length-20} more.</small>`:""}`
+    : `<b>Workspace looks healthy.</b><br><small>No dangling references, stale scene pointers, or exact-name duplicate identities were detected in the loaded scope.</small>`;
+  return issues;
+}
+
+function maybeShowOnboarding() {
+  if (localStorage.getItem("arline.onboarding.v1.1") === "done") return;
+  const empty = state.documents.length === 0 && state.sessions.length === 0 && state.families.length === 0;
+  if (empty && byId("welcomeDialog") && !byId("welcomeDialog").open) byId("welcomeDialog").showModal();
+}
+
+function dismissOnboarding() {
+  localStorage.setItem("arline.onboarding.v1.1", "done");
+  byId("welcomeDialog")?.close();
+}
+
+function showStartupRecovery(error) {
+  const card = byId("startupRecovery");
+  if (!card) return;
+  byId("startupRecoveryTitle").textContent = "Arline could not finish starting.";
+  byId("startupRecoveryDetail").textContent = error?.message || String(error || "Unknown startup error");
+  card.classList.remove("hidden");
+}
+
+function hideStartupRecovery() { byId("startupRecovery")?.classList.add("hidden"); }
+
 function attachEvents() {
   const on = (id, event, handler, options) => byId(id)?.addEventListener(event, handler, options);
   document.addEventListener("pointerdown", (event) => {
@@ -3279,19 +3576,22 @@ function attachEvents() {
     renderWorldLibraryNavigation(); renderWorldGrid(); recordNavigation();
   });
   on("newTagBtn", "click", openTagForm);
-  on("openDataBtn", "click", () => setView("data"));
+  on("openDataBtn", "click", () => { openInspector("review"); loadFeedbackLab(); });
 
-  on("settingsBtn", "click", () => openInspector("runtime"));
-  on("openFeedbackLabBtn", "click", () => { closeInspector(); setView("data"); });
+  on("settingsBtn", "click", () => { openInspector("runtime"); loadAboutInfo(); });
+  on("openFeedbackLabBtn", "click", () => { openInspector("review"); loadFeedbackLab(); });
   on("settingsSearch", "input", applySettingsFilter);
-  on("refreshBackupsBtn", "click", loadBackups);
+  on("settingsSearch", "keydown", (event) => { if (event.key === "Enter") { const first = $("#inspectorTabs [data-inspector-tab]:not(.hidden)"); if (first) { event.preventDefault(); activateInspectorTab(first.dataset.inspectorTab); } } });
+  on("developerToolsToggle", "change", (event) => setDeveloperToolsVisible(event.target.checked));
+  on("runDataDoctorBtn", "click", runWorkspaceDoctor);
+  on("refreshBackupsBtn", "click", async () => { await loadBackups(); await loadAboutInfo(); });
   on("settingsDensity", "change", (event) => { document.body.dataset.density = event.target.value; saveLocalPrefs({ density:event.target.value }); });
   on("settingsSidebarMode", "change", (event) => { const collapsed=event.target.value === "collapsed"; document.body.classList.toggle("sidebar-collapsed",collapsed); saveLocalPrefs({sidebarCollapsed:collapsed}); });
   on("openInspectorBtn", "click", () => openInspector());
   on("closeInspectorBtn", "click", closeInspector);
   on("inspectorScrim", "click", closeInspector);
   window.addEventListener("beforeunload", saveComposerDraft);
-  window.addEventListener("hashchange", () => { const route=location.hash.replace(/^#\//,""); const view=route==="manuscript"?"draft":route==="library"?"world":route; if(["home","chat","draft","world","data"].includes(view) && view!==state.activeView) setView(view,{record:false,fromHash:true}); });
+  window.addEventListener("hashchange", () => { const route=location.hash.replace(/^#\//,""); const view=route==="manuscript"?"draft":route==="library"?"world":route; if(["home","chat","draft","world"].includes(view) && view!==state.activeView) setView(view,{record:false,fromHash:true}); });
   on("closeSheetBtn", "click", closeSheet);
   on("sheetScrim", "click", closeSheet);
   $$('[data-inspector-tab]').forEach((button) => button.addEventListener("click", () => activateInspectorTab(button.dataset.inspectorTab)));
@@ -3306,7 +3606,7 @@ function attachEvents() {
   on("modeSelect", "change", () => { updateReasoningWarning(); updateBudgetUI(); updateComposerProfileSummary(); });
   on("reasoningSelect", "change", () => { updateReasoningWarning(); updateBudgetUI(); updateComposerProfileSummary(); });
   on("runProfileSelect", "change", (event) => applyRunProfile(event.target.value));
-  on("composerProfileBtn", "click", () => byId("composerAdvanced")?.classList.toggle("hidden"));
+  on("composerProfileBtn", "click", () => { const advanced=byId("composerAdvanced"); advanced?.classList.toggle("hidden"); byId("composerDock")?.querySelector(".composer-card")?.classList.toggle("details-open", !advanced?.classList.contains("hidden")); resizeComposerInput(); });
   on("saveRunProfileBtn", "click", openRunProfileForm);
   on("composerAddContextBtn", "click", () => {
     const input = byId("promptInput"); if (!input) return;
@@ -3322,7 +3622,7 @@ function attachEvents() {
   ["visibleTokens","reasoningReserve","contextLength","beatCount","beatTokens","totalStoryTokens"].forEach((id) => on(id, "input", () => { if (id === "visibleTokens") syncDynamicLength(); updateBudgetUI(); updateComposerProfileSummary(); }));
   on("refreshModelsBtn", "click", refreshModels); on("connectionBadge", "click", refreshModels); on("saveSettingsBtn", "click", saveSettings); on("reloadModelBtn", "click", reloadModel);
   on("analyzeBtn", "click", analyzePrompt); on("generateBtn", "click", generateStory);
-  on("promptInput", "input", () => { saveComposerDraft(); updateAutocomplete(); refreshPromptHighlight(); updateBudgetUI(); });
+  on("promptInput", "input", () => { saveComposerDraft(); updateAutocomplete(); refreshPromptHighlight(); updateBudgetUI(); resizeComposerInput(); });
   on("promptInput", "scroll", () => { if (byId("promptHighlight")) { byId("promptHighlight").scrollTop = byId("promptInput").scrollTop; byId("promptHighlight").scrollLeft = byId("promptInput").scrollLeft; } });
   on("promptInput", "keydown", handleComposerKey);
   on("traceSelect", "change", loadTrace);
@@ -3346,6 +3646,7 @@ function attachEvents() {
     state.activeSavedViewId = null; renderWorldLibraryNavigation(); renderWorldGrid(); recordNavigation();
   }));
   on("worldSearch", "input", renderWorldGrid);
+  $$('[data-library-view]').forEach((button)=>button.addEventListener("click",()=>setLibraryViewMode(button.dataset.libraryView,{persist:true,rerender:false})));
   on("worldGrid", "click", (event) => {
     const toggle=event.target.closest(".world-select-toggle"); if(!toggle)return;
     event.preventDefault(); event.stopImmediatePropagation(); const card=toggle.closest(".world-card"); const id=card?.dataset.familyId; if(!id)return;
@@ -3374,6 +3675,12 @@ function attachEvents() {
   on("quickCreateAdvancedBtn", "click", quickCreateAdvanced);
   on("feedbackDialog", "submit", submitFeedback);
   on("closeCompareBtn", "click", () => byId("compareDialog").close());
+  on("welcomeSkipBtn", "click", dismissOnboarding); on("welcomeSkipX", "click", dismissOnboarding);
+  on("welcomeStartStory", "click", () => { dismissOnboarding(); setView("draft"); openDocumentForm(null,"scene"); });
+  on("welcomeBuildWorld", "click", () => { dismissOnboarding(); setView("world"); openQuickCreate("","entity"); });
+  on("welcomeImport", "click", () => { dismissOnboarding(); openManuscriptImport(); });
+  on("startupReloadBtn", "click", () => location.reload());
+  on("startupOpenSettingsBtn", "click", () => { hideStartupRecovery(); openInspector("storage"); loadBackups(); runWorkspaceDoctor(); });
   on("commandSearch", "input", (event) => searchCommands(event.target.value));
   on("commandSearch", "keydown", commandKey);
   on("saveContractBtn", "click", saveContract);
@@ -3392,14 +3699,19 @@ function attachEvents() {
     if (mod && key === "z" && !editing && lastUndo) { event.preventDefault(); undoLastAction(); return; }
     if (event.altKey && event.key === "ArrowLeft") { event.preventDefault(); navigateHistory(-1); return; }
     if (event.altKey && event.key === "ArrowRight") { event.preventDefault(); navigateHistory(1); return; }
-    if (event.key === "Escape") { hideAutocomplete(); closeContextMenu(); scheduleHideReferencePeek(); }
+    if (event.key === "Escape") {
+      hideAutocomplete(); closeContextMenu(); scheduleHideReferencePeek();
+      if (byId("sheetPanel")?.classList.contains("open")) closeSheet();
+      else if (byId("inspector")?.classList.contains("open")) closeInspector();
+    }
   });
 
   const prefs = localPrefs();
+  setDeveloperToolsVisible(prefs.developerTools !== false);
   if (byId("settingsDensity")) byId("settingsDensity").value = prefs.density || "comfortable";
   if (byId("settingsSidebarMode")) byId("settingsSidebarMode").value = prefs.sidebarCollapsed ? "collapsed" : "expanded";
   if (prefs.focusMode && state.activeView === "draft") toggleFocusMode(true);
-  refreshPromptHighlight(); updateScratchUI(); updateNavigationButtons();
+  setLibraryViewMode(state.libraryViewMode, {persist:false, rerender:false}); refreshPromptHighlight(); updateScratchUI(); updateNavigationButtons(); updateComposerSessionMode(); resizeComposerInput();
 }
 
 async function init() {
@@ -3413,11 +3725,14 @@ async function init() {
     await Promise.all([refreshModels(), loadWorkspaceBootstrap(), loadDatasetStats()]);
     const route = location.hash.replace(/^#\//, "");
     const routeView = route === "manuscript" ? "draft" : route === "library" ? "world" : ["home","chat"].includes(route) ? route : null;
-    const preferred = routeView || localPrefs().lastView || "home";
+    const prefs = localPrefs();
+    const preferred = routeView || prefs.lastView || "home";
     setView(preferred, { record: false, fromHash: true });
-    if (preferred === "home") await loadHome();
-    updateNavigationButtons(); updateContextStackUI();
-  } catch (error) { toast(`Startup failed: ${error.message}`, 7000); }
+    if (preferred === "chat" && prefs.lastSessionId && state.sessions.some((s)=>s.id===prefs.lastSessionId)) await openSession(prefs.lastSessionId);
+    else if (preferred === "draft" && prefs.lastDocumentId && state.documents.some((d)=>d.id===prefs.lastDocumentId)) await openDocument(prefs.lastDocumentId);
+    else if (preferred === "home") await loadHome();
+    updateNavigationButtons(); updateContextStackUI(); updateComposerSessionMode(); resizeComposerInput(); hideStartupRecovery(); maybeShowOnboarding(); loadAboutInfo();
+  } catch (error) { toast(`Startup failed: ${error.message}`, 7000); showStartupRecovery(error); }
   finally { loading(false); }
 }
 

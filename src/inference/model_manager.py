@@ -7,7 +7,7 @@ class LMStudioModelManager:
         self.config=config;self.rest=rest_client or LMStudioClient(base_url=config.lmstudio.base_url,api_key=config.lmstudio.api_key,timeout_seconds=config.lmstudio.timeout_seconds)
     def status(self,key=None):
         key=key or self.config.lmstudio.model;info=self.rest.model_info(key)
-        return {"model":key,"available":bool(info),"loaded":bool((info or {}).get("loaded_instances")),"loaded_instances":((info or {}).get("loaded_instances") or []),"max_context_length":(info or {}).get("max_context_length"),"reasoning":((info or {}).get("capabilities") or {}).get("reasoning"),"format":(info or {}).get("format")}
+        return {"model":key,"available":bool(info),"loaded":bool((info or {}).get("loaded_instances")),"loaded_instances":((info or {}).get("loaded_instances") or []),"max_context_length":(info or {}).get("max_context_length"),"reasoning":((info or {}).get("capabilities") or {}).get("reasoning"),"vision":bool(((info or {}).get("capabilities") or {}).get("vision")),"format":(info or {}).get("format")}
     def ensure_loaded(self):
         status=self.status()
         if status["loaded"]:return {"action":"reused",**status}
