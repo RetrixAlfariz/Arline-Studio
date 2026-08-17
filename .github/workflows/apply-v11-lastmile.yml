@@ -1,0 +1,58 @@
+name: Apply v1.1 last mile
+
+on:
+  push:
+    branches:
+      - release/v1.1-final-polish
+
+permissions:
+  contents: write
+
+jobs:
+  lastmile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/v1.1-final-polish
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply last-mile patch
+        run: python tools/apply_v11_lastmile.py
+      - name: Install
+        run: python -m pip install -e .
+      - name: Regression suite
+        run: python -m unittest discover -s tests -v
+      - name: Compile and syntax
+        run: |
+          python -m compileall -q src tests
+          node --check src/interface/web/static/js/commands.js
+          node --check src/interface/web/static/js/stream.js
+          node --check src/interface/web/static/arline.js
+      - name: Static invariants
+        run: |
+          test ! -e tools/apply_v11_lastmile.py
+          python - <<'PY'
+          from pathlib import Path
+          js=Path('src/interface/web/static/arline.js').read_text(encoding='utf-8')
+          assert 'composerDraftKey' in js
+          assert 'openEntityMergeForm' in js
+          assert 'bulkMoveSelected' in js
+          print('LAST_MILE_STATIC_PASS')
+          PY
+      - name: Remove generated metadata
+        run: rm -rf src/arline_studio.egg-info
+      - name: Commit source
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/workspace/store.py src/workspace/foundation.py src/interface/web/app.py src/interface/web/static/index.html src/interface/web/static/arline.css src/interface/web/static/arline.js tests/test_v11_lastmile.py tools/apply_v11_lastmile.py
+          git diff --cached --stat
+          git commit -m 'feat: complete v1.1 identity organization and chat polish'
+          git push origin HEAD:release/v1.1-final-polish
