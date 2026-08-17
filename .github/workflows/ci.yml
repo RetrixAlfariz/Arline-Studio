@@ -35,6 +35,7 @@ jobs:
         run: |
           node --check src/interface/web/static/js/commands.js
           node --check src/interface/web/static/js/stream.js
+          node --check src/interface/web/static/js/quick-create.js
           node --check src/interface/web/static/arline.js
       - name: Repository hygiene
         run: |
