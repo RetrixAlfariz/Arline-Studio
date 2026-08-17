@@ -213,6 +213,11 @@ class FolderPatchPayload(BaseModel):
     sort_order: int | None = None
 
 
+class EntityFamilyMergePayload(BaseModel):
+    source_family_id: str
+    target_family_id: str
+
+
 class EntityFamilyPayload(BaseModel):
     project_id: str | None = None
     name: str
@@ -1646,6 +1651,31 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             "conflicts": events.get("conflicts", []),
             "uncertainties": (result.analysis or {}).get("uncertainties", []),
         }
+
+    @app.post("/api/library/entity-merge/preview")
+    def entity_merge_preview(payload: EntityFamilyMergePayload):
+        try:
+            return workspace.preview_entity_family_merge(payload.source_family_id, payload.target_family_id)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.post("/api/library/entity-merge")
+    def entity_merge(payload: EntityFamilyMergePayload):
+        try:
+            source = workspace.get_entity_family(payload.source_family_id)
+            source_aliases = foundation.list_aliases("entity_family", payload.source_family_id)
+            result = workspace.merge_entity_families(payload.source_family_id, payload.target_family_id)
+            foundation.merge_resource_refs("entity_family", payload.source_family_id, payload.target_family_id)
+            try:
+                foundation.add_alias("entity_family", payload.target_family_id, source["name"])
+                for alias in source_aliases:
+                    foundation.add_alias("entity_family", payload.target_family_id, alias["alias"])
+            except ValueError:
+                pass
+            foundation.log_activity(None, "identity_merge", "entity_family", payload.target_family_id, label=result["name"], detail={"merged_from": payload.source_family_id})
+            return result
+        except (KeyError, ValueError, sqlite3.IntegrityError) as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @app.post("/api/quick-create/preview")
     def quick_create_preview(payload: QuickCreatePayload):

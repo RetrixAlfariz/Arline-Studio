@@ -89,6 +89,7 @@ const state = {
   draftTimer: null,
   activeGenerationController: null,
   liveRun: null,
+  worldSelection: new Set(),
 };
 
 const ISSUE_LABELS = [
@@ -350,8 +351,9 @@ async function refreshModels() {
     }
     if ([...select.options].some((option) => option.value === previous)) select.value = previous;
     else if (payload.models?.[0]) select.value = payload.models[0].key;
-    setConnection(true, `${payload.models?.length || 0} models`);
     updateModelInfo();
+    const selectedModel=state.modelMap.get(select.value);
+    setConnection(true, selectedModel ? `${selectedModel.loaded?"loaded":"available"} · ${selectedModel.max_context_length?`${Math.round(selectedModel.max_context_length/1024)}K`:"model"}` : `${payload.models?.length||0} models`);
   } catch (error) {
     setConnection(false, "offline");
     if (byId("modelInfo")) byId("modelInfo").textContent = error.message;
@@ -566,6 +568,7 @@ function editSessionTags(session) {
 
 
 function newChat() {
+  saveComposerDraft();
   state.activeSession = null;
   state.activeTurn = null;
   state.activeRunId = null;
@@ -577,12 +580,14 @@ function newChat() {
   byId("chatLanding").classList.remove("hidden");
   byId("analysisStrip").classList.add("hidden");
   setView("chat");
+  restoreComposerDraft();
   renderSessions();
   byId("promptInput").focus();
 }
 
 async function analyzePrompt() {
   const payload = promptPayload();
+  const sentDraftKey = composerDraftKey();
   if (!payload.prompt.trim()) return toast("Write a prompt first");
   loading(true, "Analyzing prompt…", "Building world state, projections, and writer context");
   try {
@@ -979,10 +984,11 @@ async function openEntitySheet(familyId, variantId = null) {
     ${variant ? entityVariantSections(variant) : `<div class="empty-state small">No variant exists in this scope.</div>`}
   `;
   const inManifest = state.manifestRefs.some((ref) => ref.resource_type === "entity_family" && ref.resource_id === family.id);
-  byId("sheetFooter").innerHTML = `<button id="deleteFamilyBtn" class="danger-text-btn">Delete family</button>${variant ? `<button id="deleteVariantBtn" class="danger-text-btn">Delete variant</button>` : ""}<button id="whereUsedEntityBtn" class="secondary-btn">Where used</button>${variant ? `<button id="timelineStateEntityBtn" class="secondary-btn">Timeline state</button>` : ""}<button id="manifestEntityBtn" class="secondary-btn" ${inManifest ? "disabled" : ""}>${inManifest ? "In project working set" : "＋ Add to project"}</button><button id="pinEntityBtn" class="secondary-btn">Pin context</button><button id="tagEntityBtn" class="secondary-btn">Tags</button><button id="compareVariantBtn" class="secondary-btn">Compare variants</button><button id="newVariantBtn" class="secondary-btn">＋ Variant</button>${variant ? `<button id="editVariantBtn" class="primary-btn">Edit current variant</button>` : ""}`;
+  byId("sheetFooter").innerHTML = `<button id="deleteFamilyBtn" class="danger-text-btn">Delete family</button>${variant ? `<button id="deleteVariantBtn" class="danger-text-btn">Delete variant</button>` : ""}<button id="mergeEntityBtn" class="secondary-btn">Merge duplicate…</button><button id="whereUsedEntityBtn" class="secondary-btn">Where used</button>${variant ? `<button id="timelineStateEntityBtn" class="secondary-btn">Timeline state</button>` : ""}<button id="manifestEntityBtn" class="secondary-btn" ${inManifest ? "disabled" : ""}>${inManifest ? "In project working set" : "＋ Add to project"}</button><button id="pinEntityBtn" class="secondary-btn">Pin context</button><button id="tagEntityBtn" class="secondary-btn">Tags</button><button id="compareVariantBtn" class="secondary-btn">Compare variants</button><button id="newVariantBtn" class="secondary-btn">＋ Variant</button>${variant ? `<button id="editVariantBtn" class="primary-btn">Edit current variant</button>` : ""}`;
   $$("[data-variant-id]", byId("sheetBody")).forEach((button) => button.addEventListener("click", () => openEntitySheet(familyId, button.dataset.variantId)));
   byId("editFamilyBtn").addEventListener("click", () => editFamily(family));
   byId("deleteFamilyBtn").addEventListener("click", () => deleteEntityFamily(family));
+  byId("mergeEntityBtn")?.addEventListener("click", () => openEntityMergeForm(family));
   byId("newVariantBtn").addEventListener("click", () => openVariantForm(family, variant));
   byId("compareVariantBtn").addEventListener("click", () => openVariantCompare(family, variant));
   byId("pinEntityBtn").addEventListener("click", () => pinContext({ type: variant ? "entity_variant" : "entity_family", id: variant?.id || family.id, label: variant?.display_name || family.name }));
@@ -1124,7 +1130,9 @@ async function restoreSnapshot(id) {
 
 function worldCardHTML(item, index) {
   const iconType = item.type === "entity" ? item.family.entity_type : item.type;
-  return `<article class="world-card" data-index="${index}"><div class="world-card-head"><span class="world-card-icon">${escapeHTML(ENTITY_ICONS[iconType] || "◇")}</span><span class="canon-badge ${escapeHTML(item.status)}">${escapeHTML(item.status)}</span></div><h3>${escapeHTML(item.label)}</h3><p>${escapeHTML(item.summary || "No description")}</p><div class="world-card-meta"><span>${escapeHTML(iconType.replaceAll("_", " "))}</span>${item.variant ? `<span>${escapeHTML(worldName(item.variant.world_id))}</span>` : ""}</div></article>`;
+  const familyId = item.type === "entity" ? item.family.id : "";
+  const selected = familyId && state.worldSelection.has(familyId);
+  return `<article class="world-card ${selected ? "selected" : ""}" data-index="${index}" ${familyId ? `data-family-id="${familyId}"` : ""}>${familyId ? `<button class="world-select-toggle" title="Select for bulk organization">${selected ? "✓" : ""}</button>` : ""}<div class="world-card-head"><span class="world-card-icon">${escapeHTML(ENTITY_ICONS[iconType] || "◇")}</span><span class="canon-badge ${escapeHTML(item.status)}">${escapeHTML(item.status)}</span></div><h3>${escapeHTML(item.label)}</h3><p>${escapeHTML(item.summary || "No description")}</p><div class="world-card-meta"><span>${escapeHTML(iconType.replaceAll("_", " "))}</span>${item.variant ? `<span>${escapeHTML(worldName(item.variant.world_id))}</span>` : ""}</div></article>`;
 }
 
 function openFactSheet(fact) {
@@ -1499,6 +1507,7 @@ function bindSessionRows() {
 }
 
 async function openSession(id) {
+  saveComposerDraft();
   loading(true, "Opening chat…", "Loading turn history and branch lineage");
   try {
     const [session, forks] = await Promise.all([api(`/api/sessions/${id}`), api(`/api/sessions/${id}/forks`)]);
@@ -1508,7 +1517,7 @@ async function openSession(id) {
     state.selectedReferences = session.workspace_refs || [];
     updateContextChipUI(); updateScratchUI(); renderForkTrail();
     byId("chatLanding").classList.add("hidden"); byId("conversationSection").classList.remove("hidden");
-    renderConversation(session.turns || []); setView("chat"); renderSessions();
+    renderConversation(session.turns || []); setView("chat"); renderSessions(); restoreComposerDraft();
     scheduleContextStackSync(); recordNavigation();
   } catch (error) { toast(error.message); }
   finally { loading(false); }
@@ -1567,12 +1576,13 @@ function turnHTML(turn) {
   const visible = Math.max(0, total - reason);
   const quality = turn.post_validation?.quality_report || null;
   const runStatus = stats.run_status || "completed";
+  const branches = turnForks(turn.id);
   const thinking = turn.reasoning_text && state.config?.show_reasoning !== false
     ? `<details class="thinking-panel"><summary>Thinking${reason ? ` · ${reason} tokens` : ""}</summary><pre>${escapeHTML(turn.reasoning_text)}</pre></details>` : "";
   const qualityChip = quality ? `<button class="quality-chip quality-turn ${quality.issue_count ? "warning" : ""}">Quality ${quality.score ?? "—"}${quality.issue_count ? ` · ${quality.issue_count} issues` : ""}</button>` : "";
   return `<article class="turn" data-turn-id="${turn.id}">
     <div class="turn-user"><div class="user-bubble">${escapeHTML(turn.user_prompt)}</div></div>
-    <div class="turn-assistant"><div class="assistant-head"><div class="assistant-meta"><span class="run-chip">${escapeHTML(turn.run_id)}</span><span>${escapeHTML(turn.model || "model")}</span><span>${escapeHTML(turn.mode)} · ${escapeHTML(turn.reasoning)}</span>${runStatus !== "completed" ? `<span class="turn-status-badge ${escapeHTML(runStatus)}">${escapeHTML(runStatus)}</span>` : ""}${turn.feedback_status && turn.feedback_status !== "unreviewed" ? `<span class="feedback-badge ${turn.feedback_status}">${escapeHTML(turn.feedback_status)}</span>` : ""}${qualityChip}</div><div class="assistant-actions"><button class="tiny-btn retry-turn">↻ Retry</button><button class="tiny-btn fork-turn">↗ Fork here</button><button class="tiny-btn state-turn">∆ State</button><button class="tiny-btn copy-turn">Copy</button><button class="tiny-btn inspect-turn">Inspect</button><button class="tiny-btn save-turn">Save run</button></div></div>
+    <div class="turn-assistant"><div class="assistant-head"><div class="assistant-meta"><span class="run-chip">${escapeHTML(turn.run_id)}</span><span>${escapeHTML(turn.model || "model")}</span><span>${escapeHTML(turn.mode)} · ${escapeHTML(turn.reasoning)}</span>${runStatus !== "completed" ? `<span class="turn-status-badge ${escapeHTML(runStatus)}">${escapeHTML(runStatus)}</span>` : ""}${turn.feedback_status && turn.feedback_status !== "unreviewed" ? `<span class="feedback-badge ${turn.feedback_status}">${escapeHTML(turn.feedback_status)}</span>` : ""}${qualityChip}${branches.length ? `<button class="tiny-btn turn-branches">↗ ${branches.length} branch${branches.length===1?"":"es"}</button>` : ""}</div><div class="assistant-actions"><button class="tiny-btn retry-turn">↻ Retry</button><button class="tiny-btn fork-turn">↗ Fork here</button><button class="tiny-btn state-turn">∆ State</button><button class="tiny-btn copy-turn">Copy</button><button class="tiny-btn inspect-turn">Inspect</button><button class="tiny-btn save-turn">Save run</button></div></div>
     ${thinking}${turn.feedback_status === "edited_accept" ? `<div class="edited-marker">Human-edited accepted version</div>` : ""}<div class="story-output">${storyHTML(story)}</div>
     <div class="usage-strip">${stats.input_tokens ? `<span class="usage-pill">${stats.input_tokens} in</span>` : ""}${visible ? `<span class="usage-pill">${visible} story</span>` : ""}${reason ? `<span class="usage-pill warning">${reason} reasoning</span>` : ""}${stats.tokens_per_second ? `<span class="usage-pill">${Number(stats.tokens_per_second).toFixed(1)} tok/s</span>` : ""}</div>
     <div class="feedback-row"><button class="accept">✓ Accept</button><button class="edit-accept">✎ Edit & Accept</button><button class="reject">✕ Reject</button><button class="quick-from-turn">＋ Create from prose</button><button class="promote">＋ Stage canon change</button></div></div>
@@ -1597,6 +1607,7 @@ function bindTurnActions() {
       generateStory();
     });
     $(".quality-turn", node)?.addEventListener("click", () => turn && showQualityReport(turn));
+    $(".turn-branches", node)?.addEventListener("click", (event) => { const branches=turnForks(turnId); contextMenu(event.clientX,event.clientY,branches.map((session)=>({label:session.title||"Chat branch",action:()=>openSession(session.id)}))); });
     $(".quick-from-turn", node)?.addEventListener("click", () => openQuickCreate(window.getSelection()?.toString().trim() || storyNode.innerText.slice(0, 600)));
     $(".accept", node)?.addEventListener("click", () => openFeedback(turnId, "accepted"));
     $(".edit-accept", node)?.addEventListener("click", () => openFeedback(turnId, "edited_accept", storyNode.innerText));
@@ -2139,7 +2150,7 @@ async function generateStory() {
   if (!payload.model) return toast("Select a model first");
   const live = createLiveTurn(payload);
   state.liveRun = live;
-  byId("promptInput").value = ""; refreshPromptHighlight(); updateBudgetUI();
+  byId("promptInput").value = ""; clearComposerDraftKey(sentDraftKey); refreshPromptHighlight(); updateBudgetUI();
   setGenerateRunning(true);
 
   try {
@@ -2729,7 +2740,7 @@ function renderWorldGrid() {
   const search = byId("worldSearch")?.value.trim().toLowerCase();
   if (search) cards = cards.filter((card) => `${card.label} ${card.summary}`.toLowerCase().includes(search));
   byId("worldGrid").innerHTML = cards.map(worldCardHTML).join("");
-  byId("worldEmpty")?.classList.toggle("hidden", cards.length > 0);
+  byId("worldEmpty")?.classList.toggle("hidden", cards.length > 0); updateWorldBulkBar();
   $$(".world-card").forEach((card) => {
     const index = Number(card.dataset.index), item = cards[index];
     card.addEventListener("click", async () => {
@@ -3157,6 +3168,57 @@ function toggleFocusMode(force = null) {
   saveLocalPrefs({ focusMode: next });
 }
 
+function composerDraftKey(sessionId = state.activeSession?.id || null) {
+  if (sessionId) return `arline:composer:${sessionId}`;
+  return `arline:composer:scope:${state.activeProject?.id || "none"}:${state.activeWorld?.id || "none"}:${state.activeBranch?.id || "none"}`;
+}
+function saveComposerDraft() {
+  const input = byId("promptInput"); if (!input) return;
+  const key = composerDraftKey();
+  if (input.value) localStorage.setItem(key, input.value); else localStorage.removeItem(key);
+}
+function restoreComposerDraft() {
+  const input = byId("promptInput"); if (!input) return;
+  const value = localStorage.getItem(composerDraftKey()) || "";
+  input.value = value; refreshPromptHighlight(); updateBudgetUI();
+}
+function clearComposerDraftKey(key) { if (key) localStorage.removeItem(key); }
+function turnForks(turnId) { return (state.forkGraph?.sessions || []).filter((session) => session.forked_from_turn_id === turnId); }
+
+function updateWorldBulkBar() {
+  const bar = byId("worldBulkBar"); if (!bar) return;
+  const count = state.worldSelection.size;
+  bar.classList.toggle("hidden", !count); byId("worldBulkCount").textContent = `${count} selected`;
+  $$(".world-card").forEach((card) => { const id=card.dataset.familyId; card.classList.toggle("selected", Boolean(id && state.worldSelection.has(id))); });
+}
+function clearWorldSelection() { state.worldSelection.clear(); updateWorldBulkBar(); }
+async function bulkMoveSelected() {
+  const ids=[...state.worldSelection]; if(!ids.length)return;
+  const folders=flattenFolders(state.worldBibleFolderTree || state.worldBibleFolders || []);
+  openForm({title:`Move ${ids.length} Library sheets`,eyebrow:"Bulk organize",fields:[{name:"folder_id",label:"Folder",type:"select",options:[{value:"",label:"No folder"},...folders.map((f)=>({value:f.id,label:f.path||f.name}))],full:true}],onSubmit:async(values)=>{for(const id of ids)await api(`/api/entities/families/${id}`,{method:"PATCH",body:{folder_id:values.folder_id||"",note:"bulk move"}});clearWorldSelection();await loadProjectData();toast(`Moved ${ids.length} sheets`);}});
+}
+async function bulkAddCollection() {
+  const ids=[...state.worldSelection]; if(!ids.length)return;
+  if(!state.worldCollections.length)return toast("Create a Library collection first");
+  openForm({title:`Add ${ids.length} sheets to collection`,eyebrow:"Bulk organize",fields:[{name:"collection_id",label:"Collection",type:"select",options:state.worldCollections.map((c)=>({value:c.id,label:c.name})),full:true}],onSubmit:async(values)=>{for(const id of ids)await api(`/api/collections/${values.collection_id}/links`,{method:"POST",body:{resource_type:"entity_family",resource_id:id}});clearWorldSelection();await loadProjectData();toast(`Added ${ids.length} sheets to collection`);}});
+}
+async function bulkArchiveSelected() {
+  const ids=[...state.worldSelection]; if(!ids.length||!confirm(`Archive ${ids.length} selected Library sheets?`))return;
+  for(const id of ids)await api("/api/lifecycle/archive?archived=true",{method:"POST",body:{resource_type:"entity_family",resource_id:id}});
+  clearWorldSelection();await loadProjectData();toast(`Archived ${ids.length} sheets`);
+}
+
+function openEntityMergeForm(family) {
+  const candidates=state.families.filter((item)=>item.id!==family.id&&item.entity_type===family.entity_type);
+  if(!candidates.length)return toast("No same-type identity is available to merge into");
+  openForm({title:`Merge duplicate “${family.name}”`,eyebrow:"Library identity",description:"Safe merge preserves organizational references and moves variants only when target scopes do not collide. Overlapping variants require manual comparison.",fields:[{name:"target_id",label:"Merge into",type:"select",options:candidates.map((item)=>({value:item.id,label:item.name})),full:true}],submit:"Preview merge",onSubmit:async(values)=>{
+    const preview=await api("/api/library/entity-merge/preview",{method:"POST",body:{source_family_id:family.id,target_family_id:values.target_id}});
+    if(preview.collisions?.length){byId("compareTitle").textContent="Merge needs manual variant review";byId("compareBody").innerHTML=`<p class="compare-note">Arline will not guess which overlapping world/branch state should win.</p>${preview.collisions.map((c)=>`<div class="backlink-row"><b>${escapeHTML(worldName(c.world_id))}</b><small>${escapeHTML(c.branch_id||"main")} · source ${escapeHTML(c.source_variant_id)} ↔ target ${escapeHTML(c.target_variant_id)}</small></div>`).join("")}`;byId("compareDialog").showModal();return;}
+    if(!confirm(`Merge “${family.name}” into “${preview.target.name}”? The source identity becomes an alias and its non-overlapping variants move to the target.`))return;
+    const result=await api("/api/library/entity-merge",{method:"POST",body:{source_family_id:family.id,target_family_id:values.target_id}});closeSheet();clearWorldSelection();await loadProjectData();await openEntitySheet(result.id);toast(`Merged duplicate into “${result.name}”`);
+  }});
+}
+
 function attachEvents() {
   const on = (id, event, handler, options) => byId(id)?.addEventListener(event, handler, options);
   document.addEventListener("pointerdown", (event) => {
@@ -3228,6 +3290,7 @@ function attachEvents() {
   on("openInspectorBtn", "click", () => openInspector());
   on("closeInspectorBtn", "click", closeInspector);
   on("inspectorScrim", "click", closeInspector);
+  window.addEventListener("beforeunload", saveComposerDraft);
   window.addEventListener("hashchange", () => { const route=location.hash.replace(/^#\//,""); const view=route==="manuscript"?"draft":route==="library"?"world":route; if(["home","chat","draft","world","data"].includes(view) && view!==state.activeView) setView(view,{record:false,fromHash:true}); });
   on("closeSheetBtn", "click", closeSheet);
   on("sheetScrim", "click", closeSheet);
@@ -3257,9 +3320,9 @@ function attachEvents() {
   on("generationMode", "change", () => { updateBudgetUI(); updateComposerProfileSummary(); });
   ["gpuRatio","temperature","topP","minP","repeatPenalty"].forEach((id) => on(id, "input", () => { syncRangeOutputs(); updateBudgetUI(); }));
   ["visibleTokens","reasoningReserve","contextLength","beatCount","beatTokens","totalStoryTokens"].forEach((id) => on(id, "input", () => { if (id === "visibleTokens") syncDynamicLength(); updateBudgetUI(); updateComposerProfileSummary(); }));
-  on("refreshModelsBtn", "click", refreshModels); on("saveSettingsBtn", "click", saveSettings); on("reloadModelBtn", "click", reloadModel);
+  on("refreshModelsBtn", "click", refreshModels); on("connectionBadge", "click", refreshModels); on("saveSettingsBtn", "click", saveSettings); on("reloadModelBtn", "click", reloadModel);
   on("analyzeBtn", "click", analyzePrompt); on("generateBtn", "click", generateStory);
-  on("promptInput", "input", () => { updateAutocomplete(); refreshPromptHighlight(); updateBudgetUI(); });
+  on("promptInput", "input", () => { saveComposerDraft(); updateAutocomplete(); refreshPromptHighlight(); updateBudgetUI(); });
   on("promptInput", "scroll", () => { if (byId("promptHighlight")) { byId("promptHighlight").scrollTop = byId("promptInput").scrollTop; byId("promptHighlight").scrollLeft = byId("promptInput").scrollLeft; } });
   on("promptInput", "keydown", handleComposerKey);
   on("traceSelect", "change", loadTrace);
@@ -3283,6 +3346,12 @@ function attachEvents() {
     state.activeSavedViewId = null; renderWorldLibraryNavigation(); renderWorldGrid(); recordNavigation();
   }));
   on("worldSearch", "input", renderWorldGrid);
+  on("worldGrid", "click", (event) => {
+    const toggle=event.target.closest(".world-select-toggle"); if(!toggle)return;
+    event.preventDefault(); event.stopImmediatePropagation(); const card=toggle.closest(".world-card"); const id=card?.dataset.familyId; if(!id)return;
+    if(state.worldSelection.has(id))state.worldSelection.delete(id);else state.worldSelection.add(id);updateWorldBulkBar();toggle.textContent=state.worldSelection.has(id)?"✓":"";
+  }, true);
+  on("bulkMoveBtn", "click", bulkMoveSelected); on("bulkCollectionBtn", "click", bulkAddCollection); on("bulkArchiveBtn", "click", bulkArchiveSelected); on("bulkClearBtn", "click", clearWorldSelection);
   on("newEntityBtn", "click", openWorldActionsForTab);
   on("compareWorldBtn", "click", openWorldCompare);
   on("compareBranchBtn", "click", openBranchCompare);
