@@ -1,6 +1,6 @@
 # Arline Studio 1.1
 
-Arline Studio is a Project that mainly focused on making story.
+Arline Studio is a local-first workspace for writing, exploring, and maintaining structured story worlds.
 
 ## v1.1 status
 
