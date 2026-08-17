@@ -33,9 +33,10 @@ jobs:
           import re
           p = Path('tools/apply_v11_hardening.py')
           s = p.read_text(encoding='utf-8')
+          replacement = r'''  const boundary = (ch) => !ch || /\s/.test(ch) || ".,;:!?()[]{}<>/\\\\|+=*~—–-".includes(ch) || ch === '"' || ch === "'" || ch === "\\x60";'''
           s, n = re.subn(
               r'^  const boundary = \(ch\) => .*?;$',
-              r'''  const boundary = (ch) => !ch || /\s/.test(ch) || ".,;:!?()[]{}<>/\\\\|+=*~—–-".includes(ch) || ch === '"' || ch === "'" || ch === "\\x60";''',
+              lambda _m: replacement,
               s,
               count=1,
               flags=re.M,
