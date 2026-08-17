@@ -39,6 +39,9 @@ jobs:
           node --check src/interface/web/static/js/quick-create.js
           node --check src/interface/web/static/js/memory.js
           node --check src/interface/web/static/arline.js
+          node --check tests/frontend/memory_runtime_smoke.js
+      - name: Memory runtime scope smoke
+        run: node tests/frontend/memory_runtime_smoke.js
       - name: Repository hygiene
         run: |
           if git ls-files 'src/arline_studio.egg-info/**' | grep -q .; then
