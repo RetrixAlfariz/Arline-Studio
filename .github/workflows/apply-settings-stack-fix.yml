@@ -51,7 +51,9 @@ jobs:
           assert 'data-inspector-panel="review"' in html
           assert 'id="feedbackQueue"' in html
           assert 'v1.1 settings stack hotfix' in css
-          assert 'setView("data")' not in js
+          assert 'data: () => setView("data")' not in js
+          assert 'data-home-view="data"' not in js
+          assert 'openInspector("review")' in js
           print('SETTINGS_STACK_STATIC_PASS')
           PY
 
