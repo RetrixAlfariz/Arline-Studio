@@ -41,7 +41,7 @@ class FoundationStore:
     an issue without changing the canonical schema that owns its content.
     """
 
-    SCHEMA_VERSION = 6
+    SCHEMA_VERSION = 7
 
     def __init__(self, database_path: Path | str):
         self.path = Path(database_path)
@@ -94,6 +94,27 @@ class FoundationStore:
                 );
                 CREATE INDEX IF NOT EXISTS idx_alias_lookup
                     ON resource_aliases(normalized_alias, resource_type);
+
+                CREATE TABLE IF NOT EXISTS resource_media (
+                    id TEXT PRIMARY KEY,
+                    resource_type TEXT NOT NULL,
+                    resource_id TEXT NOT NULL,
+                    media_type TEXT NOT NULL DEFAULT 'image',
+                    kind TEXT NOT NULL DEFAULT 'reference',
+                    mime_type TEXT NOT NULL,
+                    original_name TEXT NOT NULL DEFAULT '',
+                    storage_path TEXT NOT NULL,
+                    caption TEXT NOT NULL DEFAULT '',
+                    description TEXT NOT NULL DEFAULT '',
+                    description_source TEXT NOT NULL DEFAULT 'manual',
+                    is_cover INTEGER NOT NULL DEFAULT 0,
+                    sort_order INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_resource_media_owner
+                    ON resource_media(resource_type, resource_id, sort_order, created_at);
+
 
                 CREATE TABLE IF NOT EXISTS workspace_collections (
                     id TEXT PRIMARY KEY,
@@ -383,6 +404,13 @@ class FoundationStore:
         removed so context/search/collections cannot retain zombie references.
         """
         with self._lock, self._connection() as con:
+            media_rows = con.execute("SELECT storage_path FROM resource_media WHERE resource_type=? AND resource_id=?", (resource_type, resource_id)).fetchall()
+            for media in media_rows:
+                try:
+                    Path(media["storage_path"]).unlink(missing_ok=True)
+                except OSError:
+                    pass
+            con.execute("DELETE FROM resource_media WHERE resource_type=? AND resource_id=?", (resource_type, resource_id))
             con.execute("DELETE FROM resource_lifecycle WHERE resource_type=? AND resource_id=?", (resource_type, resource_id))
             con.execute("DELETE FROM resource_aliases WHERE resource_type=? AND resource_id=?", (resource_type, resource_id))
             con.execute("DELETE FROM workspace_collection_links WHERE resource_type=? AND resource_id=?", (resource_type, resource_id))
@@ -404,6 +432,10 @@ class FoundationStore:
             for row in aliases:
                 con.execute("INSERT OR IGNORE INTO resource_aliases(id,resource_type,resource_id,alias,normalized_alias,created_at) VALUES(?,?,?,?,?,?)", (make_id("ALIAS"), resource_type, target_id, row["alias"], row["normalized_alias"], row["created_at"]))
             con.execute("DELETE FROM resource_aliases WHERE resource_type=? AND resource_id=?", (resource_type, source_id))
+            target_cover = con.execute("SELECT id FROM resource_media WHERE resource_type=? AND resource_id=? AND is_cover=1 LIMIT 1", (resource_type, target_id)).fetchone()
+            if target_cover:
+                con.execute("UPDATE resource_media SET is_cover=0,updated_at=? WHERE resource_type=? AND resource_id=? AND is_cover=1", (utc_now(), resource_type, source_id))
+            con.execute("UPDATE resource_media SET resource_id=?,updated_at=? WHERE resource_type=? AND resource_id=?", (target_id, utc_now(), resource_type, source_id))
             # collections
             links = con.execute("SELECT collection_id,sort_order,added_at FROM workspace_collection_links WHERE resource_type=? AND resource_id=?", (resource_type, source_id)).fetchall()
             for row in links:
@@ -574,6 +606,119 @@ class FoundationStore:
             if row["builtin"]:
                 raise ValueError("Built-in views are protected")
             con.execute("DELETE FROM saved_views WHERE id=?", (view_id,))
+
+
+    # ------------------------------------------------------------------
+    # Media / Gallery foundation
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _media_row(row: sqlite3.Row) -> dict[str, Any]:
+        item = dict(row)
+        item["is_cover"] = bool(item.get("is_cover"))
+        return item
+
+    def create_media(
+        self,
+        resource_type: str,
+        resource_id: str,
+        *,
+        storage_path: str,
+        mime_type: str,
+        original_name: str = "",
+        media_type: str = "image",
+        kind: str = "reference",
+        caption: str = "",
+        description: str = "",
+        description_source: str = "manual",
+        is_cover: bool = False,
+        sort_order: int = 0,
+    ) -> dict[str, Any]:
+        media_id = make_id("MEDIA")
+        now = utc_now()
+        if not resource_type.strip() or not resource_id.strip():
+            raise ValueError("Media must belong to a resource")
+        with self._lock, self._connection() as con:
+            if is_cover:
+                con.execute(
+                    "UPDATE resource_media SET is_cover=0,updated_at=? WHERE resource_type=? AND resource_id=?",
+                    (now, resource_type, resource_id),
+                )
+            con.execute(
+                "INSERT INTO resource_media(id,resource_type,resource_id,media_type,kind,mime_type,original_name,storage_path,caption,description,description_source,is_cover,sort_order,created_at,updated_at) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    media_id, resource_type, resource_id, media_type, kind, mime_type,
+                    original_name, storage_path, caption.strip(), description.strip(),
+                    description_source.strip() or "manual", int(bool(is_cover)), int(sort_order), now, now,
+                ),
+            )
+        return self.get_media(media_id)
+
+    def get_media(self, media_id: str) -> dict[str, Any]:
+        with self._connection() as con:
+            row = con.execute("SELECT * FROM resource_media WHERE id=?", (media_id,)).fetchone()
+        if row is None:
+            raise KeyError(media_id)
+        return self._media_row(row)
+
+    def list_media(
+        self,
+        *,
+        resource_type: str | None = None,
+        resource_id: str | None = None,
+        cover_only: bool = False,
+    ) -> list[dict[str, Any]]:
+        where = ["1=1"]
+        params: list[Any] = []
+        if resource_type:
+            where.append("resource_type=?"); params.append(resource_type)
+        if resource_id:
+            where.append("resource_id=?"); params.append(resource_id)
+        if cover_only:
+            where.append("is_cover=1")
+        with self._connection() as con:
+            rows = con.execute(
+                f"SELECT * FROM resource_media WHERE {' AND '.join(where)} ORDER BY is_cover DESC,sort_order ASC,created_at ASC",
+                params,
+            ).fetchall()
+        return [self._media_row(row) for row in rows]
+
+    def update_media(self, media_id: str, **changes: Any) -> dict[str, Any]:
+        allowed = {"kind", "caption", "description", "description_source", "is_cover", "sort_order"}
+        current = self.get_media(media_id)
+        now = utc_now()
+        with self._lock, self._connection() as con:
+            if changes.get("is_cover") is True:
+                con.execute(
+                    "UPDATE resource_media SET is_cover=0,updated_at=? WHERE resource_type=? AND resource_id=?",
+                    (now, current["resource_type"], current["resource_id"]),
+                )
+            fields: list[str] = []
+            params: list[Any] = []
+            for key, value in changes.items():
+                if key not in allowed or value is None:
+                    continue
+                if key == "is_cover":
+                    value = int(bool(value))
+                elif key == "sort_order":
+                    value = int(value)
+                fields.append(f"{key}=?"); params.append(value)
+            if fields:
+                fields.append("updated_at=?"); params.extend([now, media_id])
+                cur = con.execute(f"UPDATE resource_media SET {', '.join(fields)} WHERE id=?", params)
+                if not cur.rowcount:
+                    raise KeyError(media_id)
+        return self.get_media(media_id)
+
+    def delete_media(self, media_id: str) -> None:
+        item = self.get_media(media_id)
+        with self._lock, self._connection() as con:
+            con.execute("DELETE FROM resource_media WHERE id=?", (media_id,))
+        try:
+            Path(item["storage_path"]).unlink(missing_ok=True)
+        except OSError:
+            pass
 
     # ------------------------------------------------------------------
     # Run profiles

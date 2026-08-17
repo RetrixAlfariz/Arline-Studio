@@ -90,6 +90,8 @@ const state = {
   activeGenerationController: null,
   liveRun: null,
   worldSelection: new Set(),
+  mediaCovers: [],
+  libraryViewMode: "grid",
   conversationRenderLimit: 80,
 };
 
@@ -1015,6 +1017,7 @@ async function openEntitySheet(familyId, variantId = null) {
     $$(".relationship-mini[data-rel-id]", byId("sheetBody")).forEach((button) => button.addEventListener("click", () => openRelationshipSheet(button.dataset.relId)));
     $$(".variant-revision-restore", byId("sheetBody")).forEach((button) => button.addEventListener("click", () => restoreResourceRevision(button.dataset.revisionId, variant.id, "entity_variant")));
   }
+  await renderEntityMediaSheet(family, variant);
   openSheet();
 }
 
@@ -1139,11 +1142,166 @@ async function restoreSnapshot(id) {
 }
 
 
+
+function setLibraryViewMode(mode, { persist = true, rerender = false } = {}) {
+  mode = ["list", "grid", "gallery"].includes(mode) ? mode : "grid";
+  state.libraryViewMode = mode;
+  const grid = byId("worldGrid");
+  if (grid) {
+    grid.classList.remove("view-list", "view-grid", "view-gallery");
+    grid.classList.add(`view-${mode}`);
+  }
+  $$('[data-library-view]').forEach((button) => button.classList.toggle("active", button.dataset.libraryView === mode));
+  if (persist) saveLocalPrefs({ libraryViewMode: mode });
+  if (rerender && state.activeView === "world") renderWorldGrid();
+}
+
+function coverForWorldCard(item) {
+  if (item.type === "entity") {
+    return state.mediaCovers.find((media) => media.resource_type === "entity_variant" && media.resource_id === item.variant?.id)
+      || state.mediaCovers.find((media) => media.resource_type === "entity_family" && media.resource_id === item.family?.id)
+      || null;
+  }
+  if (item.type === "world") return state.mediaCovers.find((media) => media.resource_type === "world" && media.resource_id === item.id) || null;
+  return null;
+}
+
+function galleryCoverHTML(item) {
+  const media = coverForWorldCard(item);
+  if (media) return `<div class="world-card-cover"><img loading="lazy" src="${escapeHTML(media.content_url)}" alt="${escapeHTML(media.caption || item.label || "Library image")}"></div>`;
+  const iconType = item.type === "entity" ? item.family?.entity_type : item.type;
+  return `<div class="world-card-cover placeholder"><span>${escapeHTML(ENTITY_ICONS[iconType] || "◇")}</span></div>`;
+}
+
+function selectedModelHasVision() {
+  const model = state.modelMap.get(byId("modelSelect")?.value || "");
+  return Boolean(model?.capabilities?.vision);
+}
+
+function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Could not read image"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function chooseAndUploadMedia(resourceType, resourceId, { refresh, makeCover = false } = {}) {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/png,image/jpeg,image/webp,image/gif";
+  input.multiple = true;
+  input.addEventListener("change", async () => {
+    const files = [...(input.files || [])];
+    if (!files.length) return;
+    loading(true, "Adding visual references…", `${files.length} image${files.length === 1 ? "" : "s"}`);
+    try {
+      let first = true;
+      for (const file of files) {
+        if (file.size > 20 * 1024 * 1024) throw new Error(`${file.name} is larger than 20 MiB`);
+        const dataUrl = await fileToDataURL(file);
+        await api("/api/media", { method: "POST", body: {
+          resource_type: resourceType, resource_id: resourceId, filename: file.name,
+          data_url: dataUrl, kind: "reference", caption: "",
+          is_cover: Boolean(makeCover && first), sort_order: 0,
+        }});
+        first = false;
+      }
+      await loadProjectData();
+      if (refresh) await refresh();
+      toast(`Added ${files.length} visual reference${files.length === 1 ? "" : "s"}`);
+    } catch (error) { toast(`Image upload failed: ${error.message}`, 6000); }
+    finally { loading(false); }
+  }, { once: true });
+  input.click();
+}
+
+async function reviewVisionDescription(media, refresh) {
+  if (!selectedModelHasVision()) return toast("The selected LM Studio model does not report vision support");
+  loading(true, "Describing image…", "Using the selected local vision model");
+  try {
+    const apiKey = byId("apiKey")?.value.trim() || null;
+    const result = await api(`/api/media/${encodeURIComponent(media.id)}/describe`, { method: "POST", body: {
+      model: byId("modelSelect")?.value || "",
+      server_url: byId("serverUrl")?.value.trim() || null,
+      api_key: apiKey,
+      prompt: "",
+    }});
+    loading(false);
+    openForm({
+      title: "Review visual description",
+      eyebrow: "Vision proposal · not canon",
+      description: "Arline described only the image. Saving keeps this as media metadata; it does not modify entity canon.",
+      fields: [
+        { name: "caption", label: "Caption", value: media.caption || "", full: true },
+        { name: "description", label: "Visual description", type: "textarea", rows: 10, value: result.description || "", full: true },
+      ],
+      submit: "Save media description",
+      onSubmit: async (values) => {
+        await api(`/api/media/${encodeURIComponent(media.id)}`, { method: "PATCH", body: {
+          caption: values.caption, description: values.description,
+          description_source: `vision:${result.model}`,
+        }});
+        await loadProjectData();
+        if (refresh) await refresh();
+      },
+    });
+  } catch (error) { loading(false); toast(`Vision description failed: ${error.message}`, 6000); }
+}
+
+function editMediaMetadata(media, refresh) {
+  openForm({
+    title: "Edit visual reference",
+    eyebrow: "Media metadata",
+    description: "Media descriptions are reference metadata. Canon remains unchanged unless you explicitly stage a canon fact elsewhere.",
+    fields: [
+      { name: "kind", label: "Kind", type: "select", options: ["reference","portrait","outfit","concept","map","diagram"].map((x)=>({value:x,label:x})), value: media.kind || "reference" },
+      { name: "caption", label: "Caption", value: media.caption || "", full: true },
+      { name: "description", label: "Description", type: "textarea", rows: 8, value: media.description || "", full: true },
+      { name: "sort_order", label: "Order", type: "number", value: Number(media.sort_order || 0) },
+    ],
+    onSubmit: async (values) => {
+      await api(`/api/media/${encodeURIComponent(media.id)}`, { method: "PATCH", body: {
+        kind: values.kind, caption: values.caption, description: values.description,
+        description_source: "manual", sort_order: Number(values.sort_order || 0),
+      }});
+      await loadProjectData(); if (refresh) await refresh();
+    },
+  });
+}
+
+function mediaCardsHTML(items, scopeLabel) {
+  if (!items.length) return `<div class="gallery-empty-media">No ${escapeHTML(scopeLabel.toLowerCase())} images yet.</div>`;
+  const vision = selectedModelHasVision();
+  return items.map((media) => `<article class="entity-media-card" data-media-id="${escapeHTML(media.id)}"><div class="entity-media-thumb"><img loading="lazy" src="${escapeHTML(media.content_url)}" alt="${escapeHTML(media.caption || media.original_name || "Visual reference")}"><span class="entity-media-badge ${media.is_cover ? "cover" : ""}">${media.is_cover ? "Cover" : escapeHTML(scopeLabel)}</span></div><div class="entity-media-body"><b>${escapeHTML(media.caption || media.original_name || media.kind || "Image")}</b><small>${escapeHTML(media.kind || "reference")}${media.description_source?.startsWith("vision:") ? " · vision reviewed" : ""}</small>${media.description ? `<p>${escapeHTML(media.description)}</p>` : ""}<div class="entity-media-card-actions"><button class="tiny-btn media-cover" ${media.is_cover ? "disabled" : ""}>Cover</button><button class="tiny-btn media-describe ${vision ? "" : "vision-unavailable"}" ${vision ? "" : "disabled"} title="${vision ? "Describe with selected local model" : "Selected model has no reported vision support"}">Describe</button><button class="tiny-btn media-edit">Edit</button><button class="tiny-danger-btn media-delete">Delete</button></div></div></article>`).join("");
+}
+
+async function renderEntityMediaSheet(family, variant) {
+  const familyResult = await api(`/api/media?${new URLSearchParams({resource_type:"entity_family",resource_id:family.id})}`);
+  const variantResult = variant ? await api(`/api/media?${new URLSearchParams({resource_type:"entity_variant",resource_id:variant.id})}`) : {items:[]};
+  const familyMedia = familyResult.items || [], variantMedia = variantResult.items || [];
+  const host = document.createElement("section");
+  host.className = "sheet-section entity-media-section";
+  const refresh = () => openEntitySheet(family.id, variant?.id || null);
+  host.innerHTML = `<div class="sheet-section-head"><h3>Gallery & visual references</h3><div class="entity-media-actions"><button class="tiny-btn add-family-media">＋ Shared image</button>${variant ? `<button class="tiny-btn add-variant-media">＋ Variant image</button>` : ""}</div></div><p class="entity-media-note">Cover images power Gallery view. Vision descriptions stay reviewable media metadata and never become canon automatically.</p>${familyMedia.length ? `<div class="section-label">Shared identity</div><div class="entity-media-grid family-media-grid">${mediaCardsHTML(familyMedia,"Shared")}</div>` : `<div class="entity-media-grid family-media-grid">${mediaCardsHTML([],"Shared")}</div>`}${variant ? `<div class="section-label gap">Current variant</div><div class="entity-media-grid variant-media-grid">${mediaCardsHTML(variantMedia,"Variant")}</div>` : ""}`;
+  byId("sheetBody").prepend(host);
+  $(".add-family-media", host)?.addEventListener("click", () => chooseAndUploadMedia("entity_family", family.id, { refresh, makeCover: !familyMedia.some((x)=>x.is_cover) && !variantMedia.some((x)=>x.is_cover) }));
+  $(".add-variant-media", host)?.addEventListener("click", () => chooseAndUploadMedia("entity_variant", variant.id, { refresh, makeCover: !variantMedia.some((x)=>x.is_cover) }));
+  for (const card of $$("[data-media-id]", host)) {
+    const media = [...familyMedia, ...variantMedia].find((x)=>x.id===card.dataset.mediaId); if (!media) continue;
+    $(".media-cover", card)?.addEventListener("click", async()=>{await api(`/api/media/${encodeURIComponent(media.id)}`,{method:"PATCH",body:{is_cover:true}});await loadProjectData();await refresh();});
+    $(".media-describe", card)?.addEventListener("click",()=>reviewVisionDescription(media,refresh));
+    $(".media-edit", card)?.addEventListener("click",()=>editMediaMetadata(media,refresh));
+    $(".media-delete", card)?.addEventListener("click",async()=>{if(!confirm("Delete this image from Arline media storage?"))return;await api(`/api/media/${encodeURIComponent(media.id)}`,{method:"DELETE"});await loadProjectData();await refresh();});
+  }
+}
+
 function worldCardHTML(item, index) {
   const iconType = item.type === "entity" ? item.family.entity_type : item.type;
   const familyId = item.type === "entity" ? item.family.id : "";
   const selected = familyId && state.worldSelection.has(familyId);
-  return `<article class="world-card ${selected ? "selected" : ""}" data-index="${index}" ${familyId ? `data-family-id="${familyId}"` : ""}>${familyId ? `<button class="world-select-toggle" title="Select for bulk organization">${selected ? "✓" : ""}</button>` : ""}<div class="world-card-head"><span class="world-card-icon">${escapeHTML(ENTITY_ICONS[iconType] || "◇")}</span><span class="canon-badge ${escapeHTML(item.status)}">${escapeHTML(item.status)}</span></div><h3>${escapeHTML(item.label)}</h3><p>${escapeHTML(item.summary || "No description")}</p><div class="world-card-meta"><span>${escapeHTML(iconType.replaceAll("_", " "))}</span>${item.variant ? `<span>${escapeHTML(worldName(item.variant.world_id))}</span>` : ""}</div></article>`;
+  return `<article class="world-card ${selected ? "selected" : ""}" data-index="${index}" ${familyId ? `data-family-id="${familyId}"` : ""}>${galleryCoverHTML(item)}${familyId ? `<button class="world-select-toggle" title="Select for bulk organization">${selected ? "✓" : ""}</button>` : ""}<div class="world-card-head"><span class="world-card-icon">${escapeHTML(ENTITY_ICONS[iconType] || "◇")}</span><span class="canon-badge ${escapeHTML(item.status)}">${escapeHTML(item.status)}</span></div><h3>${escapeHTML(item.label)}</h3><p>${escapeHTML(item.summary || "No description")}</p><div class="world-card-meta"><span>${escapeHTML(iconType.replaceAll("_", " "))}</span>${item.variant ? `<span>${escapeHTML(worldName(item.variant.world_id))}</span>` : ""}</div></article>`;
 }
 
 function openFactSheet(fact) {
@@ -1461,7 +1619,7 @@ function updateModelInfo() {
       byId("contextLength").value = model.max_context_length;
       byId("contextLength").max = model.max_context_length;
     }
-    byId("modelInfo").innerHTML = `<b>${escapeHTML(model.display_name)}</b><br>Loaded: ${model.loaded ? "yes" : "no"}<br>Max context: ${(model.max_context_length || 0).toLocaleString()}<br>Reasoning: ${escapeHTML(allowed.join(", "))}`;
+    byId("modelInfo").innerHTML = `<b>${escapeHTML(model.display_name)}</b><br>Loaded: ${model.loaded ? "yes" : "no"}<br>Max context: ${(model.max_context_length || 0).toLocaleString()}<br>Reasoning: ${escapeHTML(allowed.join(", "))}<br>Vision: ${model.capabilities?.vision ? "yes" : "no"}`;
   }
   updateReasoningWarning();
   syncDynamicLength();
@@ -2257,6 +2415,7 @@ function saveLocalPrefs(patch = {}) {
 function restoreLayoutPrefs() {
   const prefs = localPrefs();
   state.layoutPrefs = prefs;
+  state.libraryViewMode = ["list","grid","gallery"].includes(prefs.libraryViewMode) ? prefs.libraryViewMode : "grid";
   document.body.classList.toggle("sidebar-collapsed", Boolean(prefs.sidebarCollapsed));
   document.body.dataset.density = prefs.density || "comfortable";
 }
@@ -2585,13 +2744,14 @@ async function loadProjectData() {
   const qBible = new URLSearchParams({ ...(worldId ? { world_id: worldId } : {}), ...(branchId ? { branch_id: branchId } : {}), project_id: state.activeProject.id });
   const factQ = new URLSearchParams({ ...(worldId ? { world_id: worldId } : {}), ...(branchForFacts ? { branch_id: branchForFacts } : {}) });
   const stagedQ = new URLSearchParams({ ...(worldId ? { world_id: worldId } : {}), ...(branchForFacts ? { branch_id: branchForFacts } : {}) });
-  const [tree, bible, facts, snapshots, staged, continuity] = await Promise.all([
+  const [tree, bible, facts, snapshots, staged, continuity, media] = await Promise.all([
     api(`/api/projects/${state.activeProject.id}/tree?${qTree}`),
     api(`/api/world-bible?${qBible}`),
     worldId ? api(`/api/facts?${factQ}`) : { facts: [] },
     worldId ? api(`/api/snapshots?world_id=${encodeURIComponent(worldId)}`) : { snapshots: [] },
     api(`/api/projects/${state.activeProject.id}/staged-changes?${stagedQ}`),
     api(`/api/projects/${state.activeProject.id}/continuity?${qTree}`),
+    api("/api/media?cover_only=true"),
   ]);
   state.projectTree = { ...tree, folders: tree.folder_tree || tree.folders || [] };
   state.worlds = bible.worlds || state.worlds;
@@ -2616,6 +2776,7 @@ async function loadProjectData() {
   state.overlays = tree.overlays || [];
   state.stagedChanges = staged.changes || [];
   state.continuity = continuity || null;
+  state.mediaCovers = media.items || [];
   state.activity = tree.activity || [];
   state.issues = tree.issues || [];
   state.favorites = tree.favorites || state.favorites;
@@ -2710,6 +2871,7 @@ function applySavedWorldView(viewId) {
   const view = state.worldSavedViews.find((item) => item.id === viewId);
   if (!view) return;
   state.activeSavedViewId = viewId; state.activeWorldFolderId = null; state.activeCollectionId = null;
+  if (view.query?.layout) setLibraryViewMode(view.query.layout, {persist:false, rerender:false});
   const type = view.resource_type;
   if (["character", "location", "item", "organization", "lore"].includes(type)) state.activeWorldTab = type;
   $$('[data-world-tab]').forEach((tab) => tab.classList.toggle("active", tab.dataset.worldTab === state.activeWorldTab));
@@ -2734,7 +2896,7 @@ function openSavedViewForm() {
   openForm({ title: "Save Library view", eyebrow: "Reusable filter", fields: [
     { name: "name", label: "View name", required: true },
     { name: "resource_type", label: "Entity type", type: "select", value: resourceType, options: ["all","character","location","item","organization","lore"].map((x) => ({ value:x,label:x })) },
-  ], onSubmit: async (values) => { await api("/api/saved-views", { method:"POST", body:{ ...values, scope_type:"world_bible", query:{} } }); await loadProjectData(); }});
+  ], onSubmit: async (values) => { await api("/api/saved-views", { method:"POST", body:{ ...values, scope_type:"world_bible", query:{layout:state.libraryViewMode} } }); await loadProjectData(); }});
 }
 
 function renderWorldGrid() {
@@ -2757,6 +2919,7 @@ function renderWorldGrid() {
   const search = byId("worldSearch")?.value.trim().toLowerCase();
   if (search) cards = cards.filter((card) => `${card.label} ${card.summary}`.toLowerCase().includes(search));
   byId("worldGrid").innerHTML = cards.map(worldCardHTML).join("");
+  setLibraryViewMode(state.libraryViewMode, {persist:false, rerender:false});
   byId("worldEmpty")?.classList.toggle("hidden", cards.length > 0); updateWorldBulkBar();
   $$(".world-card").forEach((card) => {
     const index = Number(card.dataset.index), item = cards[index];
@@ -2957,7 +3120,6 @@ function renderHome() {
   const favorites = data.favorites || state.favorites || [];
   byId("homeFavorites").innerHTML = favorites.map((f)=>`<button class="home-action-row" data-home-resource="${escapeHTML(f.resource_type)}:${escapeHTML(f.resource_id)}"><span>★</span><div><b>${escapeHTML(f.label||f.resource_id)}</b><small>${escapeHTML(f.resource_type.replaceAll("_"," "))}</small></div></button>`).join("")||`<div class="empty-note">Pin frequently used sheets, scenes, or worlds here.</div>`;
   $$('[data-home-view]',byId("homeView")).forEach((b)=>b.addEventListener("click",()=>setView(b.dataset.homeView)));
-  $$('[data-home-review]',byId("homeView")).forEach((b)=>b.addEventListener("click",()=>{openInspector("review");loadFeedbackLab();}));
   $$('[data-home-review]',byId("homeView")).forEach((b)=>b.addEventListener("click",()=>{openInspector("review");loadFeedbackLab();}));
   $$('[data-home-doc]',byId("homeView")).forEach((b)=>b.addEventListener("click",()=>b.dataset.homeDoc&&openDocument(b.dataset.homeDoc)));
   $$('[data-home-chat]',byId("homeView")).forEach((b)=>b.addEventListener("click",()=>openSession(b.dataset.homeChat)));
@@ -3484,6 +3646,7 @@ function attachEvents() {
     state.activeSavedViewId = null; renderWorldLibraryNavigation(); renderWorldGrid(); recordNavigation();
   }));
   on("worldSearch", "input", renderWorldGrid);
+  $$('[data-library-view]').forEach((button)=>button.addEventListener("click",()=>setLibraryViewMode(button.dataset.libraryView,{persist:true,rerender:false})));
   on("worldGrid", "click", (event) => {
     const toggle=event.target.closest(".world-select-toggle"); if(!toggle)return;
     event.preventDefault(); event.stopImmediatePropagation(); const card=toggle.closest(".world-card"); const id=card?.dataset.familyId; if(!id)return;
@@ -3548,7 +3711,7 @@ function attachEvents() {
   if (byId("settingsDensity")) byId("settingsDensity").value = prefs.density || "comfortable";
   if (byId("settingsSidebarMode")) byId("settingsSidebarMode").value = prefs.sidebarCollapsed ? "collapsed" : "expanded";
   if (prefs.focusMode && state.activeView === "draft") toggleFocusMode(true);
-  refreshPromptHighlight(); updateScratchUI(); updateNavigationButtons(); updateComposerSessionMode(); resizeComposerInput();
+  setLibraryViewMode(state.libraryViewMode, {persist:false, rerender:false}); refreshPromptHighlight(); updateScratchUI(); updateNavigationButtons(); updateComposerSessionMode(); resizeComposerInput();
 }
 
 async function init() {

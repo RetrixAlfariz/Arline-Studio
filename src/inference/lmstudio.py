@@ -89,6 +89,10 @@ class LMStudioClient:
             "reported": bool(config),
         }
 
+    def vision_supported(self, key: str) -> bool:
+        info = self.model_info(key) or {}
+        return bool((info.get("capabilities") or {}).get("vision"))
+
     def resolve_reasoning_option(self, key: str, requested: str) -> str | None:
         """Validate and resolve a requested reasoning setting for one model.
 
@@ -123,6 +127,7 @@ class LMStudioClient:
                     "loaded": bool(model.get("loaded_instances")),
                     "max_context_length": model.get("max_context_length"),
                     "reasoning": (model.get("capabilities") or {}).get("reasoning"),
+                    "vision": bool((model.get("capabilities") or {}).get("vision")),
                 }
                 for model in self.list_models()
                 if model.get("type") == "llm"
@@ -147,6 +152,7 @@ class LMStudioClient:
         model: str,
         input_text: str,
         system_prompt: str,
+        images: list[str] | None = None,
         temperature: float = 0.8,
         top_p: float = 0.95,
         top_k: int | None = 40,
@@ -163,7 +169,10 @@ class LMStudioClient:
 
         payload: dict[str, Any] = {
             "model": model,
-            "input": input_text,
+            "input": input_text if not images else [
+                {"type": "message", "content": input_text},
+                *[{"type": "image", "data_url": image} for image in images],
+            ],
             "system_prompt": system_prompt,
             "stream": False,
             "temperature": temperature,
