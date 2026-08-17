@@ -1,0 +1,78 @@
+name: Final v1.2.0 completion gate
+
+on:
+  push:
+    branches:
+      - develop/v1.2
+    paths:
+      - tools/fix_complete_v120_anchor.py
+      - .github/workflows/complete-v120-final.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: final-v120-completion
+  cancel-in-progress: false
+
+jobs:
+  complete:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop/v1.2
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Repair function-specific anchor
+        run: python tools/fix_complete_v120_anchor.py
+      - name: Validate completion patcher
+        run: python -m py_compile tools/complete_v120_foundation.py
+      - name: Apply canonical v1.2.0 foundation
+        run: python tools/complete_v120_foundation.py
+      - name: Refresh lockfile
+        run: |
+          python -m pip install --quiet uv
+          uv lock
+      - name: Install
+        run: python -m pip install -e .
+      - name: Full Python regression suite
+        run: python -m unittest discover -s tests -v
+      - name: Compile Python
+        run: python -m compileall -q src tests
+      - name: JavaScript syntax
+        run: |
+          node --check src/interface/web/static/js/commands.js
+          node --check src/interface/web/static/js/stream.js
+          node --check src/interface/web/static/js/quick-create.js
+          node --check src/interface/web/static/js/memory.js
+          node --check src/interface/web/static/arline.js
+      - name: v1.2.0 source contract
+        run: |
+          test -f src/memory/web.py
+          grep -q 'create_memory_router' src/interface/web/app.py
+          grep -q '_augment_memory_context' src/interface/web/app.py
+          grep -q 'gated_lane_results' src/memory/query.py
+          grep -q 'version = "1.2.0a1"' pyproject.toml
+          grep -q '\[memory\]' config/arline.toml
+          test -f docs/V12_IMPLEMENTATION_STATUS.md
+          ! find .github/workflows -maxdepth 1 -type f \( -iname '*v12*' -o -iname '*v1.2*' -o -iname '*v120*' \) | grep .
+          ! find tools -maxdepth 1 -type f \( -iname '*v12*' -o -iname '*v1_2*' -o -iname '*v120*' \) | grep .
+      - name: Clean runtime artifacts
+        run: |
+          find . -type d -name __pycache__ -prune -exec rm -rf {} +
+          find . -type f \( -name '*.pyc' -o -name '*.db' -o -name '*.db-wal' -o -name '*.db-shm' \) -delete
+      - name: Commit verified v1.2.0 foundation
+        run: |
+          git config user.name "Rafzan"
+          git config user.email "86295808+RetrixAlfariz@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "feat: complete v1.2.0 evidence and retrieval foundation"
+          git push origin HEAD:develop/v1.2
