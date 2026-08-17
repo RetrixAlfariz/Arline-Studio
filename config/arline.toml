@@ -130,14 +130,16 @@ trace_enabled = true
 max_pack_tokens = 4096
 
 [memory.embedding]
-# Install the recommended model in LM Studio normally, then set its local
-# model key here. Dense retrieval stays optional in v1.2.0.
+# Recommended LM Studio download: lm-kit/bge-m3-gguf (Q4_K_M is a sensible
+# baseline). Use the exact local embedding model key shown by LM Studio if it
+# differs from the common `text-embedding-bge-m3` key below.
+# Dense retrieval stays optional in v1.2.0.
 enabled = false
 provider = "lmstudio"
-model = "intfloat/multilingual-e5-base"
-dimension = 768
-query_prefix = "query: "
-passage_prefix = "passage: "
+model = "text-embedding-bge-m3"
+dimension = 1024
+query_prefix = ""
+passage_prefix = ""
 batch_size = 32
 timeout_seconds = 120.0
 
