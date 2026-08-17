@@ -100,12 +100,47 @@
     button.addEventListener("click", bulkTrashSelectedCompat);
   }
 
+  function installQuickCreateProjectScopeBridge() {
+    if (typeof document === "undefined") return;
+    const projectSelect = document.getElementById("quickCreateProject");
+    const worldSelect = document.getElementById("quickCreateWorld");
+    if (!projectSelect || !worldSelect || projectSelect.dataset.scopeBridge === "1") return;
+    projectSelect.dataset.scopeBridge = "1";
+    projectSelect.addEventListener("change", async (event) => {
+      // The original v1.1 enhancement listener refreshes from the active
+      // workspace and can accidentally snap this select back. Capture the
+      // event first so Destination remains the user's explicit choice.
+      event.stopImmediatePropagation();
+      const projectId = projectSelect.value;
+      if (!projectId) return;
+      try {
+        const response = await window.fetch(`/api/projects/${encodeURIComponent(projectId)}`);
+        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+        const project = await response.json();
+        const previousWorld = worldSelect.value;
+        const worlds = project.worlds || [];
+        worldSelect.innerHTML = "";
+        for (const world of worlds) {
+          const option = document.createElement("option");
+          option.value = world.id;
+          option.textContent = `${world.name}${world.canon_status ? ` · ${world.canon_status}` : ""}`;
+          worldSelect.appendChild(option);
+        }
+        if ([...worldSelect.options].some((option) => option.value === previousWorld)) worldSelect.value = previousWorld;
+        worldSelect.dispatchEvent(new Event("change", { bubbles: true }));
+      } catch (error) {
+        if (typeof globalThis.toast === "function") globalThis.toast(`Destination project failed: ${error.message}`, 5000);
+      }
+    }, true);
+  }
+
   function loadQuickCreateEnhancements() {
     if (typeof document === "undefined" || typeof document.querySelector !== "function") return;
     if (document.querySelector('script[data-arline-quick-create="1"]')) return;
     const script = document.createElement("script");
     script.src = "/static/js/quick-create.js?v=1.1.4-qc";
     script.dataset.arlineQuickCreate = "1";
+    script.addEventListener("load", installQuickCreateProjectScopeBridge, { once: true });
     document.body.appendChild(script);
   }
 
