@@ -1,6 +1,6 @@
 # Arline Studio 1.1
 
-Arline Studio is a Project that mainly focused on making story
+Arline Studio is a Project that mainly focused on making story.
 
 ## v1.1 mental model
 
@@ -9,7 +9,7 @@ Arline Studio is a Project that mainly focused on making story
 - **Manuscript** — what you have written: scenes, chapters, notes, research, and outline views.
 - **Chat** — what you are exploring: conversations, forks, scratch/what-if exploration.
 - **Scene** — where you are narratively: POV, location, participants, narrative time, target outcome.
-- **Feedback Lab** — what Arline learns from your choices: review, accept/edit/reject, fork comparisons, advanced dataset exports.
+- **Review & Evals** — what Arline learns from your choices: review, accept/edit/reject, fork comparisons, and advanced dataset exports under Settings → Developer.
 - **Context Stack** — what Arline is allowed to use for the current generation.
 
 Opening something in the UI does **not** automatically put it into context. Navigation state and Context Stack are deliberately separate.
@@ -77,7 +77,20 @@ A Chat fork is only a conversation fork. It does not become a semantic World bra
 
 ### Review instead of silently learning
 
-Generated prose enters **Feedback Lab** as reviewable output. Accept/edit/reject decisions and fork comparisons can later feed SFT, preference, and evaluation exports; dataset plumbing stays in the advanced layer rather than dominating the everyday UI.
+Generated prose is reviewable under **Settings → Developer → Review & Evals**. Accept/edit/reject decisions and fork comparisons can later feed SFT, preference, and evaluation exports; dataset plumbing stays out of the primary writing navigation.
+
+## v1.1 final UI / recovery polish
+
+- The Composer stays spacious for a new chat, then automatically becomes a compact sticky dock once a conversation is active.
+- Response-length, token-budget, and context-detail controls collapse in active chats and can be expanded from the profile control when needed.
+- Chat rendering is progressive: very long sessions initially render only the newest turns and expose a **Load earlier messages** control.
+- Unsent Composer drafts, the last chat/document, navigation state, density, and sidebar preferences are restored where possible after restart.
+- First-run onboarding offers **Start a story**, **Build the Library**, and **Import existing writing** without exposing the underlying schema first.
+- Settings uses a vertical top-to-down layout. Developer tools can be hidden when the user only wants writing-facing settings.
+- **Data & Storage → Workspace health** provides a read-only Doctor that reports dangling references, stale scene pointers, and obvious duplicate identities without auto-repairing canon.
+- Startup failures keep a visible recovery surface with direct access to Data & Storage and reload, rather than disappearing into a transient toast.
+- Settings search matches both category names and the actual setting content inside each panel.
+- Static assets are versioned together so browsers are less likely to mix stale HTML, CSS, and JavaScript after an update.
 
 ## Data safety
 
@@ -96,6 +109,7 @@ Project deletion never owns or deletes shared Library sheets. Project bundles re
 - `Ctrl/Cmd + S` — create a meaningful Manuscript checkpoint
 - `Ctrl/Cmd + Z` — undo the most recent Trash action when not editing text
 - `Alt + Left / Right` — navigation history
+- `Ctrl/Cmd + Shift + F` — Manuscript Focus mode
 
 ## Regression tests
 
@@ -109,7 +123,10 @@ A release pass should also include:
 
 ```powershell
 python -m compileall -q src
+node --check src/interface/web/static/js/commands.js
+node --check src/interface/web/static/js/stream.js
 node --check src/interface/web/static/arline.js
+```
 
 ## v1.1 hardening guarantees
 
@@ -121,3 +138,4 @@ node --check src/interface/web/static/arline.js
 - Context Stack state is browser-tab scoped, preventing two open Studio tabs from overwriting each other.
 - API keys are no longer returned by `/api/config` or sent in model-discovery query strings.
 - CI rejects duplicate top-level frontend functions and frontend/backend context-contract regressions.
+- The final v1.1 release gate covers compact Composer behavior, onboarding/recovery surfaces, Data Doctor wiring, progressive chat rendering, and Developer/Settings separation.
