@@ -36,6 +36,17 @@ from .service import MemoryService
 from .spatial import SpatialMemory
 from .store import MEMORY_SCHEMA_VERSION, MemoryStore
 from .temporal import TemporalMemory
+from .v121 import (
+    V121_EXTENSION_VERSION,
+    compare_world_time,
+    install_v121,
+    normalize_world_time,
+    world_time_in_interval,
+)
+
+# v1.2.x stays on one development line. Install the v1.2.1 behavior over the
+# stable v1.2.0 foundation without changing the public Memory API.
+install_v121()
 
 __all__ = [
     "Authority", "ContextLens", "DisabledEmbeddingProvider",
@@ -48,6 +59,7 @@ __all__ = [
     "RerankerProvider", "RetrievalLane", "RetrievalResult", "SCHEMA_MODELS",
     "ScopeGate", "SemanticClass", "SemanticStatus", "SpatialMemory",
     "StructuralChunker", "TASK_PROFILES", "TemporalMemory", "TrustLevel",
-    "evidence_wrapper", "get_task_profile", "inspect_retrieved_text",
-    "schema_document", "validate_structured_output",
+    "V121_EXTENSION_VERSION", "compare_world_time", "evidence_wrapper",
+    "get_task_profile", "inspect_retrieved_text", "normalize_world_time",
+    "schema_document", "validate_structured_output", "world_time_in_interval",
 ]
