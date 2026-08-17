@@ -1,4 +1,3 @@
-
 # Arline Studio
 
 ## v1.2 development — Evidence & Retrieval Foundation
@@ -16,13 +15,20 @@ Arline does not bundle or download model weights. Install models in LM
 Studio normally and select the local model key in Settings/config.
 
 - **Generation + vision:** [HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive](https://huggingface.co/HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive)
-- **Recommended embedding baseline:** [intfloat/multilingual-e5-base](https://huggingface.co/intfloat/multilingual-e5-base)
+- **Recommended embedding baseline:** [lm-kit/bge-m3-gguf](https://huggingface.co/lm-kit/bge-m3-gguf) — BGE-M3, 1024-dimensional embeddings; Q4_K_M is the suggested starting quantization.
 - **Embedding challenger (disabled by default):** [Qwen/Qwen3-Embedding-0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B)
 - **Experimental reranker (not required by v1.2.0):** [Qwen/Qwen3-Reranker-0.6B](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B)
 
-`multilingual-e5-base` should be exposed through LM Studio's embeddings
-endpoint when dense retrieval is enabled. v1.2.0 remains fully usable with
-`dense_enabled = false`.
+For BGE-M3, use the exact local embedding model key reported by LM Studio
+(`GET /api/v1/models` or `lms ls --embedding`) in `[memory.embedding].model`.
+`text-embedding-bge-m3` is Arline's default key, but an LM Studio install may
+expose a different local key. BGE-M3 does **not** use the E5-specific `query:` /
+`passage:` prefixes, so both prefix settings are empty by default.
+
+Dense retrieval remains optional in v1.2.0. If it is disabled or the embedding
+model is unavailable, Arline continues with structured retrieval + SQLite FTS5.
+Changing embedding model or dimension creates a new derived vector generation;
+vectors from an older embedding model are never reinterpreted as BGE-M3 vectors.
 
 ---
 
