@@ -32,7 +32,7 @@ python main.py
 
 4. Open the Studio URL configured under `[ui]` in `config/arline.toml` (default port `7860`).
 
-The SQLite database, exports, backups, and generated output are runtime data and are intentionally not included in release ZIPs.
+The SQLite database, local media, exports, backups, and generated output are runtime data and are intentionally not included in release ZIPs.
 
 ## The v1.1 workflow
 
@@ -57,6 +57,23 @@ Use:
 - **Collections** for curated groups without moving a sheet.
 - **Saved Views** for reusable filters/query views.
 
+Library presentation is independent of the underlying object model. The same sheets can be browsed as **List**, **Grid**, or **Gallery**, and Saved Views can remember their layout.
+
+### Gallery and visual references
+
+Library sheets can carry local visual references without turning images into a separate canon system.
+
+- Entity families can have shared identity images.
+- World/branch variants can have variant-specific images.
+- One image per resource can be selected as its **Cover** for Gallery view.
+- Media can store a kind, caption, ordering, and reviewed visual description.
+- Deleting a media item removes its managed local file; permanent resource deletion also cleans its media, while identity merges move media to the surviving identity.
+- The selected model's LM Studio metadata controls whether the **Describe** action is available.
+- When a vision-capable local model is selected, **Describe** sends the image through the existing LM Studio inference path and returns a reviewable visual-description proposal.
+- A vision description is saved only after explicit review and remains **media metadata, not canon**. It never silently changes character attributes, facts, relationships, or world state.
+
+Automatic image tagging, visual embeddings/similarity, image-vs-canon contradiction detection, and autonomous multimodal canon extraction are intentionally deferred to v1.2.
+
 ### Write in Manuscript
 
 Project folders contain Project files only. Manuscript items use explicit types such as Scene, Chapter, Note, Research, and Outline. Writing status is separate:
@@ -70,6 +87,8 @@ Editing autosaves recovery state without flooding revision history. Use **Checkp
 ### Use Context Stack deliberately
 
 The Context Stack tracks the active Project, World/branch, Scene, Chat fork, Run Profile, explicit references, pins, and overrides. `@references` can use Mention / Context / Deep depth without changing the Library itself.
+
+Visual media is not injected into normal story context merely because a sheet is open or has a cover. v1.1 uses vision only for the explicit **Describe image** action.
 
 ### Fork without polluting canon
 
@@ -91,12 +110,13 @@ Generated prose is reviewable under **Settings → Developer → Review & Evals*
 - Startup failures keep a visible recovery surface with direct access to Data & Storage and reload, rather than disappearing into a transient toast.
 - Settings search matches both category names and the actual setting content inside each panel.
 - Static assets are versioned together so browsers are less likely to mix stale HTML, CSS, and JavaScript after an update.
+- Library view modes are List / Grid / Gallery, with local cover images and explicit vision-description review.
 
 ## Data safety
 
 Normal destructive actions use **Trash**, not immediate permanent deletion. Activity Center provides Restore and explicit permanent deletion. Archive is separate from Trash.
 
-Before a database schema upgrade, v1.1 creates a consistent SQLite backup under the runtime database directory's `backups/` folder. Legacy Manuscript rows are migrated from the old broad Draft vocabulary to the v1.1 Scene/writing-state model.
+Before a database schema upgrade, v1.1 creates a consistent SQLite backup under the runtime database directory's `backups/` folder. Legacy Manuscript rows are migrated from the old broad Draft vocabulary to the v1.1 Scene/writing-state model. The visual-reference foundation advances the shared workspace schema to v7 and therefore passes through the same pre-migration backup boundary.
 
 Project deletion never owns or deletes shared Library sheets. Project bundles reference Library resources rather than silently embedding ownership copies.
 
@@ -138,4 +158,4 @@ node --check src/interface/web/static/arline.js
 - Context Stack state is browser-tab scoped, preventing two open Studio tabs from overwriting each other.
 - API keys are no longer returned by `/api/config` or sent in model-discovery query strings.
 - CI rejects duplicate top-level frontend functions and frontend/backend context-contract regressions.
-- The final v1.1 release gate covers compact Composer behavior, onboarding/recovery surfaces, Data Doctor wiring, progressive chat rendering, and Developer/Settings separation.
+- The final v1.1 release gate covers compact Composer behavior, onboarding/recovery surfaces, Data Doctor wiring, progressive chat rendering, Developer/Settings separation, Gallery/media lifecycle, and native LM Studio image-input plumbing.
