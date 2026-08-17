@@ -120,7 +120,7 @@ def _state_at_v121(
     params: list[Any] = [world_id, branch_id, owner_type, owner_id]
     with self.connection() as con:
         rows = con.execute(
-            f"SELECT id FROM state_intervals WHERE {' AND '.join(where)} ORDER BY created_at DESC",
+            f"SELECT id FROM state_intervals WHERE {' AND '.join(where)} ORDER BY created_at DESC, rowid DESC",
             params,
         ).fetchall()
 
@@ -192,7 +192,7 @@ def _transition_state_v121(
         try:
             previous = con.execute(
                 "SELECT * FROM state_intervals WHERE world_id=? AND branch_id IS ? AND owner_type=? AND owner_id=? "
-                "AND state_key=? AND status='accepted' ORDER BY created_at DESC LIMIT 1",
+                "AND state_key=? AND status='accepted' ORDER BY created_at DESC, rowid DESC LIMIT 1",
                 (world_id, branch_id, owner_type, owner_id, state_key),
             ).fetchone()
             if previous is not None:
@@ -335,7 +335,7 @@ def _profile_and_relationship_state(self: MemoryQueryEngine, plan, lane: Retriev
                     text=f"Character profile for {label}: {json.dumps(profile, ensure_ascii=False, default=str)}",
                     source_type="entity_variant",
                     source_id=variant_id,
-                    project_id=family.get("project_id"),
+                    project_id=None,  # Library sheets are shared across story projects.
                     world_id=variant.get("world_id") or plan.scope.world_id,
                     branch_id=variant.get("branch_id"),
                     authority=Authority.USER_ACCEPTED_WORLD_CANON.value,
