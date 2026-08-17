@@ -101,7 +101,8 @@
   }
 
   function loadQuickCreateEnhancements() {
-    if (typeof document === "undefined" || document.querySelector('script[data-arline-quick-create="1"]')) return;
+    if (typeof document === "undefined" || typeof document.querySelector !== "function") return;
+    if (document.querySelector('script[data-arline-quick-create="1"]')) return;
     const script = document.createElement("script");
     script.src = "/static/js/quick-create.js?v=1.1.4-qc";
     script.dataset.arlineQuickCreate = "1";
@@ -134,7 +135,8 @@
       // frontend script has executed, so its capture hooks augment the existing
       // v1.1 handlers instead of racing them during startup.
       if (document.readyState === "complete") loadQuickCreateEnhancements();
-      else document.addEventListener("DOMContentLoaded", loadQuickCreateEnhancements, { once: true });
+      else if (typeof document.addEventListener === "function") document.addEventListener("DOMContentLoaded", loadQuickCreateEnhancements, { once: true });
+      else if (typeof setTimeout === "function") setTimeout(loadQuickCreateEnhancements, 0);
     }
 
     // v1.1's streaming generation path clears the sent Composer draft with an
