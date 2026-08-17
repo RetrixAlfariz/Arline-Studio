@@ -33,9 +33,6 @@ jobs:
           import re
           p = Path('tools/apply_v11_hardening.py')
           s = p.read_text(encoding='utf-8')
-
-          # A function signature may destructure objects. Only a { reached after
-          # the parameter parenthesis closes is the body brace.
           body_parser = r'''def find_open_brace(text: str, i: int) -> int:
               n = len(text)
               paren_depth = 1
@@ -63,15 +60,8 @@ jobs:
 
 
           def find_matching_brace'''
-          s, n = re.subn(
-              r'def find_open_brace\(text: str, i: int\) -> int:.*?\n\n\ndef find_matching_brace',
-              lambda _m: body_parser,
-              s,
-              count=1,
-              flags=re.S,
-          )
+          s, n = re.subn(r'def find_open_brace\(text: str, i: int\) -> int:.*?\n\n\ndef find_matching_brace', lambda _m: body_parser, s, count=1, flags=re.S)
           if n != 1: raise SystemExit(f'function-body parser patch count={n}')
-
           replacement = r'''  const boundary = (ch) => !ch || /\s/.test(ch) || ".,;:!?()[]{}<>/\\\\|+=*~—–-".includes(ch) || ch === '"' || ch === "'" || ch === "\\x60";'''
           s, n = re.subn(r'^  const boundary = \(ch\) => .*?;$', lambda _m: replacement, s, count=1, flags=re.M)
           if n != 1: raise SystemExit(f'boundary patch count={n}')
@@ -164,6 +154,17 @@ jobs:
           s = s.replace(meta_anchor, late_indexes + '\n' + meta_anchor, 1)
           p.write_text(s, encoding='utf-8')
           PY
+      - name: Sync package lock version
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('uv.lock')
+          s = p.read_text(encoding='utf-8')
+          old = 'name = "arline-studio"\nversion = "0.6.4"'
+          new = 'name = "arline-studio"\nversion = "1.1.0"'
+          if old not in s: raise SystemExit('Arline package block in uv.lock not found')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
       - name: Install package
         run: python -m pip install -e .
       - name: Regression tests
@@ -174,12 +175,14 @@ jobs:
         run: |
           node --check src/interface/web/static/js/commands.js
           node --check src/interface/web/static/arline.js
-      - name: Ensure migration helper removed
+      - name: Ensure temporary migration files removed
         run: |
           test ! -e tools/apply_v11_hardening.py
           test ! -e .github/workflows/apply-hardening.yml
       - name: Commit hardened source
         run: |
+          rm -rf src/arline_studio.egg-info
+          rm -f .github/workflows/ci.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
