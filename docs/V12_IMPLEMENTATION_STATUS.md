@@ -14,7 +14,7 @@ Implemented:
 
 - source-backed MemoryStore with revision/checksum/provenance metadata;
 - split SQLite FTS5 domains with structured/FTS fallback;
-- optional LM Studio `multilingual-e5-base` embedding provider;
+- optional LM Studio BGE-M3 embedding provider (`lm-kit/bge-m3-gguf`, 1024 dimensions);
 - deterministic Query Compiler and specialized retrieval lanes;
 - hard Scope Gate applied before rank fusion;
 - RRF fusion, authority boosts, source diversity and abstention;
@@ -34,6 +34,20 @@ Implemented:
 - Developer API exposes task contracts and JSON Schemas for inspection;
 - README model recommendations; Arline does not download model weights;
 - permanent CI covers the v1.2 memory modules, profile/schema contracts, and frontend assets.
+
+### Retrieval model baseline
+
+The original research draft named `intfloat/multilingual-e5-base`, but the
+runtime architecture for v1.2 delegates model serving to LM Studio. The current
+recommended dense-retrieval baseline is therefore **BGE-M3 GGUF** from
+`lm-kit/bge-m3-gguf`, with a 1024-dimensional embedding contract and no
+E5-specific `query:` / `passage:` prefixes. The configured model string is a
+local LM Studio key; use the exact embedding key reported by LM Studio if it
+differs from `text-embedding-bge-m3`.
+
+Changing the embedding model or dimension requires a new derived index
+generation. Existing vectors from another embedding model/dimension must not be
+reinterpreted as BGE-M3 vectors.
 
 ## Explicit v1.2.0 boundary
 
