@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from pathlib import Path
@@ -31,6 +30,14 @@ class _FakeEmbedding:
 
 
 class V120CorrectnessHardeningTests(unittest.TestCase):
+    def test_bge_m3_is_default_lmstudio_embedding_profile(self):
+        config = EmbeddingConfig()
+        self.assertEqual(config.provider, "lmstudio")
+        self.assertEqual(config.model, "text-embedding-bge-m3")
+        self.assertEqual(config.dimension, 1024)
+        self.assertEqual(config.query_prefix, "")
+        self.assertEqual(config.passage_prefix, "")
+
     def test_routing_does_not_treat_scene_word_as_continue(self):
         workspace = _NoEntities()
         self.assertEqual(QueryCompiler.route("Summarize this scene"), QueryRoute.GLOBAL_SUMMARY)
