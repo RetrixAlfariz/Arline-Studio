@@ -7,7 +7,10 @@ import tempfile
 import tomllib
 import unittest
 
+from fastapi.testclient import TestClient
+
 from src.history import HistoryStore
+from src.interface.web.app import create_app
 from src.storage_backup import backup_sqlite_before_migrations
 from src.workspace import DOCUMENT_TYPES, FoundationStore, WorkspaceStore
 
@@ -101,6 +104,51 @@ class HardeningTests(unittest.TestCase):
             con.close()
             store = HistoryStore(db)
             self.assertIsNotNone(store.last_migration_backup)
+
+    def test_fastapi_startup_public_config_and_tab_context_smoke(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            db = root / "arline.db"
+            config_text = (ROOT / "config/arline.toml").read_text(encoding="utf-8")
+            config_text = config_text.replace('auto_load = true', 'auto_load = false')
+            config_text = config_text.replace(
+                'database_path = "data\\\\arline_history.db"',
+                f'database_path = "{db.as_posix()}"',
+            )
+            config_text = config_text.replace(
+                'dataset_root = "data\\\\datasets"',
+                f'dataset_root = "{(root / "datasets").as_posix()}"',
+            )
+            config_text = config_text.replace(
+                'output_root = "output"',
+                f'output_root = "{(root / "output").as_posix()}"',
+            )
+            config_text = config_text.replace(
+                'saved_root = "output\\\\saved"',
+                f'saved_root = "{(root / "saved").as_posix()}"',
+            )
+            config_path = root / "arline.toml"
+            config_path.write_text(config_text, encoding="utf-8")
+
+            client = TestClient(create_app(config_path))
+            public = client.get("/api/config")
+            self.assertEqual(public.status_code, 200)
+            payload = public.json()
+            self.assertNotIn("api_key", payload)
+            self.assertFalse(payload["api_key_configured"])
+            self.assertEqual(payload["studio_version"], "1.1.0")
+
+            bootstrap = client.get("/api/workspace/bootstrap", params={"stack_id": "smoke-a"})
+            self.assertEqual(bootstrap.status_code, 200)
+            project_id = bootstrap.json()["active"]["project"]["id"]
+            saved = client.put(
+                "/api/context-stack",
+                json={"stack_id": "smoke-a", "project_id": project_id, "references": []},
+            )
+            self.assertEqual(saved.status_code, 200)
+            other = client.get("/api/context-stack", params={"stack_id": "smoke-b"})
+            self.assertEqual(other.status_code, 200)
+            self.assertNotEqual(other.json().get("project_id"), project_id)
 
 
 if __name__ == "__main__":
