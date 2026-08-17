@@ -1,6 +1,46 @@
 "use strict";
 
 (function () {
+  function installRuntimeCompatibility() {
+    if (typeof document !== "undefined") {
+      let host = document.getElementById("legacyScopeCompatibility");
+      if (!host) {
+        host = document.createElement("div");
+        host.id = "legacyScopeCompatibility";
+        host.hidden = true;
+        host.setAttribute("aria-hidden", "true");
+        document.body.appendChild(host);
+      }
+
+      for (const id of ["projectSelect", "worldSelect", "branchSelect"]) {
+        if (document.getElementById(id)) continue;
+        const select = document.createElement("select");
+        select.id = id;
+        select.hidden = true;
+        select.tabIndex = -1;
+        select.setAttribute("aria-hidden", "true");
+        host.appendChild(select);
+      }
+    }
+
+    // v1.1's streaming generation path clears the sent Composer draft with an
+    // unqualified `sentDraftKey` identifier, but the local binding was dropped
+    // during the final UI refactor. Keep that identifier live until arline.js
+    // owns the fix directly; the getter always resolves the current scope key.
+    if (!Object.prototype.hasOwnProperty.call(globalThis, "sentDraftKey")) {
+      Object.defineProperty(globalThis, "sentDraftKey", {
+        configurable: true,
+        get() {
+          return typeof globalThis.composerDraftKey === "function"
+            ? globalThis.composerDraftKey()
+            : null;
+        },
+      });
+    }
+  }
+
+  installRuntimeCompatibility();
+
   async function consume(response, onEvent) {
     if (!response.ok) {
       let message = `${response.status} ${response.statusText}`;
