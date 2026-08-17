@@ -395,6 +395,42 @@ class FoundationStore:
                 if len(filtered) != len(refs):
                     con.execute("UPDATE context_stack SET references_json=?,updated_at=? WHERE id=?", (_dumps(filtered), utc_now(), row["id"]))
 
+    def merge_resource_refs(self, resource_type: str, source_id: str, target_id: str) -> None:
+        if source_id == target_id:
+            return
+        with self._lock, self._connection() as con:
+            # aliases
+            aliases = con.execute("SELECT alias,normalized_alias,created_at FROM resource_aliases WHERE resource_type=? AND resource_id=?", (resource_type, source_id)).fetchall()
+            for row in aliases:
+                con.execute("INSERT OR IGNORE INTO resource_aliases(id,resource_type,resource_id,alias,normalized_alias,created_at) VALUES(?,?,?,?,?,?)", (make_id("ALIAS"), resource_type, target_id, row["alias"], row["normalized_alias"], row["created_at"]))
+            con.execute("DELETE FROM resource_aliases WHERE resource_type=? AND resource_id=?", (resource_type, source_id))
+            # collections
+            links = con.execute("SELECT collection_id,sort_order,added_at FROM workspace_collection_links WHERE resource_type=? AND resource_id=?", (resource_type, source_id)).fetchall()
+            for row in links:
+                con.execute("INSERT OR IGNORE INTO workspace_collection_links(collection_id,resource_type,resource_id,sort_order,added_at) VALUES(?,?,?,?,?)", (row["collection_id"], resource_type, target_id, row["sort_order"], row["added_at"]))
+            con.execute("DELETE FROM workspace_collection_links WHERE resource_type=? AND resource_id=?", (resource_type, source_id))
+            # favorites/issues point to the surviving identity.
+            favorites = con.execute("SELECT project_id,label,created_at FROM workspace_favorites WHERE resource_type=? AND resource_id=?", (resource_type, source_id)).fetchall()
+            for row in favorites:
+                con.execute("INSERT OR IGNORE INTO workspace_favorites(id,project_id,resource_type,resource_id,label,created_at) VALUES(?,?,?,?,?,?)", (make_id("FAV"), row["project_id"], resource_type, target_id, row["label"], row["created_at"]))
+            con.execute("DELETE FROM workspace_favorites WHERE resource_type=? AND resource_id=?", (resource_type, source_id))
+            con.execute("UPDATE workspace_issues SET resource_id=?,updated_at=? WHERE resource_type=? AND resource_id=?", (target_id, utc_now(), resource_type, source_id))
+            # context stacks are JSON, so retarget and deduplicate explicit refs.
+            rows = con.execute("SELECT id,references_json FROM context_stack").fetchall()
+            for row in rows:
+                refs = _loads(row["references_json"], [])
+                changed = False; seen = set(); out = []
+                for ref in refs:
+                    item = dict(ref)
+                    if item.get("type") == resource_type and item.get("id") == source_id:
+                        item["id"] = target_id; changed = True
+                    key = (item.get("type"), item.get("id"), item.get("mode"))
+                    if key in seen: continue
+                    seen.add(key); out.append(item)
+                if changed:
+                    con.execute("UPDATE context_stack SET references_json=?,updated_at=? WHERE id=?", (_dumps(out), utc_now(), row["id"]))
+            con.execute("DELETE FROM resource_lifecycle WHERE resource_type=? AND resource_id=?", (resource_type, source_id))
+
     # ------------------------------------------------------------------
     # Identity / aliases
     # ------------------------------------------------------------------

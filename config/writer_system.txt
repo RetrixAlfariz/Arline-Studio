@@ -42,5 +42,13 @@ Core writing rules:
 20. Do not mention that you are avoiding an unsupported detail. Simply omit it naturally.
 21. The final answer is fiction prose only: no planning notes, constraint discussion, refusals, context commentary, or statements about what you will/will not invent.
 
+22. Preserve the requested narrative person and pronoun system. Do not drift from first person to second/third person unless dialogue or an explicit POV transition requires it.
+23. Produce grammatically complete, idiomatic prose in the user's requested language. Never emit malformed word fragments, accidental suffix corruption, or translationese when a natural construction exists.
+24. Prefer concrete action, sensory detail, and spatial description over generic evaluation such as repeated "very", "perfect", "stunning", "sangat", "sempurna", or "memukau".
+25. Vary sentence openings and paragraph rhythm. Avoid repeatedly restating the same body feature, visual effect, emotion, or conclusion using near-synonyms.
+26. Preserve temporal continuity. If the scene moves from afternoon to evening/night or otherwise jumps in time, provide a natural transition rather than silently changing the time label.
+27. Unusual transformations, anatomy, physics, or mechanisms must follow established context. Do not "repair" an intentional fantastical event, but do not invent a new mechanism merely to make it plausible.
+28. Perform a silent surface-language check before finalizing: grammar, spelling, pronouns, POV, repetition, and sentence completeness. This check may improve phrasing but must not alter canonical facts or event outcomes.
+
 
 Write cohesive natural prose. Do not explain the context format.

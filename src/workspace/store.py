@@ -2189,6 +2189,82 @@ class WorkspaceStore:
                 raise
         return self.get_entity_family(family_id)
 
+    def preview_entity_family_merge(self, source_family_id: str, target_family_id: str) -> dict[str, Any]:
+        if source_family_id == target_family_id:
+            raise ValueError("Source and target identity must be different")
+        source = self.get_entity_family(source_family_id)
+        target = self.get_entity_family(target_family_id)
+        if source["entity_type"] != target["entity_type"]:
+            raise ValueError("Only entity families of the same type can be merged")
+        source_scopes = {(v["world_id"], v.get("branch_id")): v for v in source.get("variants", [])}
+        target_scopes = {(v["world_id"], v.get("branch_id")): v for v in target.get("variants", [])}
+        collisions = []
+        for scope, left in source_scopes.items():
+            right = target_scopes.get(scope)
+            if right:
+                collisions.append({"world_id": scope[0], "branch_id": scope[1], "source_variant_id": left["id"], "target_variant_id": right["id"]})
+        return {
+            "source": source,
+            "target": target,
+            "collisions": collisions,
+            "safe": not collisions,
+            "moved_variants": len(source_scopes),
+        }
+
+    def merge_entity_families(self, source_family_id: str, target_family_id: str) -> dict[str, Any]:
+        preview = self.preview_entity_family_merge(source_family_id, target_family_id)
+        if preview["collisions"]:
+            raise ValueError("Automatic merge blocked: both identities have a variant in the same world/branch. Compare those variants explicitly before merging.")
+        source, target = preview["source"], preview["target"]
+        now = utc_now()
+        with self._lock, self._connection() as con:
+            con.execute("BEGIN IMMEDIATE")
+            try:
+                source_core = dict(source.get("shared_core") or {})
+                target_core = dict(target.get("shared_core") or {})
+                merged_core = {**source_core, **target_core}
+                description = target.get("description") or source.get("description") or ""
+                con.execute("UPDATE entity_families SET description=?,shared_core_json=?,updated_at=? WHERE id=?", (description, _dumps(merged_core), now, target_family_id))
+                con.execute("UPDATE entity_variants SET family_id=?,updated_at=? WHERE family_id=?", (target_family_id, now, source_family_id))
+
+                # Polymorphic references that can be retargeted without semantic arbitration.
+                for table, type_col, id_col in (
+                    ("canon_facts", "owner_type", "owner_id"),
+                    ("project_overlays", "owner_type", "owner_id"),
+                    ("staged_changes", "owner_type", "owner_id"),
+                    ("timeline_events", "owner_type", "owner_id"),
+                    ("workspace_conflicts", "owner_type", "owner_id"),
+                ):
+                    con.execute(f"UPDATE {table} SET {id_col}=? WHERE {type_col}='entity_family' AND {id_col}=?", (target_family_id, source_family_id))
+                con.execute("UPDATE scene_dependencies SET target_id=? WHERE target_type='entity_family' AND target_id=?", (target_family_id, source_family_id))
+
+                # Many-to-many references: copy, then discard the source link.
+                con.execute("INSERT OR IGNORE INTO workspace_tag_links(tag_id,resource_type,resource_id) SELECT tag_id,'entity_family',? FROM workspace_tag_links WHERE resource_type='entity_family' AND resource_id=?", (target_family_id, source_family_id))
+                con.execute("DELETE FROM workspace_tag_links WHERE resource_type='entity_family' AND resource_id=?", (source_family_id,))
+                con.execute("INSERT OR IGNORE INTO context_pins(id,project_id,world_id,branch_id,resource_type,resource_id,scope,priority,created_at) SELECT id||'-MERGED',project_id,world_id,branch_id,'entity_family',?,scope,priority,created_at FROM context_pins WHERE resource_type='entity_family' AND resource_id=?", (target_family_id, source_family_id))
+                con.execute("DELETE FROM context_pins WHERE resource_type='entity_family' AND resource_id=?", (source_family_id,))
+
+                manifest_rows = con.execute("SELECT project_id,label,priority,created_at FROM project_manifest_refs WHERE resource_type='entity_family' AND resource_id=?", (source_family_id,)).fetchall()
+                for row in manifest_rows:
+                    existing = con.execute("SELECT priority FROM project_manifest_refs WHERE project_id=? AND resource_type='entity_family' AND resource_id=?", (row["project_id"], target_family_id)).fetchone()
+                    if existing:
+                        con.execute("UPDATE project_manifest_refs SET priority=? WHERE project_id=? AND resource_type='entity_family' AND resource_id=?", (max(int(existing["priority"]), int(row["priority"])), row["project_id"], target_family_id))
+                    else:
+                        con.execute("INSERT INTO project_manifest_refs(project_id,resource_type,resource_id,label,priority,created_at) VALUES(?, 'entity_family', ?, ?, ?, ?)", (row["project_id"], target_family_id, target["name"], row["priority"], row["created_at"]))
+                con.execute("DELETE FROM project_manifest_refs WHERE resource_type='entity_family' AND resource_id=?", (source_family_id,))
+
+                self._purge_resource_refs_tx(con, "entity_family", source_family_id, purge_owned_facts=False)
+                con.execute("DELETE FROM entity_families WHERE id=?", (source_family_id,))
+                row = con.execute("SELECT * FROM entity_families WHERE id=?", (target_family_id,)).fetchone()
+                self._add_revision_tx(con, "entity_family", target_family_id, self._family_row(row), f"merged identity {source.get('name')}")
+                con.execute("COMMIT")
+            except Exception:
+                con.execute("ROLLBACK")
+                raise
+        result = self.get_entity_family(target_family_id)
+        result["merged_from"] = {"id": source_family_id, "name": source.get("name")}
+        return result
+
     def _create_variant_tx(
         self,
         con: sqlite3.Connection,

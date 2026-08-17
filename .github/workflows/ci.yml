@@ -7,6 +7,7 @@ on:
       - v1.1
       - "fix/**"
       - "feat/**"
+      - "release/**"
   pull_request:
 
 permissions:
@@ -33,6 +34,7 @@ jobs:
       - name: JavaScript syntax
         run: |
           node --check src/interface/web/static/js/commands.js
+          node --check src/interface/web/static/js/stream.js
           node --check src/interface/web/static/arline.js
       - name: Repository hygiene
         run: |
@@ -41,4 +43,6 @@ jobs:
             exit 1
           fi
           test ! -e tools/apply_v11_hardening.py
+          test ! -e tools/apply_v11_final.py
           test ! -e .github/workflows/apply-hardening.yml
+          test ! -e .github/workflows/apply-v11-final.yml

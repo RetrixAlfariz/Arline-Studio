@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+import asyncio
 from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version as package_version
 from difflib import SequenceMatcher
@@ -12,7 +13,7 @@ from threading import RLock
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import uvicorn
@@ -25,6 +26,8 @@ from src.inference import LMStudioError, LMStudioModelManager
 from src.pipeline import ArlineAnalyticalPipeline
 from src.runtime_config import DEFAULT_CONFIG_PATH, RuntimeConfig, VALID_INPUT_MODES, VALID_REASONING, VALID_PROJECTION_MODES
 from src.service import ArlineService, ArtifactStore, make_run_id
+from src.service.streaming import StreamingArlineService
+from src.writer.quality import ProseQualityAnalyzer
 from src.storage_backup import backup_sqlite_before_migrations
 from src.workspace.store import WORKSPACE_SCHEMA_VERSION
 from src.workspace import (
@@ -208,6 +211,11 @@ class FolderPatchPayload(BaseModel):
     branch_id: str | None = None
     kind: str | None = None
     sort_order: int | None = None
+
+
+class EntityFamilyMergePayload(BaseModel):
+    source_family_id: str
+    target_family_id: str
 
 
 class EntityFamilyPayload(BaseModel):
@@ -883,6 +891,24 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     def get_config():
         return _public_config(RuntimeConfig.load(config_path))
 
+    @app.get("/api/backups")
+    def list_backups():
+        cfg = RuntimeConfig.load(config_path)
+        database_path = Path(cfg.workspace.database_path)
+        backup_dir = database_path.parent / "backups"
+        rows = []
+        if backup_dir.exists():
+            for path in sorted(backup_dir.glob("*"), key=lambda item: item.stat().st_mtime, reverse=True):
+                if not path.is_file():
+                    continue
+                stat = path.stat()
+                rows.append({"name": path.name, "bytes": stat.st_size, "modified_at": __import__("datetime").datetime.fromtimestamp(stat.st_mtime, __import__("datetime").timezone.utc).isoformat()})
+        return {
+            "database_name": database_path.name,
+            "database_bytes": database_path.stat().st_size if database_path.exists() else 0,
+            "backups": rows,
+        }
+
     @app.get("/api/models")
     def get_models(
         server_url: str = Query("http://127.0.0.1:1234"),
@@ -905,6 +931,14 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                     "max_context_length": item.get("max_context_length"),
                     "reasoning": (item.get("capabilities") or {}).get("reasoning") or item.get("reasoning") or {},
                     "format": item.get("format"),
+                    "capabilities": {
+                        "provider": "lmstudio",
+                        "context_window": item.get("max_context_length"),
+                        "streaming": True,
+                        "separate_reasoning_stream": bool(((item.get("capabilities") or {}).get("reasoning") or item.get("reasoning") or {}).get("allowed_options")),
+                        "reasoning_modes": list((((item.get("capabilities") or {}).get("reasoning") or item.get("reasoning") or {}).get("allowed_options") or [])),
+                        "sampling_controls": ["temperature", "top_p", "top_k", "min_p", "repeat_penalty"],
+                    },
                 }
                 for item in models
             ]
@@ -931,6 +965,14 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                     "max_context_length": item.get("max_context_length"),
                     "reasoning": (item.get("capabilities") or {}).get("reasoning") or item.get("reasoning") or {},
                     "format": item.get("format"),
+                    "capabilities": {
+                        "provider": "lmstudio",
+                        "context_window": item.get("max_context_length"),
+                        "streaming": True,
+                        "separate_reasoning_stream": bool(((item.get("capabilities") or {}).get("reasoning") or item.get("reasoning") or {}).get("allowed_options")),
+                        "reasoning_modes": list((((item.get("capabilities") or {}).get("reasoning") or item.get("reasoning") or {}).get("allowed_options") or [])),
+                        "sampling_controls": ["temperature", "top_p", "top_k", "min_p", "repeat_penalty"],
+                    },
                 }
                 for item in models
             ]
@@ -1609,6 +1651,31 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             "conflicts": events.get("conflicts", []),
             "uncertainties": (result.analysis or {}).get("uncertainties", []),
         }
+
+    @app.post("/api/library/entity-merge/preview")
+    def entity_merge_preview(payload: EntityFamilyMergePayload):
+        try:
+            return workspace.preview_entity_family_merge(payload.source_family_id, payload.target_family_id)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.post("/api/library/entity-merge")
+    def entity_merge(payload: EntityFamilyMergePayload):
+        try:
+            source = workspace.get_entity_family(payload.source_family_id)
+            source_aliases = foundation.list_aliases("entity_family", payload.source_family_id)
+            result = workspace.merge_entity_families(payload.source_family_id, payload.target_family_id)
+            foundation.merge_resource_refs("entity_family", payload.source_family_id, payload.target_family_id)
+            try:
+                foundation.add_alias("entity_family", payload.target_family_id, source["name"])
+                for alias in source_aliases:
+                    foundation.add_alias("entity_family", payload.target_family_id, alias["alias"])
+            except ValueError:
+                pass
+            foundation.log_activity(None, "identity_merge", "entity_family", payload.target_family_id, label=result["name"], detail={"merged_from": payload.source_family_id})
+            return result
+        except (KeyError, ValueError, sqlite3.IntegrityError) as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @app.post("/api/quick-create/preview")
     def quick_create_preview(payload: QuickCreatePayload):
@@ -2621,6 +2688,155 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             raise HTTPException(404, "Trace entry not found")
         return result
 
+    def _sse(event: str, payload: dict[str, Any]) -> str:
+        return f"event: {event}\ndata: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n"
+
+    @app.post("/api/generate/stream")
+    async def generate_stream(payload: PromptPayload):
+        if not payload.prompt.strip():
+            raise HTTPException(400, "Prompt is empty")
+        if payload.generation_mode != "single":
+            raise HTTPException(400, "Inline streaming currently supports single-response mode; beats use the normal generation endpoint")
+
+        async def events():
+            existing_session = None
+            if payload.session_id:
+                try:
+                    existing_session = history.get_session_meta(payload.session_id)
+                except KeyError:
+                    yield _sse("error", {"message": "Session not found"})
+                    return
+            cfg = _apply_payload(RuntimeConfig.load(config_path), payload)
+            project_id = payload.project_id or (existing_session or {}).get("project_id")
+            world_id = payload.world_id or (existing_session or {}).get("world_id")
+            branch_id = payload.branch_id or (existing_session or {}).get("branch_id")
+            refs = [item.model_dump() for item in payload.references]
+            if not refs and existing_session:
+                refs = existing_session.get("workspace_refs") or []
+
+            ws_context = None
+            if cfg.workspace.context_enabled and (project_id or world_id):
+                try:
+                    ws_context = workspace_context.resolve(project_id=project_id, world_id=world_id, branch_id=branch_id, references=refs, recipe_id=payload.context_recipe_id)
+                except (KeyError, ValueError) as exc:
+                    yield _sse("error", {"message": f"Workspace context error: {exc}"})
+                    return
+            session_context = ""
+            if existing_session is not None and cfg.history.smart_hybrid_continuity and payload.input_mode == "smart_hybrid":
+                context_policy = (ws_context.scope.get("context_policy") if ws_context else {}) or {}
+                requested_turns = context_policy.get("recent_turns", cfg.history.continuity_turns)
+                try: requested_turns = max(1, min(50, int(requested_turns)))
+                except (TypeError, ValueError): requested_turns = cfg.history.continuity_turns
+                session_context = history.build_continuity_context(existing_session["id"], max_turns=requested_turns, max_chars=cfg.history.continuity_chars)
+
+            if existing_session is not None:
+                session = existing_session
+                history.update_session(session["id"], project_id=project_id, world_id=world_id, branch_id=branch_id, folder_id=None, workspace_refs=refs, scratch_mode=payload.scratch_mode)
+            else:
+                session = history.create_session(prompt=payload.prompt, project_id=project_id, world_id=world_id, branch_id=branch_id, folder_id=None, session_kind="chat", workspace_refs=refs, scratch_mode=payload.scratch_mode)
+
+            run_id = make_run_id(payload.input_mode, payload.reasoning, payload.timezone)
+            base = run_id; index = 2
+            while saved_cache.get(run_id) is not None:
+                run_id = f"{base}-{index:02d}"; index += 1
+            yield _sse("run.start", {"run_id": run_id, "session_id": session["id"], "session_title": session["title"]})
+
+            prepared = None
+            partial_story = ""
+            partial_reasoning = ""
+            try:
+                streamer = StreamingArlineService(cfg)
+                async for event in streamer.stream(payload.prompt, mode=payload.input_mode, session_context=session_context or None, workspace_context=ws_context):
+                    event_type = event.get("type")
+                    if event_type == "_prepared":
+                        prepared = event["prepared"]
+                        continue
+                    if event_type == "answer.delta": partial_story += event.get("content", "")
+                    if event_type == "reasoning.delta": partial_reasoning += event.get("content", "")
+                    if event_type != "_complete":
+                        yield _sse(event_type or "message", event)
+                        continue
+
+                    bundle = event["bundle"]
+                    quality_report = event["quality"]
+                    post = bundle.post_validation.to_dict() if bundle.post_validation else {}
+                    post["quality_report"] = quality_report
+                    saved_cache.put(CachedRun(config=cfg, bundle=bundle, run_id=run_id))
+                    lineage = {
+                        "application_version": STUDIO_VERSION,
+                        "wcf_version": bundle.analysis.writer_context.version,
+                        "aif_core_profile": "teacher",
+                        "projection_mode": cfg.projection.mode,
+                        "narrative_runtime_version": bundle.analysis.narrative_runtime.version,
+                        "narrative_brief_version": bundle.analysis.narrative_brief.version,
+                        "workspace_context_version": ws_context.version if ws_context else None,
+                        "validator_version": post.get("metrics", {}).get("validator_version") if post else None,
+                        "model": cfg.lmstudio.model,
+                        "run_status": "completed",
+                    }
+                    turn = history.add_turn(
+                        session["id"], run_id=run_id, user_prompt=payload.prompt, story=bundle.story,
+                        model=cfg.lmstudio.model, mode=cfg.writer.input_mode, reasoning=cfg.generation.reasoning,
+                        projection_mode=cfg.projection.mode, reasoning_text=bundle.reasoning or "", stats=bundle.stats,
+                        wcf=bundle.analysis.rendered_context.text, aif_core=bundle.analysis.aif_core,
+                        session_context=session_context, workspace_context=ws_context.text if ws_context else "",
+                        workspace_scope=ws_context.scope if ws_context else {}, workspace_refs=refs, lineage=lineage,
+                        projections=[x.to_dict() for x in bundle.analysis.writer_context.projections], post_validation=post,
+                        wcf_validation=bundle.analysis.wcf_validation.to_dict(),
+                    )
+                    final_session = history.get_session_meta(session["id"])
+                    result = {
+                        "run_id": run_id, "session_id": final_session["id"], "session_title": final_session["title"], "turn_id": turn["id"],
+                        "continuity_context_used": bool(session_context), "story": bundle.story,
+                        "wcf": bundle.analysis.rendered_context.text, "aif_core": bundle.analysis.aif_core,
+                        "narrative_brief": bundle.analysis.narrative_brief.to_dict(), "workspace_context": ws_context.to_dict() if ws_context else {},
+                        "context_breakdown": _context_breakdown(cfg, bundle.analysis, session_context=session_context),
+                        "projections": [x.to_dict() for x in bundle.analysis.writer_context.projections],
+                        "reasoning": bundle.reasoning if cfg.ui.show_reasoning else "", "stats": bundle.stats,
+                        "post_validation": post, "quality_report": quality_report,
+                        "wcf_validation": bundle.analysis.wcf_validation.to_dict(), "summary": _analysis_summary(bundle.analysis),
+                        "trace_choices": _trace_choices(bundle.analysis), "scratch_mode": payload.scratch_mode,
+                    }
+                    yield _sse("quality", quality_report)
+                    yield _sse("done", result)
+            except asyncio.CancelledError:
+                if partial_story and prepared is not None:
+                    quality_report = ProseQualityAnalyzer().analyze(partial_story)
+                    try:
+                        history.add_turn(
+                            session["id"], run_id=run_id, user_prompt=payload.prompt, story=partial_story,
+                            model=cfg.lmstudio.model, mode=cfg.writer.input_mode, reasoning=cfg.generation.reasoning,
+                            projection_mode=cfg.projection.mode, reasoning_text=partial_reasoning,
+                            stats={"run_status": "cancelled", "partial": True}, wcf=prepared.analysis.rendered_context.text,
+                            aif_core=prepared.analysis.aif_core, session_context=session_context,
+                            workspace_context=ws_context.text if ws_context else "", workspace_scope=ws_context.scope if ws_context else {},
+                            workspace_refs=refs, lineage={"application_version": STUDIO_VERSION, "run_status": "cancelled", "model": cfg.lmstudio.model},
+                            projections=[x.to_dict() for x in prepared.analysis.writer_context.projections],
+                            post_validation={"quality_report": quality_report}, wcf_validation=prepared.analysis.wcf_validation.to_dict(),
+                        )
+                    except Exception:
+                        pass
+                raise
+            except Exception as exc:
+                if partial_story and prepared is not None:
+                    try:
+                        history.add_turn(
+                            session["id"], run_id=run_id, user_prompt=payload.prompt, story=partial_story,
+                            model=cfg.lmstudio.model, mode=cfg.writer.input_mode, reasoning=cfg.generation.reasoning,
+                            projection_mode=cfg.projection.mode, reasoning_text=partial_reasoning,
+                            stats={"run_status": "failed", "partial": True, "error": str(exc)}, wcf=prepared.analysis.rendered_context.text,
+                            aif_core=prepared.analysis.aif_core, session_context=session_context,
+                            workspace_context=ws_context.text if ws_context else "", workspace_scope=ws_context.scope if ws_context else {},
+                            workspace_refs=refs, lineage={"application_version": STUDIO_VERSION, "run_status": "failed", "model": cfg.lmstudio.model},
+                            projections=[x.to_dict() for x in prepared.analysis.writer_context.projections],
+                            post_validation={"quality_report": ProseQualityAnalyzer().analyze(partial_story)}, wcf_validation=prepared.analysis.wcf_validation.to_dict(),
+                        )
+                    except Exception:
+                        pass
+                yield _sse("error", {"message": str(exc)})
+
+        return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
     @app.post("/api/generate")
     def generate(payload: PromptPayload):
         if not payload.prompt.strip():
@@ -2706,6 +2922,8 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         saved_cache.put(CachedRun(config=cfg, bundle=bundle, run_id=run_id))
 
         post = bundle.post_validation.to_dict() if bundle.post_validation else {}
+        quality_report = ProseQualityAnalyzer().analyze(bundle.story)
+        post["quality_report"] = quality_report
         if existing_session is not None:
             session = existing_session
             history.update_session(
@@ -2782,6 +3000,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             "reasoning": bundle.reasoning if cfg.ui.show_reasoning else "",
             "stats": bundle.stats,
             "post_validation": post,
+            "quality_report": quality_report,
             "wcf_validation": bundle.analysis.wcf_validation.to_dict(),
             "summary": _analysis_summary(bundle.analysis),
             "trace_choices": _trace_choices(bundle.analysis),
