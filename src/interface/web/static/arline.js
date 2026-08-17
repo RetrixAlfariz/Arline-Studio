@@ -90,6 +90,7 @@ const state = {
   activeGenerationController: null,
   liveRun: null,
   worldSelection: new Set(),
+  conversationRenderLimit: 80,
 };
 
 const ISSUE_LABELS = [
@@ -513,7 +514,15 @@ function sessionRowHTML(item) {
 
 function renderConversation(turns) {
   const feed = byId("conversationFeed");
-  feed.innerHTML = turns.map((turn) => turnHTML(turn)).join("");
+  const total = turns.length;
+  const limit = Math.max(20, Number(state.conversationRenderLimit || 80));
+  const start = Math.max(0, total - limit);
+  const visible = turns.slice(start);
+  feed.innerHTML = `${start > 0 ? `<button class="load-earlier-turns" data-remaining="${start}">Load earlier messages · ${start} hidden</button>` : ""}${visible.map((turn) => turnHTML(turn)).join("")}`;
+  $(".load-earlier-turns", feed)?.addEventListener("click", () => {
+    state.conversationRenderLimit += 80;
+    renderConversation(turns);
+  });
   bindTurnActions();
   feed.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "end" });
 }
@@ -583,7 +592,7 @@ function newChat() {
   setView("chat");
   restoreComposerDraft();
   renderSessions();
-  byId("promptInput").focus();
+  updateComposerSessionMode(); resizeComposerInput(); byId("promptInput").focus();
 }
 
 async function analyzePrompt() {
@@ -912,6 +921,7 @@ async function openDocument(id) {
   renderRevisions(doc.revisions || []);
   renderSceneDependencies(dependencies);
   renderManuscriptSuggestions(doc);
+  saveLocalPrefs({ lastDocumentId:doc.id });
   setView("draft");
   recordNavigation();
 }
@@ -1508,6 +1518,8 @@ function bindSessionRows() {
 }
 
 async function openSession(id) {
+  const switchingSession = state.activeSession?.id !== id;
+  if (switchingSession) state.conversationRenderLimit = 80;
   saveComposerDraft();
   loading(true, "Opening chat…", "Loading turn history and branch lineage");
   try {
@@ -1518,7 +1530,7 @@ async function openSession(id) {
     state.selectedReferences = session.workspace_refs || [];
     updateContextChipUI(); updateScratchUI(); renderForkTrail();
     byId("chatLanding").classList.add("hidden"); byId("conversationSection").classList.remove("hidden");
-    renderConversation(session.turns || []); setView("chat"); renderSessions(); restoreComposerDraft();
+    renderConversation(session.turns || []); setView("chat"); renderSessions(); restoreComposerDraft(); updateComposerSessionMode(); resizeComposerInput(); saveLocalPrefs({ lastSessionId:id });
     scheduleContextStackSync(); recordNavigation();
   } catch (error) { toast(error.message); }
   finally { loading(false); }
@@ -2104,6 +2116,7 @@ function showQualityReport(turn) {
 function createLiveTurn(payload) {
   byId("chatLanding")?.classList.add("hidden");
   byId("conversationSection")?.classList.remove("hidden");
+  updateComposerSessionMode(true);
   const feed = byId("conversationFeed");
   const node = document.createElement("article");
   node.className = "turn live-turn";
@@ -2945,6 +2958,7 @@ function renderHome() {
   byId("homeFavorites").innerHTML = favorites.map((f)=>`<button class="home-action-row" data-home-resource="${escapeHTML(f.resource_type)}:${escapeHTML(f.resource_id)}"><span>★</span><div><b>${escapeHTML(f.label||f.resource_id)}</b><small>${escapeHTML(f.resource_type.replaceAll("_"," "))}</small></div></button>`).join("")||`<div class="empty-note">Pin frequently used sheets, scenes, or worlds here.</div>`;
   $$('[data-home-view]',byId("homeView")).forEach((b)=>b.addEventListener("click",()=>setView(b.dataset.homeView)));
   $$('[data-home-review]',byId("homeView")).forEach((b)=>b.addEventListener("click",()=>{openInspector("review");loadFeedbackLab();}));
+  $$('[data-home-review]',byId("homeView")).forEach((b)=>b.addEventListener("click",()=>{openInspector("review");loadFeedbackLab();}));
   $$('[data-home-doc]',byId("homeView")).forEach((b)=>b.addEventListener("click",()=>b.dataset.homeDoc&&openDocument(b.dataset.homeDoc)));
   $$('[data-home-chat]',byId("homeView")).forEach((b)=>b.addEventListener("click",()=>openSession(b.dataset.homeChat)));
   $$('[data-home-activity]',byId("homeView")).forEach((b)=>b.addEventListener("click",openActivityCenter));
@@ -3152,9 +3166,17 @@ async function deleteBranch(branch) {
 
 function applySettingsFilter() {
   const query = (byId("settingsSearch")?.value || "").trim().toLowerCase();
-  $$("#inspectorTabs [data-inspector-tab]").forEach((button) => {
-    button.classList.toggle("hidden", Boolean(query) && !button.textContent.toLowerCase().includes(query));
-  });
+  const buttons = $$("#inspectorTabs [data-inspector-tab]");
+  for (const button of buttons) {
+    const panel = document.querySelector(`[data-inspector-panel="${button.dataset.inspectorTab}"]`);
+    const haystack = `${button.textContent} ${panel?.textContent || ""}`.toLowerCase();
+    button.classList.toggle("hidden", Boolean(query) && !haystack.includes(query));
+  }
+  const devLabel = document.querySelector('[data-settings-group="developer"]');
+  if (devLabel) {
+    const devTabs = ["review","trace","validator","contract","debug"];
+    devLabel.classList.toggle("hidden", Boolean(query) && !devTabs.some((id)=>!document.querySelector(`[data-inspector-tab="${id}"]`)?.classList.contains("hidden")));
+  }
 }
 
 async function loadBackups() {
@@ -3224,6 +3246,114 @@ function openEntityMergeForm(family) {
   }});
 }
 
+
+function updateComposerSessionMode(force = null) {
+  const active = force == null
+    ? Boolean(state.activeSession || state.liveRun || !byId("conversationSection")?.classList.contains("hidden"))
+    : Boolean(force);
+  document.body.classList.toggle("chat-session-active", active);
+  if (!active) byId("composerDock")?.querySelector(".composer-card")?.classList.remove("details-open");
+}
+
+function resizeComposerInput() {
+  const input = byId("promptInput");
+  if (!input) return;
+  input.style.height = "auto";
+  const max = document.body.classList.contains("chat-session-active") ? 116 : 210;
+  const min = document.body.classList.contains("chat-session-active") ? 46 : 118;
+  input.style.height = `${Math.max(min, Math.min(max, input.scrollHeight))}px`;
+}
+
+function setDeveloperToolsVisible(enabled) {
+  document.body.classList.toggle("developer-tools-hidden", !enabled);
+  if (byId("developerToolsToggle")) byId("developerToolsToggle").checked = enabled;
+  saveLocalPrefs({ developerTools: enabled });
+  if (!enabled && ["review","trace","validator","contract","debug"].some((tab)=>document.querySelector(`[data-inspector-tab="${tab}"]`)?.classList.contains("active"))) activateInspectorTab("general");
+}
+
+async function loadAboutInfo() {
+  if (!byId("aboutCard")) return;
+  const version = state.config?.studio_version || state.config?.version || "1.1.0";
+  const schema = state.bootstrap?.schema_version || state.bootstrap?.workspace_schema_version || state.bootstrap?.schema?.workspace || "6";
+  byId("aboutVersion").textContent = version;
+  byId("aboutSchema").textContent = String(schema);
+  try {
+    const backups = await api("/api/backups");
+    byId("aboutBackups").textContent = String(backups.backups?.length || 0);
+  } catch (_) { byId("aboutBackups").textContent = "—"; }
+}
+
+function knownResourceIds() {
+  return {
+    project: new Set(state.projects.map((x)=>x.id)),
+    world: new Set(state.worlds.map((x)=>x.id)),
+    document: new Set(state.documents.map((x)=>x.id)),
+    entity_family: new Set(state.families.map((x)=>x.id)),
+    entity_variant: new Set(state.variants.map((x)=>x.id)),
+    relationship: new Set(state.relationships.map((x)=>x.id)),
+    fact: new Set(state.facts.map((x)=>x.id)),
+  };
+}
+
+function runWorkspaceDoctor() {
+  const issues = [];
+  const ids = knownResourceIds();
+  const projectFolders = new Set(flattenFolders(state.projectTree?.folders || []).map((f)=>f.id));
+  const bibleFolders = new Set((state.worldBibleFolders || []).map((f)=>f.id));
+  const familyIds = ids.entity_family;
+  const variantIds = ids.entity_variant;
+  const worldIds = ids.world;
+
+  for (const doc of state.documents) if (doc.folder_id && !projectFolders.has(doc.folder_id)) issues.push({kind:"orphan_document_folder",label:doc.title,detail:`folder ${doc.folder_id} is missing`});
+  for (const family of state.families) if (family.folder_id && !bibleFolders.has(family.folder_id)) issues.push({kind:"orphan_library_folder",label:family.name,detail:`folder ${family.folder_id} is missing`});
+  for (const variant of state.variants) {
+    if (!familyIds.has(variant.family_id)) issues.push({kind:"orphan_variant_family",label:variant.display_name,detail:`family ${variant.family_id} is missing`});
+    if (variant.world_id && !worldIds.has(variant.world_id)) issues.push({kind:"orphan_variant_world",label:variant.display_name,detail:`world ${variant.world_id} is missing`});
+  }
+  for (const rel of state.relationships) {
+    if (!variantIds.has(rel.subject_variant_id)) issues.push({kind:"orphan_relationship_subject",label:rel.relation_type,detail:`subject ${rel.subject_variant_id} is missing`});
+    if (!variantIds.has(rel.object_variant_id)) issues.push({kind:"orphan_relationship_object",label:rel.relation_type,detail:`object ${rel.object_variant_id} is missing`});
+  }
+  const duplicateMap = new Map();
+  for (const family of state.families) {
+    const key = `${family.entity_type}:${String(family.name).trim().toLowerCase()}`;
+    duplicateMap.set(key, [...(duplicateMap.get(key)||[]), family]);
+  }
+  for (const group of duplicateMap.values()) if (group.length > 1) issues.push({kind:"possible_duplicate_identity",label:group.map((x)=>x.name).join(" / "),detail:`${group.length} same-type identities share this normalized name`});
+  if (state.activeScene?.document_id && !ids.document.has(state.activeScene.document_id)) issues.push({kind:"stale_active_scene",label:"Active scene",detail:`document ${state.activeScene.document_id} is missing`});
+  for (const ref of state.selectedReferences || []) if (ids[ref.type] && !ids[ref.type].has(ref.id)) issues.push({kind:"stale_context_reference",label:ref.label || ref.id,detail:`${ref.type} no longer exists`});
+
+  const host = byId("dataDoctorResult");
+  if (!host) return issues;
+  host.classList.toggle("good", issues.length === 0);
+  host.classList.toggle("warn", issues.length > 0);
+  host.innerHTML = issues.length
+    ? `<b>${issues.length} workspace health warning${issues.length===1?"":"s"}</b><small>Read-only report; nothing was changed.</small>${issues.slice(0,20).map((issue)=>`<div class="doctor-issue"><span>!</span><div><b>${escapeHTML(issue.kind.replaceAll("_"," "))} · ${escapeHTML(issue.label)}</b><small>${escapeHTML(issue.detail)}</small></div></div>`).join("")}${issues.length>20?`<small>…and ${issues.length-20} more.</small>`:""}`
+    : `<b>Workspace looks healthy.</b><br><small>No dangling references, stale scene pointers, or exact-name duplicate identities were detected in the loaded scope.</small>`;
+  return issues;
+}
+
+function maybeShowOnboarding() {
+  if (localStorage.getItem("arline.onboarding.v1.1") === "done") return;
+  const empty = state.documents.length === 0 && state.sessions.length === 0 && state.families.length === 0;
+  if (empty && byId("welcomeDialog") && !byId("welcomeDialog").open) byId("welcomeDialog").showModal();
+}
+
+function dismissOnboarding() {
+  localStorage.setItem("arline.onboarding.v1.1", "done");
+  byId("welcomeDialog")?.close();
+}
+
+function showStartupRecovery(error) {
+  const card = byId("startupRecovery");
+  if (!card) return;
+  byId("startupRecoveryTitle").textContent = "Arline could not finish starting.";
+  byId("startupRecoveryDetail").textContent = error?.message || String(error || "Unknown startup error");
+  card.classList.remove("hidden");
+}
+
+function hideStartupRecovery() { byId("startupRecovery")?.classList.add("hidden"); }
+
 function attachEvents() {
   const on = (id, event, handler, options) => byId(id)?.addEventListener(event, handler, options);
   document.addEventListener("pointerdown", (event) => {
@@ -3286,17 +3416,20 @@ function attachEvents() {
   on("newTagBtn", "click", openTagForm);
   on("openDataBtn", "click", () => { openInspector("review"); loadFeedbackLab(); });
 
-  on("settingsBtn", "click", () => openInspector("runtime"));
+  on("settingsBtn", "click", () => { openInspector("runtime"); loadAboutInfo(); });
   on("openFeedbackLabBtn", "click", () => { openInspector("review"); loadFeedbackLab(); });
   on("settingsSearch", "input", applySettingsFilter);
-  on("refreshBackupsBtn", "click", loadBackups);
+  on("settingsSearch", "keydown", (event) => { if (event.key === "Enter") { const first = $("#inspectorTabs [data-inspector-tab]:not(.hidden)"); if (first) { event.preventDefault(); activateInspectorTab(first.dataset.inspectorTab); } } });
+  on("developerToolsToggle", "change", (event) => setDeveloperToolsVisible(event.target.checked));
+  on("runDataDoctorBtn", "click", runWorkspaceDoctor);
+  on("refreshBackupsBtn", "click", async () => { await loadBackups(); await loadAboutInfo(); });
   on("settingsDensity", "change", (event) => { document.body.dataset.density = event.target.value; saveLocalPrefs({ density:event.target.value }); });
   on("settingsSidebarMode", "change", (event) => { const collapsed=event.target.value === "collapsed"; document.body.classList.toggle("sidebar-collapsed",collapsed); saveLocalPrefs({sidebarCollapsed:collapsed}); });
   on("openInspectorBtn", "click", () => openInspector());
   on("closeInspectorBtn", "click", closeInspector);
   on("inspectorScrim", "click", closeInspector);
   window.addEventListener("beforeunload", saveComposerDraft);
-  window.addEventListener("hashchange", () => { const route=location.hash.replace(/^#\//,""); const view=route==="manuscript"?"draft":route==="library"?"world":route; if(["home","chat","draft","world","data"].includes(view) && view!==state.activeView) setView(view,{record:false,fromHash:true}); });
+  window.addEventListener("hashchange", () => { const route=location.hash.replace(/^#\//,""); const view=route==="manuscript"?"draft":route==="library"?"world":route; if(["home","chat","draft","world"].includes(view) && view!==state.activeView) setView(view,{record:false,fromHash:true}); });
   on("closeSheetBtn", "click", closeSheet);
   on("sheetScrim", "click", closeSheet);
   $$('[data-inspector-tab]').forEach((button) => button.addEventListener("click", () => activateInspectorTab(button.dataset.inspectorTab)));
@@ -3311,7 +3444,7 @@ function attachEvents() {
   on("modeSelect", "change", () => { updateReasoningWarning(); updateBudgetUI(); updateComposerProfileSummary(); });
   on("reasoningSelect", "change", () => { updateReasoningWarning(); updateBudgetUI(); updateComposerProfileSummary(); });
   on("runProfileSelect", "change", (event) => applyRunProfile(event.target.value));
-  on("composerProfileBtn", "click", () => byId("composerAdvanced")?.classList.toggle("hidden"));
+  on("composerProfileBtn", "click", () => { const advanced=byId("composerAdvanced"); advanced?.classList.toggle("hidden"); byId("composerDock")?.querySelector(".composer-card")?.classList.toggle("details-open", !advanced?.classList.contains("hidden")); resizeComposerInput(); });
   on("saveRunProfileBtn", "click", openRunProfileForm);
   on("composerAddContextBtn", "click", () => {
     const input = byId("promptInput"); if (!input) return;
@@ -3327,7 +3460,7 @@ function attachEvents() {
   ["visibleTokens","reasoningReserve","contextLength","beatCount","beatTokens","totalStoryTokens"].forEach((id) => on(id, "input", () => { if (id === "visibleTokens") syncDynamicLength(); updateBudgetUI(); updateComposerProfileSummary(); }));
   on("refreshModelsBtn", "click", refreshModels); on("connectionBadge", "click", refreshModels); on("saveSettingsBtn", "click", saveSettings); on("reloadModelBtn", "click", reloadModel);
   on("analyzeBtn", "click", analyzePrompt); on("generateBtn", "click", generateStory);
-  on("promptInput", "input", () => { saveComposerDraft(); updateAutocomplete(); refreshPromptHighlight(); updateBudgetUI(); });
+  on("promptInput", "input", () => { saveComposerDraft(); updateAutocomplete(); refreshPromptHighlight(); updateBudgetUI(); resizeComposerInput(); });
   on("promptInput", "scroll", () => { if (byId("promptHighlight")) { byId("promptHighlight").scrollTop = byId("promptInput").scrollTop; byId("promptHighlight").scrollLeft = byId("promptInput").scrollLeft; } });
   on("promptInput", "keydown", handleComposerKey);
   on("traceSelect", "change", loadTrace);
@@ -3379,6 +3512,12 @@ function attachEvents() {
   on("quickCreateAdvancedBtn", "click", quickCreateAdvanced);
   on("feedbackDialog", "submit", submitFeedback);
   on("closeCompareBtn", "click", () => byId("compareDialog").close());
+  on("welcomeSkipBtn", "click", dismissOnboarding); on("welcomeSkipX", "click", dismissOnboarding);
+  on("welcomeStartStory", "click", () => { dismissOnboarding(); setView("draft"); openDocumentForm(null,"scene"); });
+  on("welcomeBuildWorld", "click", () => { dismissOnboarding(); setView("world"); openQuickCreate("","entity"); });
+  on("welcomeImport", "click", () => { dismissOnboarding(); openManuscriptImport(); });
+  on("startupReloadBtn", "click", () => location.reload());
+  on("startupOpenSettingsBtn", "click", () => { hideStartupRecovery(); openInspector("storage"); loadBackups(); runWorkspaceDoctor(); });
   on("commandSearch", "input", (event) => searchCommands(event.target.value));
   on("commandSearch", "keydown", commandKey);
   on("saveContractBtn", "click", saveContract);
@@ -3397,14 +3536,19 @@ function attachEvents() {
     if (mod && key === "z" && !editing && lastUndo) { event.preventDefault(); undoLastAction(); return; }
     if (event.altKey && event.key === "ArrowLeft") { event.preventDefault(); navigateHistory(-1); return; }
     if (event.altKey && event.key === "ArrowRight") { event.preventDefault(); navigateHistory(1); return; }
-    if (event.key === "Escape") { hideAutocomplete(); closeContextMenu(); scheduleHideReferencePeek(); }
+    if (event.key === "Escape") {
+      hideAutocomplete(); closeContextMenu(); scheduleHideReferencePeek();
+      if (byId("sheetPanel")?.classList.contains("open")) closeSheet();
+      else if (byId("inspector")?.classList.contains("open")) closeInspector();
+    }
   });
 
   const prefs = localPrefs();
+  setDeveloperToolsVisible(prefs.developerTools !== false);
   if (byId("settingsDensity")) byId("settingsDensity").value = prefs.density || "comfortable";
   if (byId("settingsSidebarMode")) byId("settingsSidebarMode").value = prefs.sidebarCollapsed ? "collapsed" : "expanded";
   if (prefs.focusMode && state.activeView === "draft") toggleFocusMode(true);
-  refreshPromptHighlight(); updateScratchUI(); updateNavigationButtons();
+  refreshPromptHighlight(); updateScratchUI(); updateNavigationButtons(); updateComposerSessionMode(); resizeComposerInput();
 }
 
 async function init() {
@@ -3418,11 +3562,14 @@ async function init() {
     await Promise.all([refreshModels(), loadWorkspaceBootstrap(), loadDatasetStats()]);
     const route = location.hash.replace(/^#\//, "");
     const routeView = route === "manuscript" ? "draft" : route === "library" ? "world" : ["home","chat"].includes(route) ? route : null;
-    const preferred = routeView || localPrefs().lastView || "home";
+    const prefs = localPrefs();
+    const preferred = routeView || prefs.lastView || "home";
     setView(preferred, { record: false, fromHash: true });
-    if (preferred === "home") await loadHome();
-    updateNavigationButtons(); updateContextStackUI();
-  } catch (error) { toast(`Startup failed: ${error.message}`, 7000); }
+    if (preferred === "chat" && prefs.lastSessionId && state.sessions.some((s)=>s.id===prefs.lastSessionId)) await openSession(prefs.lastSessionId);
+    else if (preferred === "draft" && prefs.lastDocumentId && state.documents.some((d)=>d.id===prefs.lastDocumentId)) await openDocument(prefs.lastDocumentId);
+    else if (preferred === "home") await loadHome();
+    updateNavigationButtons(); updateContextStackUI(); updateComposerSessionMode(); resizeComposerInput(); hideStartupRecovery(); maybeShowOnboarding(); loadAboutInfo();
+  } catch (error) { toast(`Startup failed: ${error.message}`, 7000); showStartupRecovery(error); }
   finally { loading(false); }
 }
 

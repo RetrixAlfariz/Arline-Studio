@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#202220" />
   <title>Arline Studio</title>
-  <link rel="stylesheet" href="/static/arline.css?v=1.1.1-settings" />
+  <link rel="stylesheet" href="/static/arline.css?v=1.1.2-polish" />
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -274,7 +274,7 @@
         <button data-inspector-tab="sampling">Generation</button>
         <button data-inspector-tab="context">Context</button>
         <button data-inspector-tab="storage">Data & Storage</button>
-        <span class="settings-group-label">Developer</span>
+        <span class="settings-group-label" data-settings-group="developer">Developer</span>
         <button data-inspector-tab="review">Review & Evals</button>
         <button data-inspector-tab="trace">Trace</button>
         <button data-inspector-tab="validator">Validator</button>
@@ -285,6 +285,8 @@
         <span class="eyebrow">Interface</span><h3>Workspace appearance</h3>
         <label>Density<select id="settingsDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
         <label>Sidebar default<select id="settingsSidebarMode"><option value="expanded">Expanded</option><option value="collapsed">Compact rail</option></select></label>
+        <label class="settings-toggle-row"><span><b>Developer tools</b><small>Show Review & Evals, Trace, Validator, Contract, and Debug settings.</small></span><input id="developerToolsToggle" type="checkbox" checked /></label>
+        <div id="aboutCard" class="info-card about-card"><b>Arline Studio</b><div><span>Version</span><strong id="aboutVersion">1.1.0</strong></div><div><span>Workspace schema</span><strong id="aboutSchema">—</strong></div><div><span>Migration backups</span><strong id="aboutBackups">—</strong></div></div>
         <div class="info-card"><b>Navigation and AI context are separate.</b><br>Opening a Library sheet never adds it to model context unless you reference or pin it.</div>
         <div class="shortcut-grid"><span>⌘/Ctrl K</span><b>Search</b><span>⌘/Ctrl N</span><b>Quick create</b><span>Ctrl Shift F</span><b>Focus mode</b></div>
       </div>
@@ -318,6 +320,8 @@
         <div id="storageSummary" class="info-card">Loading storage information…</div>
         <div class="section-title-row"><span class="section-label">Migration backups</span><button id="refreshBackupsBtn" class="tiny-btn">Refresh</button></div>
         <div id="backupList" class="settings-list"><div class="empty-note">No backups loaded.</div></div>
+        <div class="section-title-row settings-doctor-head"><span class="section-label">Workspace health</span><button id="runDataDoctorBtn" class="tiny-btn">Run check</button></div>
+        <div id="dataDoctorResult" class="info-card data-doctor-result"><b>Not checked yet.</b><br>Doctor is read-only: it reports dangling references, duplicate identities, and stale workspace pointers without repairing canon automatically.</div>
         <p class="settings-help">Backups are created before schema migrations. Restore remains an explicit manual safety operation in v1.1.</p>
       </div>
       <div class="inspector-panel" data-inspector-panel="review">
@@ -396,10 +400,25 @@
     <!-- Compare modal -->
     <dialog id="compareDialog" class="compare-dialog"><div class="dialog-head"><div><span class="eyebrow">Diff</span><h2 id="compareTitle">Compare</h2></div><button id="closeCompareBtn" class="icon-btn">×</button></div><div id="compareBody" class="compare-body"></div></dialog>
 
+
+    <dialog id="welcomeDialog" class="welcome-dialog">
+      <div class="dialog-head"><div><span class="eyebrow">Welcome to Arline</span><h2>What do you want to do first?</h2><p>Start naturally. The structured workspace is created underneath.</p></div><button id="welcomeSkipX" class="icon-btn">×</button></div>
+      <div class="welcome-actions">
+        <button id="welcomeStartStory"><span>✎</span><div><b>Start a story</b><small>Create your first scene in Manuscript.</small></div></button>
+        <button id="welcomeBuildWorld"><span>◇</span><div><b>Build the Library</b><small>Create a character, location, item, or world naturally.</small></div></button>
+        <button id="welcomeImport"><span>⇩</span><div><b>Import existing writing</b><small>Bring Markdown or plain text into Manuscript.</small></div></button>
+      </div>
+      <div class="dialog-actions"><button id="welcomeSkipBtn" class="secondary-btn">Not now</button></div>
+    </dialog>
+
+    <div id="startupRecovery" class="startup-recovery hidden" role="alert">
+      <div><span class="eyebrow">Recovery</span><b id="startupRecoveryTitle">Arline could not finish starting.</b><small id="startupRecoveryDetail">Your data has not been modified by this screen.</small></div>
+      <div><button id="startupOpenSettingsBtn" class="secondary-btn">Data & Storage</button><button id="startupReloadBtn" class="primary-btn">Reload</button></div>
+    </div>
     <div id="toast" class="toast hidden"></div>
     <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><b id="loadingTitle">Arline is working…</b><span id="loadingDetail">Preparing context</span></div>
   </div>
-  <script src="/static/js/stream.js?v=1.1.1-settings" defer></script>
-  <script src="/static/arline.js?v=1.1.1-settings" defer></script>
+  <script src="/static/js/stream.js?v=1.1.2-polish" defer></script>
+  <script src="/static/arline.js?v=1.1.2-polish" defer></script>
 </body>
 </html>
