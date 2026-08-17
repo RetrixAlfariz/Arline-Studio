@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from datetime import datetime
@@ -37,22 +36,33 @@ class ScopeGate:
         return visible
 
     def session_cutoffs(self, session_id: str | None) -> dict[str | None, str | None]:
+        """Return visible chat lineage with a turn cutoff for every ancestor.
+
+        A child fork may see its parent only through the turn it forked from. If
+        that parent was itself forked, the grandparent receives the parent's own
+        fork cutoff. This keeps nested fork chains from inheriting later turns
+        from any ancestor.
+        """
         visible: dict[str | None, str | None] = {None: None}
         if not session_id or self.history is None:
             return visible
         current = session_id
+        current_cutoff: str | None = None
+        seen: set[str] = set()
         guard = 0
         while current and guard < 256:
-            if current in visible:
+            if current in seen:
                 break
+            seen.add(current)
+            visible[current] = current_cutoff
             try:
                 meta = self.history.get_session_meta(current)
             except KeyError:
                 break
-            visible[current] = None if current == session_id else visible.get(current)
             parent = meta.get("parent_session_id")
-            if parent:
-                visible[parent] = meta.get("forked_from_turn_id")
+            if not parent:
+                break
+            current_cutoff = meta.get("forked_from_turn_id")
             current = parent
             guard += 1
         return visible
