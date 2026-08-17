@@ -34,15 +34,8 @@ jobs:
           p = Path('tools/apply_v11_hardening.py')
           s = p.read_text(encoding='utf-8')
           replacement = r'''  const boundary = (ch) => !ch || /\s/.test(ch) || ".,;:!?()[]{}<>/\\\\|+=*~—–-".includes(ch) || ch === '"' || ch === "'" || ch === "\\x60";'''
-          s, n = re.subn(
-              r'^  const boundary = \(ch\) => .*?;$',
-              lambda _m: replacement,
-              s,
-              count=1,
-              flags=re.M,
-          )
-          if n != 1:
-              raise SystemExit(f'boundary patch count={n}')
+          s, n = re.subn(r'^  const boundary = \(ch\) => .*?;$', lambda _m: replacement, s, count=1, flags=re.M)
+          if n != 1: raise SystemExit(f'boundary patch count={n}')
           old = r'''        const match = text.slice(after).match(/^[^\s@,;:()\[\]{}]+/);
                   if (!match) { i += 1; continue; }
                   end = after + match[0].length;
@@ -52,13 +45,86 @@ jobs:
                   if (end === after) { i += 1; continue; }
                   const unresolved = text.slice(after, end);
                   found.push({ type: "unresolved", id: `unresolved:${unresolved}`, label: unresolved, resolved: false });'''
-          if old not in s:
-              raise SystemExit('unresolved-token block not found')
-          s = s.replace(old, new, 1)
-          p.write_text(s, encoding='utf-8')
+          if old not in s: raise SystemExit('unresolved-token block not found')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
           PY
       - name: Apply audited fixes
         run: python tools/apply_v11_hardening.py
+      - name: Harden legacy History migration ordering
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/history/store.py')
+          s = p.read_text(encoding='utf-8')
+          indexes = '''
+                          CREATE INDEX IF NOT EXISTS idx_sessions_updated
+                              ON sessions(updated_at DESC);
+                          CREATE INDEX IF NOT EXISTS idx_sessions_pinned
+                              ON sessions(pinned DESC, updated_at DESC);
+                          CREATE INDEX IF NOT EXISTS idx_turns_session
+                              ON turns(session_id, created_at ASC);
+                          CREATE INDEX IF NOT EXISTS idx_turns_feedback
+                              ON turns(feedback_status);
+          '''
+          if indexes not in s: raise SystemExit('early history indexes not found')
+          s = s.replace(indexes, '', 1)
+          old_sessions = '''            for name, definition in (
+                          ("project_id", "TEXT"),'''
+          new_sessions = '''            for name, definition in (
+                          ("title", "TEXT NOT NULL DEFAULT 'Untitled chat'"),
+                          ("created_at", "TEXT NOT NULL DEFAULT ''"),
+                          ("updated_at", "TEXT NOT NULL DEFAULT ''"),
+                          ("pinned", "INTEGER NOT NULL DEFAULT 0"),
+                          ("archived", "INTEGER NOT NULL DEFAULT 0"),
+                          ("project", "TEXT"),
+                          ("last_model", "TEXT"),
+                          ("last_mode", "TEXT"),
+                          ("last_reasoning", "TEXT"),
+                          ("project_id", "TEXT"),'''
+          if old_sessions not in s: raise SystemExit('session migration anchor not found')
+          s = s.replace(old_sessions, new_sessions, 1)
+          old_turns = '''            for name, definition in (
+                          ("session_context", "TEXT NOT NULL DEFAULT ''"),'''
+          new_turns = '''            for name, definition in (
+                          ("session_id", "TEXT NOT NULL DEFAULT ''"),
+                          ("run_id", "TEXT"),
+                          ("created_at", "TEXT NOT NULL DEFAULT ''"),
+                          ("updated_at", "TEXT NOT NULL DEFAULT ''"),
+                          ("user_prompt", "TEXT NOT NULL DEFAULT ''"),
+                          ("story", "TEXT NOT NULL DEFAULT ''"),
+                          ("model", "TEXT"),
+                          ("mode", "TEXT"),
+                          ("reasoning", "TEXT"),
+                          ("projection_mode", "TEXT"),
+                          ("stats_json", "TEXT NOT NULL DEFAULT '{}'"),
+                          ("wcf", "TEXT NOT NULL DEFAULT ''"),
+                          ("aif_core", "TEXT NOT NULL DEFAULT ''"),
+                          ("projections_json", "TEXT NOT NULL DEFAULT '[]'"),
+                          ("post_validation_json", "TEXT NOT NULL DEFAULT '{}'"),
+                          ("wcf_validation_json", "TEXT NOT NULL DEFAULT '{}'"),
+                          ("feedback_status", "TEXT NOT NULL DEFAULT 'unreviewed'"),
+                          ("feedback_issues_json", "TEXT NOT NULL DEFAULT '[]'"),
+                          ("feedback_note", "TEXT NOT NULL DEFAULT ''"),
+                          ("edited_story", "TEXT NOT NULL DEFAULT ''"),
+                          ("session_context", "TEXT NOT NULL DEFAULT ''"),'''
+          if old_turns not in s: raise SystemExit('turn migration anchor not found')
+          s = s.replace(old_turns, new_turns, 1)
+          late_indexes = '''
+                      con.executescript(
+                          """
+                          CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC);
+                          CREATE INDEX IF NOT EXISTS idx_sessions_pinned ON sessions(pinned DESC, updated_at DESC);
+                          CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id, created_at ASC);
+                          CREATE INDEX IF NOT EXISTS idx_turns_feedback ON turns(feedback_status);
+                          """
+                      )
+          '''
+          meta_anchor = '''            con.execute(
+                          "INSERT INTO meta(key,value) VALUES('schema_version',?) "'''
+          if meta_anchor not in s: raise SystemExit('history meta anchor not found')
+          s = s.replace(meta_anchor, late_indexes + '\n' + meta_anchor, 1)
+          p.write_text(s, encoding='utf-8')
+          PY
       - name: Install package
         run: python -m pip install -e .
       - name: Regression tests
