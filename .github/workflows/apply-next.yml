@@ -58,3 +58,5 @@ jobs:
           git diff --cached --quiet && { echo "Applicator produced no changes" >&2; exit 1; }
           git commit -m "feat: start v1.2.1 temporal memory and Character Rails"
           git push origin HEAD:develop/v1.2
+
+# retrigger: 2026-08-18 v1.2.1 bulk pass
