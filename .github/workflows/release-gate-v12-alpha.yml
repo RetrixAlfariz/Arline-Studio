@@ -1,0 +1,101 @@
+name: Release gate v1.2 alpha
+
+on:
+  push:
+    branches:
+      - develop/v1.2
+    paths:
+      - tools/release_gate_v12_alpha.py
+      - .github/workflows/release-gate-v12-alpha.yml
+
+concurrency:
+  group: arline-v12-alpha-mutator
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release-gate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop/v1.2
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Consolidate all v1.2 alpha patches
+        run: python tools/release_gate_v12_alpha.py
+      - name: Refresh lockfile
+        run: |
+          python -m pip install --quiet uv
+          uv lock
+      - name: Install package
+        run: python -m pip install -e .
+      - name: Full regression suite
+        run: python -m unittest discover -s tests -v
+      - name: Compile Python
+        run: python -m compileall -q src tests
+      - name: JavaScript syntax
+        run: |
+          node --check src/interface/web/static/js/commands.js
+          node --check src/interface/web/static/js/stream.js
+          node --check src/interface/web/static/js/memory.js
+          node --check src/interface/web/static/arline.js
+      - name: Static v1.2 invariants
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re, collections
+          root=Path('.')
+          html=(root/'src/interface/web/static/index.html').read_text(encoding='utf-8')
+          ids=re.findall(r'\bid="([^"]+)"',html)
+          duplicates=[key for key,count in collections.Counter(ids).items() if count>1]
+          assert not duplicates, duplicates
+          app=(root/'src/interface/web/app.py').read_text(encoding='utf-8')
+          for route in ('/api/memory/status','/api/memory/query','/api/memory/spatial','/api/memory/state/at','/api/memory/epistemic','/api/memory/threads','/api/memory/continuity'):
+              assert route in app, route
+          scope=(root/'src/memory/scope.py').read_text(encoding='utf-8')
+          assert 'ancestor evidence occurs after the branch fork cutoff' in scope
+          assert 'parent chat turn occurs after the fork cutoff' in scope
+          print('V12_STATIC_INVARIANTS_PASS')
+          PY
+      - name: Repository hygiene
+        run: |
+          ! find . -type f \( -name '*.db' -o -name '*.db-wal' -o -name '*.db-shm' -o -name '*.pyc' \) -print | grep .
+      - name: Remove all one-shot automation
+        run: |
+          rm -f tools/apply_v12_memory_foundation.py
+          rm -f tools/finalize_v12_memory_foundation.py
+          rm -f tools/verify_v12_alpha.py
+          rm -f tools/polish_v12_spatial_ui.py
+          rm -f tools/complete_v12_alpha.py
+          rm -f tools/extend_v12_cutoffs.py
+          rm -f tools/fix_v12_branch_cutoff_chain.py
+          rm -f tools/extend_v12_reasoning_indexes.py
+          rm -f tools/release_gate_v12_alpha.py
+          rm -f .github/workflows/apply-v12-memory-foundation.yml
+          rm -f .github/workflows/finalize-v12-memory-foundation.yml
+          rm -f .github/workflows/verify-v12-alpha.yml
+          rm -f .github/workflows/polish-v12-spatial-ui.yml
+          rm -f .github/workflows/complete-v12-alpha.yml
+          rm -f .github/workflows/extend-v12-cutoffs.yml
+          rm -f .github/workflows/release-gate-v12-alpha.yml
+          rm -f .github/workflows/export-v12-source.yml
+          rm -f .github/workflows/apply-v1-1-hardening.yml
+          find . -type d -name __pycache__ -prune -exec rm -rf {} +
+          find . -type f -name '*.pyc' -delete
+      - name: Commit verified v1.2 alpha
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m 'feat: deliver verified Arline v1.2 memory query alpha'
+          git push origin HEAD:develop/v1.2
