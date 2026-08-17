@@ -23,6 +23,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Align one-shot patch with current Library markup
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('tools/apply_v11_lastmile.py')
+          s=p.read_text(encoding='utf-8')
+          old='''html=once(html,'          <div id="worldTagFilters" class="tag-list compact"></div>\\n        </div>\\n        <div id="worldGrid"', '          <div id="worldTagFilters" class="tag-list compact"></div>\\n          <div id="worldBulkBar" class="world-bulk-bar hidden"><b id="worldBulkCount">0 selected</b><button id="bulkMoveBtn" class="tiny-btn">Move</button><button id="bulkCollectionBtn" class="tiny-btn">Collection</button><button id="bulkArchiveBtn" class="tiny-btn">Archive</button><button id="bulkClearBtn" class="tiny-btn">Clear</button></div>\\n        </div>\\n        <div id="worldGrid"','world bulk toolbar')'''
+          new='''html=once(html,'                  <div id="worldTagFilters" class="inline-tags"></div>\\n                </div>\\n                <div id="worldGrid"', '                  <div id="worldTagFilters" class="inline-tags"></div>\\n                  <div id="worldBulkBar" class="world-bulk-bar hidden"><b id="worldBulkCount">0 selected</b><button id="bulkMoveBtn" class="tiny-btn">Move</button><button id="bulkCollectionBtn" class="tiny-btn">Collection</button><button id="bulkArchiveBtn" class="tiny-btn">Archive</button><button id="bulkClearBtn" class="tiny-btn">Clear</button></div>\\n                </div>\\n                <div id="worldGrid"','world bulk toolbar')'''
+          if old not in s:
+              raise SystemExit('old bulk anchor block not found in patcher')
+          p.write_text(s.replace(old,new,1),encoding='utf-8')
+          PY
       - name: Apply last-mile patch
         run: python tools/apply_v11_lastmile.py
       - name: Install
