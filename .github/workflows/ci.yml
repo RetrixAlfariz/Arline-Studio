@@ -8,6 +8,7 @@ on:
       - "fix/**"
       - "feat/**"
       - "release/**"
+      - "develop/**"
   pull_request:
 
 permissions:
@@ -36,6 +37,7 @@ jobs:
           node --check src/interface/web/static/js/commands.js
           node --check src/interface/web/static/js/stream.js
           node --check src/interface/web/static/js/quick-create.js
+          node --check src/interface/web/static/js/memory.js
           node --check src/interface/web/static/arline.js
       - name: Repository hygiene
         run: |
@@ -47,3 +49,11 @@ jobs:
           test ! -e tools/apply_v11_final.py
           test ! -e .github/workflows/apply-hardening.yml
           test ! -e .github/workflows/apply-v11-final.yml
+          if find tools -maxdepth 1 -type f \( -iname '*v12*' -o -iname '*v1_2*' -o -iname '*v120*' \) | grep -q .; then
+            echo 'Temporary v1.2 applicator/tooling is tracked in the repository.' >&2
+            exit 1
+          fi
+          if find .github/workflows -maxdepth 1 -type f \( -iname '*v12*' -o -iname '*v1.2*' -o -iname '*v120*' \) | grep -q .; then
+            echo 'Temporary v1.2 workflows are tracked in the repository.' >&2
+            exit 1
+          fi
