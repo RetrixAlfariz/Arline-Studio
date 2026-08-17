@@ -19,6 +19,9 @@ class MemoryStoreTests(unittest.TestCase):
             self.assertEqual(store.get_chunk(first["id"])["semantic_status"], "active")
             results = store.search_fts("black dress wardrobe", domains=["manuscript"])
             self.assertTrue(any(item["id"] == first["id"] for item in results))
+            # Source-level lifecycle is explicit so multi-chunk revisions can be
+            # inserted atomically without each chunk invalidating its siblings.
+            store.mark_source_status("document", "DOC-1", "stale")
             second = store.upsert_chunk(
                 source_type="document", source_id="DOC-1", source_revision="2",
                 text="Vian moved the black dress into the storage room.",

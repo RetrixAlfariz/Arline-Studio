@@ -52,7 +52,7 @@ class V11MediaGalleryTests(unittest.TestCase):
         app = (ROOT / "src/interface/web/app.py").read_text(encoding="utf-8")
         provider = (ROOT / "src/inference/provider.py").read_text(encoding="utf-8")
         self.assertIn('data-library-view="gallery"', html)
-        self.assertIn('arline.css?v=1.1.3-media', html)
+        self.assertRegex(html, r'arline\.css\?v=[^"\s]+')
         self.assertIn('.world-grid.view-gallery', css)
         self.assertIn('renderEntityMediaSheet', js)
         self.assertIn('reviewVisionDescription', js)

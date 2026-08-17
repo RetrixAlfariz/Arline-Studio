@@ -27,11 +27,12 @@ class QueryCompiler:
     """Deterministic-first narrative query compiler."""
 
     ROUTE_PATTERNS: list[tuple[QueryRoute, re.Pattern[str]]] = [
+        (QueryRoute.STORY_CONTINUE, re.compile(r"\b(continue|write|scene|dialogue|lanjut|tulis|adegan)\b", re.I)),
         (QueryRoute.EPISTEMIC_STATE, re.compile(r"\b(know|knew|believe|believed|suspect|aware|secret|tahu|percaya|curiga)\b", re.I)),
+        (QueryRoute.TEMPORAL_STATE, re.compile(r"\b(before|after|at the time|used to|previously|historical|sebelum|setelah|saat itu|dulu)\b", re.I)),
         (QueryRoute.SPATIAL_LOOKUP, re.compile(r"\b(where|inside|contains?|room|stored|located|near|adjacent|di mana|ruang|berisi|tersimpan)\b", re.I)),
         (QueryRoute.THREAD_LOOKUP, re.compile(r"\b(unresolved|promise|mystery|goal|foreshadow|thread|belum selesai|janji|misteri|tujuan)\b", re.I)),
         (QueryRoute.WHY_CAUSAL, re.compile(r"\b(why|cause|caused|because|motivated|mengapa|kenapa|sebab)\b", re.I)),
-        (QueryRoute.TEMPORAL_STATE, re.compile(r"\b(before|after|at the time|used to|previously|historical|sebelum|setelah|saat itu|dulu)\b", re.I)),
         (QueryRoute.EVENT_LOOKUP, re.compile(r"\b(when|what happened|event|changed|happened|kapan|terjadi|peristiwa|berubah)\b", re.I)),
         (QueryRoute.CONTINUITY_CHECK, re.compile(r"\b(continuity|contradiction|inconsistent|conflict|kontinuitas|kontradiksi|tidak konsisten)\b", re.I)),
         (QueryRoute.BRANCH_COMPARE, re.compile(r"\b(compare branches?|alternate timeline|what-if|bandingkan cabang|timeline alternatif)\b", re.I)),
@@ -409,9 +410,14 @@ class MemoryQueryEngine:
         for lane in plan.required_lanes + plan.optional_lanes:
             if lane not in lanes and lane not in plan.forbidden_lanes: lanes.append(lane)
         lane_results = {lane: self._run_lane(lane, plan) for lane in lanes}
-        raw = self._rrf(lane_results)
-        allowed, excluded = self.gate.filter(raw, scope)
-        selected = self._diversify(allowed, plan.final_candidate_budget)
+        gated_lane_results: dict[RetrievalLane, list[MemoryCandidate]] = {}
+        excluded: list[dict[str, Any]] = []
+        for lane, candidates in lane_results.items():
+            allowed, rejected = self.gate.filter(candidates, scope)
+            gated_lane_results[lane] = allowed
+            excluded.extend(rejected)
+        raw = self._rrf(gated_lane_results)
+        selected = self._diversify(raw, plan.final_candidate_budget)
         if self.reranker.available() and len(selected) > 1:
             payloads = [item.to_dict() for item in selected]
             reranked = self.reranker.rerank(query, payloads, plan.final_candidate_budget)

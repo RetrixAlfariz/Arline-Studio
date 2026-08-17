@@ -429,11 +429,6 @@ class MemoryStore:
             ).fetchone()
             if existing:
                 return self._chunk_row(existing)
-            con.execute(
-                "UPDATE memory_chunks SET semantic_status='stale',index_state='stale',updated_at=? "
-                "WHERE source_type=? AND source_id=? AND semantic_status='active'",
-                (utc_now(), source_type, source_id),
-            )
             chunk_id = make_id("MEM")
             now = utc_now()
             con.execute(
@@ -441,7 +436,7 @@ class MemoryStore:
                 "source_start_id,source_end_id,world_time_json,story_order,scope_kind,semantic_class,authority,trust_level,text,"
                 "retrieval_text,display_excerpt,token_count,importance,extraction_confidence,identity_confidence,semantic_status,"
                 "index_state,checksum,chunker_version,index_generation,created_at,updated_at) "
-                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'active','ready',?,?,?,?,?,?)",
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'active','ready',?,?,?,?,?)",
                 (chunk_id, source_type, source_id, source_revision, project_id, world_id, branch_id, session_id,
                  source_start_id, source_end_id, dumps(world_time) if world_time is not None else None, story_order,
                  scope_kind, semantic_class, authority, trust_level, clean, retrieval_text or clean,
@@ -488,6 +483,60 @@ class MemoryStore:
                 f"SELECT * FROM memory_chunks WHERE {' AND '.join(where)} ORDER BY updated_at DESC LIMIT ?", params
             ).fetchall()
         return [self._chunk_row(row) for row in rows]
+
+
+    def mark_source_status(self, source_type: str, source_id: str, status: str = "stale") -> int:
+        if status not in {"stale", "deleted", "deprecated", "superseded"}:
+            raise ValueError(status)
+        with self._lock, self.connection() as con:
+            rows = con.execute(
+                "SELECT id FROM memory_chunks WHERE source_type=? AND source_id=? AND semantic_status='active'",
+                (source_type, source_id),
+            ).fetchall()
+            ids = [row["id"] for row in rows]
+            if ids:
+                con.execute(
+                    "UPDATE memory_chunks SET semantic_status=?,index_state=?,updated_at=? "
+                    "WHERE source_type=? AND source_id=? AND semantic_status='active'",
+                    (status, status, utc_now(), source_type, source_id),
+                )
+                if self.fts_available:
+                    domain = self._domain_for_source(source_type)
+                    for chunk_id in ids:
+                        con.execute(f"DELETE FROM memory_fts_{domain} WHERE chunk_id=?", (chunk_id,))
+            return len(ids)
+
+    def mark_session_status(self, session_id: str, status: str = "deleted") -> int:
+        if status not in {"stale", "deleted", "deprecated", "superseded"}:
+            raise ValueError(status)
+        with self._lock, self.connection() as con:
+            rows = con.execute(
+                "SELECT id,source_type FROM memory_chunks WHERE session_id=? AND semantic_status='active'",
+                (session_id,),
+            ).fetchall()
+            if not rows:
+                return 0
+            con.execute(
+                "UPDATE memory_chunks SET semantic_status=?,index_state=?,updated_at=? "
+                "WHERE session_id=? AND semantic_status='active'",
+                (status, status, utc_now(), session_id),
+            )
+            if self.fts_available:
+                for row in rows:
+                    domain = self._domain_for_source(row["source_type"])
+                    con.execute(f"DELETE FROM memory_fts_{domain} WHERE chunk_id=?", (row["id"],))
+            return len(rows)
+
+    def list_linked_chunks(self, resource_type: str, resource_id: str, *, limit: int = 200) -> list[dict[str, Any]]:
+        with self.connection() as con:
+            rows = con.execute(
+                "SELECT DISTINCT c.id FROM memory_chunks c "
+                "JOIN memory_links l ON l.memory_chunk_id=c.id "
+                "WHERE l.resource_type=? AND l.resource_id=? AND c.semantic_status='active' "
+                "ORDER BY c.updated_at DESC LIMIT ?",
+                (resource_type, resource_id, max(1, min(1000, int(limit)))),
+            ).fetchall()
+        return [self.get_chunk(row["id"]) for row in rows]
 
     @staticmethod
     def _fts_query(query: str) -> str:
@@ -539,6 +588,20 @@ class MemoryStore:
         if not row: raise KeyError(generation_id)
         item = dict(row); item["detail"] = loads(item.pop("detail_json"), {})
         return item
+
+
+    def list_generations(self, limit: int = 50) -> list[dict[str, Any]]:
+        with self.connection() as con:
+            rows = con.execute(
+                "SELECT * FROM memory_index_generations ORDER BY generation_id DESC LIMIT ?",
+                (max(1, min(200, int(limit))),),
+            ).fetchall()
+        result = []
+        for row in rows:
+            item = dict(row)
+            item["detail"] = loads(item.pop("detail_json"), {})
+            result.append(item)
+        return result
 
     def active_generation(self) -> dict[str, Any] | None:
         with self.connection() as con:

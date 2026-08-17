@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from threading import RLock, Timer
 
 from .config import MemoryConfig
 from .embedding import DisabledEmbeddingProvider, DisabledRerankerProvider, LMStudioEmbeddingProvider
@@ -38,6 +39,74 @@ class MemoryService:
             store=store, workspace=workspace, history=history, foundation=foundation,
             config=config, embedding=embedding, reranker=self.reranker,
         )
+        self._refresh_lock = RLock()
+        self._refresh_timers: dict[str, Timer] = {}
+
+
+    def _incremental_generation_id(self) -> int | None:
+        if not self.config.dense_enabled:
+            return None
+        generation = self.store.active_generation()
+        if generation is None:
+            return None
+        try:
+            return int(generation["generation_id"]) if self.embedding.available() else None
+        except Exception:
+            return None
+
+    def refresh_document(self, document_id: str) -> list[dict[str, Any]]:
+        document = self.workspace.get_document(document_id)
+        return self.indexer.index_document(
+            document,
+            generation_id=self._incremental_generation_id(),
+        )
+
+    def refresh_turn(self, turn_id: str) -> list[dict[str, Any]]:
+        turn = self.history.get_turn(turn_id)
+        session = self.history.get_session_meta(turn["session_id"])
+        scoped = {
+            **turn,
+            "project_id": session.get("project_id"),
+            "world_id": session.get("world_id"),
+            "branch_id": session.get("branch_id"),
+            "scratch_mode": session.get("scratch_mode"),
+            "parent_session_id": session.get("parent_session_id"),
+            "forked_from_turn_id": session.get("forked_from_turn_id"),
+        }
+        return self.indexer.index_turn(
+            scoped,
+            generation_id=self._incremental_generation_id(),
+        )
+
+    def _schedule(self, key: str, callback, delay: float) -> None:
+        def run() -> None:
+            try:
+                callback()
+            except Exception:
+                pass
+            finally:
+                with self._refresh_lock:
+                    self._refresh_timers.pop(key, None)
+        with self._refresh_lock:
+            previous = self._refresh_timers.pop(key, None)
+            if previous is not None:
+                previous.cancel()
+            timer = Timer(max(0.05, float(delay)), run)
+            timer.daemon = True
+            self._refresh_timers[key] = timer
+            timer.start()
+
+    def schedule_document_refresh(self, document_id: str, delay: float = 0.75) -> None:
+        self._schedule(f"document:{document_id}", lambda: self.refresh_document(document_id), delay)
+
+    def schedule_turn_refresh(self, turn_id: str, delay: float = 0.1) -> None:
+        self._schedule(f"turn:{turn_id}", lambda: self.refresh_turn(turn_id), delay)
+
+    def forget_document(self, document_id: str) -> int:
+        return self.store.mark_source_status("document", document_id, "deleted")
+
+    def forget_session(self, session_id: str) -> int:
+        return self.store.mark_session_status(session_id, "deleted")
 
     def status(self) -> dict[str, Any]:
         embedding_available = False
@@ -52,7 +121,7 @@ class MemoryService:
             "automatic_context": self.config.automatic_context,
             "config": self.config.to_dict(),
             "embedding_available": embedding_available,
-            "fallback_active": not embedding_available,
+            "fallback_active": bool(self.config.dense_enabled and not embedding_available),
             "fallback": "structured indexes + SQLite FTS5",
             "reranker_available": self.reranker.available(),
         }

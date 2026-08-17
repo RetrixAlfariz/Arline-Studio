@@ -32,6 +32,8 @@ from src.service import ArlineService, ArtifactStore, make_run_id
 from src.service.streaming import StreamingArlineService
 from src.writer.quality import ProseQualityAnalyzer
 from src.storage_backup import backup_sqlite_before_migrations
+from src.memory import MemoryConfig, MemoryQueryContext, MemoryService, MemoryStore
+from src.memory.web import create_memory_router
 from src.workspace.store import WORKSPACE_SCHEMA_VERSION
 from src.workspace import (
     BRANCH_KINDS,
@@ -110,6 +112,10 @@ class PromptPayload(RuntimePayload):
     folder_id: str | None = None
     references: list[ReferencePayload] = Field(default_factory=list)
     context_recipe_id: str | None = None
+    context_lens: str | None = None
+    world_time: Any = None
+    story_order: float | None = None
+    pov_variant_id: str | None = None
     scratch_mode: bool = False
 
 
@@ -835,6 +841,7 @@ def _public_config(cfg: RuntimeConfig) -> dict[str, Any]:
             "dataset_root": str(cfg.history.dataset_root),
             "recent_limit": cfg.history.recent_limit,
         },
+        "memory": MemoryConfig.load(cfg.path).to_dict(),
         "reasoning_guard": {
             "enforce_model_capabilities": cfg.reasoning_runtime.enforce_model_capabilities,
             "dominance_ratio_warn": cfg.reasoning_runtime.dominance_ratio_warn,
@@ -877,6 +884,17 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     history = HistoryStore(initial_cfg.history.database_path, backup_before_migration=False)
     workspace = WorkspaceStore(initial_cfg.workspace.database_path, backup_before_migration=False)
     foundation = FoundationStore(initial_cfg.workspace.database_path)
+    memory_config = MemoryConfig.load(config_path)
+    memory_store = MemoryStore(initial_cfg.workspace.database_path)
+    memory_service = MemoryService(
+        store=memory_store,
+        workspace=workspace,
+        history=history,
+        foundation=foundation,
+        config=memory_config,
+        lmstudio_base_url=initial_cfg.lmstudio.base_url,
+        lmstudio_api_key=initial_cfg.lmstudio.api_key,
+    )
     media_root = workspace_path.parent / "media"
     media_root.mkdir(parents=True, exist_ok=True)
     for backup in migration_backups:
@@ -922,8 +940,56 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             return set()
         return {row["id"] for row in effective_folders(workspace.list_folders(project_id))}
 
+
+    def _augment_memory_context(
+        prompt: str,
+        payload: PromptPayload,
+        ws_context,
+        *,
+        project_id: str | None,
+        world_id: str | None,
+        branch_id: str | None,
+        session_id: str | None,
+        refs: list[dict[str, Any]],
+    ):
+        if ws_context is None or not memory_config.enabled or not memory_config.automatic_context:
+            return ws_context
+        active_scene = (ws_context.scope.get("active_scene") or {}) if ws_context else {}
+        lens = str(payload.context_lens or memory_config.default_lens or "scene").lower()
+        if lens not in {"author", "scene", "pov"}:
+            lens = memory_config.default_lens if memory_config.default_lens in {"author", "scene", "pov"} else "scene"
+        memory_scope = MemoryQueryContext(
+            project_id=project_id,
+            world_id=world_id,
+            branch_id=branch_id,
+            session_id=session_id,
+            world_time=payload.world_time if payload.world_time is not None else (active_scene.get("narrative_time") or None),
+            story_order=payload.story_order,
+            pov_variant_id=payload.pov_variant_id or active_scene.get("pov_variant_id"),
+            context_lens=lens,
+            retrieval_mode="generation",
+            explicit_references=refs,
+            allow_scratch=bool(payload.scratch_mode),
+            allow_future_author_knowledge=(lens == "author"),
+        )
+        try:
+            result = memory_service.retrieve(prompt, memory_scope)
+            return memory_service.augment_workspace_context(ws_context, result)
+        except Exception as exc:
+            ws_context.scope["memory"] = {
+                "fallback": True,
+                "error": str(exc),
+                "reason": "Memory retrieval failed; v1.1 workspace context remained active.",
+            }
+            return ws_context
+
     app = FastAPI(title="Arline Studio", version=STUDIO_VERSION)
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    app.include_router(create_memory_router(
+        service=memory_service,
+        store=memory_store,
+        foundation=foundation,
+    ))
 
     @app.get("/")
     def index():
@@ -1095,6 +1161,8 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                 ))
                 foundation.update_job(job["id"], status="running", progress=(index + 1) / max(1, len(sections)), message=f"Imported {index + 1}/{len(sections)}")
             foundation.update_job(job["id"], status="done", progress=1, message="Import complete", result={"document_ids": [x["id"] for x in created]})
+            for document in created:
+                memory_service.schedule_document_refresh(document["id"])
             foundation.log_activity(payload.project_id, "manuscript_import", "project", payload.project_id, label=f"Imported {len(created)} manuscript items")
             return {"job": foundation.get_job(job["id"]), "documents": created}
         except Exception as exc:
@@ -2095,7 +2163,9 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     @app.post("/api/documents")
     def create_document(payload: DocumentPayload):
         try:
-            return workspace.create_document(**payload.model_dump())
+            document = workspace.create_document(**payload.model_dump())
+            memory_service.schedule_document_refresh(document["id"])
+            return document
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
 
@@ -2124,7 +2194,9 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         data = payload.model_dump(exclude_none=True)
         note = data.pop("note", "updated")
         try:
-            return workspace.update_document(document_id, note=note, **data)
+            document = workspace.update_document(document_id, note=note, **data)
+            memory_service.schedule_document_refresh(document_id)
+            return document
         except KeyError as exc:
             raise HTTPException(404, "Document not found") from exc
 
@@ -2132,6 +2204,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     def delete_document(document_id: str):
         try:
             workspace.delete_document(document_id)
+            memory_service.forget_document(document_id)
         except KeyError as exc:
             raise HTTPException(404, "Document not found") from exc
         return {"ok": True}
@@ -2606,6 +2679,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     def delete_session(session_id: str):
         try:
             history.delete_session(session_id)
+            memory_service.forget_session(session_id)
         except KeyError as exc:
             raise HTTPException(404, "Session not found") from exc
         return {"ok": True}
@@ -2633,6 +2707,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             raise HTTPException(404, "Turn not found") from exc
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
+        memory_service.schedule_turn_refresh(turn["id"])
         return {"ok": True, "turn": turn, "dataset": history.dataset_stats()}
 
     @app.get("/api/feedback/queue")
@@ -2701,6 +2776,15 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                 if cfg.workspace.context_enabled and (payload.project_id or payload.world_id)
                 else None
             )
+            if ws_context is not None:
+                ws_context = _augment_memory_context(
+                    payload.prompt, payload, ws_context,
+                    project_id=payload.project_id,
+                    world_id=payload.world_id,
+                    branch_id=payload.branch_id,
+                    session_id=payload.session_id,
+                    refs=refs,
+                )
             bundle = ArlineService(cfg).analyze(
                 payload.prompt, workspace_context=ws_context
             )
@@ -2765,6 +2849,15 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                 except (KeyError, ValueError) as exc:
                     yield _sse("error", {"message": f"Workspace context error: {exc}"})
                     return
+            if ws_context is not None:
+                ws_context = _augment_memory_context(
+                    payload.prompt, payload, ws_context,
+                    project_id=project_id,
+                    world_id=world_id,
+                    branch_id=branch_id,
+                    session_id=(existing_session or {}).get("id"),
+                    refs=refs,
+                )
             session_context = ""
             if existing_session is not None and cfg.history.smart_hybrid_continuity and payload.input_mode == "smart_hybrid":
                 context_policy = (ws_context.scope.get("context_policy") if ws_context else {}) or {}
@@ -2828,6 +2921,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                         projections=[x.to_dict() for x in bundle.analysis.writer_context.projections], post_validation=post,
                         wcf_validation=bundle.analysis.wcf_validation.to_dict(),
                     )
+                    memory_service.schedule_turn_refresh(turn["id"])
                     final_session = history.get_session_meta(session["id"])
                     result = {
                         "run_id": run_id, "session_id": final_session["id"], "session_title": final_session["title"], "turn_id": turn["id"],
@@ -2916,6 +3010,15 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             except (KeyError, ValueError) as exc:
                 raise HTTPException(400, f"Workspace context error: {exc}") from exc
 
+        if ws_context is not None:
+            ws_context = _augment_memory_context(
+                payload.prompt, payload, ws_context,
+                project_id=project_id,
+                world_id=world_id,
+                branch_id=branch_id,
+                session_id=(existing_session or {}).get("id"),
+                refs=refs,
+            )
         session_context = ""
         if (
             existing_session is not None
@@ -3024,6 +3127,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             post_validation=post,
             wcf_validation=bundle.analysis.wcf_validation.to_dict(),
         )
+        memory_service.schedule_turn_refresh(turn["id"])
         session = history.get_session_meta(session["id"])
 
         return {

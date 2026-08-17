@@ -126,6 +126,12 @@ class MemoryIndexer:
         title = str(document.get("title") or "Untitled")
         body = str(document.get("content") or "")
         chunks = self.chunker.chunk(body, source_id=source_id)
+        active_rows = self.store.list_chunks(source_type="document", source_id=source_id, status="active", limit=5000)
+        if len(active_rows) == len(chunks) and active_rows and all(
+            str(row.get("source_revision") or "").startswith(f"{revision}:") for row in active_rows
+        ):
+            return active_rows
+        self.store.mark_source_status("document", source_id, "stale")
         catalog = catalog if catalog is not None else self._identity_catalog()
         rows=[]
         for unit in chunks:
@@ -174,9 +180,16 @@ class MemoryIndexer:
         report = inspect_retrieved_text(combined, trust_level=TrustLevel.GENERATED.value)
         trust = report.trust_level
         revision = self._revision(turn.get("updated_at"), combined, feedback)
+        units = self.chunker.chunk(combined, source_id=turn["id"])
+        active_rows = self.store.list_chunks(source_type="chat_window", source_id=turn["id"], status="active", limit=5000)
+        if len(active_rows) == len(units) and active_rows and all(
+            str(row.get("source_revision") or "").startswith(f"{revision}:") for row in active_rows
+        ):
+            return active_rows
+        self.store.mark_source_status("chat_window", turn["id"], "stale")
         catalog = catalog if catalog is not None else self._identity_catalog()
         rows=[]
-        for unit in self.chunker.chunk(combined, source_id=turn["id"]):
+        for unit in units:
             row = self.store.upsert_chunk(
                 source_type="chat_window", source_id=turn["id"], source_revision=f"{revision}:{unit.ordinal}",
                 text=unit.text, retrieval_text=unit.text, display_excerpt=unit.text[:700],

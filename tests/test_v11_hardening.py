@@ -64,7 +64,6 @@ class HardeningTests(unittest.TestCase):
         lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
         match = re.search(r'\[\[package\]\]\nname = "arline-studio"\nversion = "([^"]+)"', lock)
         self.assertIsNotNone(match)
-        self.assertEqual(version, "1.1.0")
         self.assertEqual(match.group(1), version)
 
     def test_draft_is_compatibility_input_not_canonical_type(self):
@@ -136,7 +135,8 @@ class HardeningTests(unittest.TestCase):
             payload = public.json()
             self.assertNotIn("api_key", payload)
             self.assertFalse(payload["api_key_configured"])
-            self.assertEqual(payload["studio_version"], "1.1.0")
+            expected_version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+            self.assertEqual(payload["studio_version"], expected_version)
 
             bootstrap = client.get("/api/workspace/bootstrap", params={"stack_id": "smoke-a"})
             self.assertEqual(bootstrap.status_code, 200)

@@ -110,3 +110,37 @@ mention_limit = 20
 pinned_context_limit = 24
 autosave_drafts = true
 language_mode = "follow_prompt"
+
+
+[memory]
+enabled = true
+fts_enabled = true
+dense_enabled = false
+automatic_context = true
+default_lens = "scene"
+chunk_chars = 1800
+chunk_overlap_chars = 180
+max_candidates = 60
+final_k = 12
+max_per_source = 2
+rrf_k = 60
+trace_enabled = true
+
+[memory.embedding]
+# Install the recommended model in LM Studio normally, then set its local
+# model key here. Dense retrieval stays optional in v1.2.0.
+enabled = false
+provider = "lmstudio"
+model = "intfloat/multilingual-e5-base"
+dimension = 768
+query_prefix = "query: "
+passage_prefix = "passage: "
+batch_size = 32
+timeout_seconds = 120.0
+
+[memory.reranker]
+enabled = false
+provider = "disabled"
+model = "Qwen/Qwen3-Reranker-0.6B"
+top_k_input = 20
+top_k_output = 8

@@ -1,4 +1,30 @@
-# Arline Studio 1.1
+
+# Arline Studio
+
+## v1.2 development — Evidence & Retrieval Foundation
+
+`develop/v1.2` contains the unmerged v1.2 development line. The v1.2.0
+milestone adds branch-aware evidence retrieval without turning search output
+into canon: source-backed chunks, SQLite FTS5, deterministic query routing,
+one hard Scope Gate, RRF fusion, retrieval traces, incremental indexing, and
+Context Stack integration. Dense embeddings are optional; structured lookup
+and FTS remain the baseline when LM Studio embeddings are unavailable.
+
+### Recommended LM Studio models
+
+Arline does not bundle or download model weights. Install models in LM
+Studio normally and select the local model key in Settings/config.
+
+- **Generation + vision:** [HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive](https://huggingface.co/HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive)
+- **Recommended embedding baseline:** [intfloat/multilingual-e5-base](https://huggingface.co/intfloat/multilingual-e5-base)
+- **Embedding challenger (disabled by default):** [Qwen/Qwen3-Embedding-0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B)
+- **Experimental reranker (not required by v1.2.0):** [Qwen/Qwen3-Reranker-0.6B](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B)
+
+`multilingual-e5-base` should be exposed through LM Studio's embeddings
+endpoint when dense retrieval is enabled. v1.2.0 remains fully usable with
+`dense_enabled = false`.
+
+---
 
 Arline Studio is a local-first workspace for writing, exploring, and maintaining structured story worlds.
 

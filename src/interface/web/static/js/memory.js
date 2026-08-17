@@ -90,9 +90,20 @@
       const projectId = window.state?.activeProject?.id || null;
       const result = await request("/api/memory/backfill", {
         method: "POST",
-        body: JSON.stringify({project_id: projectId}),
+        body: JSON.stringify({project_id: projectId, background: true}),
       });
-      button.textContent = `Indexed ${result.chunks || 0} chunks`;
+      if (result.job?.id) {
+        let job = result.job;
+        while (!["done", "failed"].includes(job.status)) {
+          await new Promise((resolve) => setTimeout(resolve, 350));
+          job = await request(`/api/memory/jobs/${encodeURIComponent(job.id)}`);
+          button.textContent = `${Math.round((job.progress || 0) * 100)}% · ${job.message || "Indexing"}`;
+        }
+        if (job.status === "failed") throw new Error(job.message || "Memory indexing failed");
+        button.textContent = `Indexed ${job.result?.chunks || 0} chunks`;
+      } else {
+        button.textContent = `Indexed ${result.chunks || 0} chunks`;
+      }
       await loadStatus();
     } catch (error) {
       button.textContent = "Index failed";
