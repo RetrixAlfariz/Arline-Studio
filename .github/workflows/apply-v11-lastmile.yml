@@ -33,7 +33,12 @@ jobs:
           new='''html=once(html,'                  <div id="worldTagFilters" class="inline-tags"></div>\\n                </div>\\n                <div id="worldGrid"', '                  <div id="worldTagFilters" class="inline-tags"></div>\\n                  <div id="worldBulkBar" class="world-bulk-bar hidden"><b id="worldBulkCount">0 selected</b><button id="bulkMoveBtn" class="tiny-btn">Move</button><button id="bulkCollectionBtn" class="tiny-btn">Collection</button><button id="bulkArchiveBtn" class="tiny-btn">Archive</button><button id="bulkClearBtn" class="tiny-btn">Clear</button></div>\\n                </div>\\n                <div id="worldGrid"','world bulk toolbar')'''
           if old not in s:
               raise SystemExit('old bulk anchor block not found in patcher')
-          p.write_text(s.replace(old,new,1),encoding='utf-8')
+          s=s.replace(old,new,1)
+          old2='''js=once(js,'  byId(\\"worldEmpty\\").classList.toggle(\\"hidden\\",cards.length>0);','  byId(\\"worldEmpty\\").classList.toggle(\\"hidden\\",cards.length>0); updateWorldBulkBar();','bulk rerender')'''
+          new2='''js=once(js,'  byId(\\"worldEmpty\\")?.classList.toggle(\\"hidden\\", cards.length > 0);','  byId(\\"worldEmpty\\")?.classList.toggle(\\"hidden\\", cards.length > 0); updateWorldBulkBar();','bulk rerender')'''
+          if old2 not in s:
+              raise SystemExit('old bulk rerender anchor not found in patcher')
+          p.write_text(s.replace(old2,new2,1),encoding='utf-8')
           PY
       - name: Apply last-mile patch
         run: python tools/apply_v11_lastmile.py
