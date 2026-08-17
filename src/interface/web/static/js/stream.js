@@ -1,6 +1,105 @@
 "use strict";
 
 (function () {
+  function installBulkUndoBridge() {
+    if (typeof globalThis.undoLastAction !== "function" || globalThis.undoLastAction.__arlineBulkWrapped) return;
+    const originalUndo = globalThis.undoLastAction;
+    const wrappedUndo = async function () {
+      if (typeof lastUndo !== "undefined" && lastUndo?.type === "restore_bulk") {
+        const action = lastUndo;
+        lastUndo = null;
+        const failed = [];
+        for (const resource of action.resources || []) {
+          try {
+            await api("/api/lifecycle/restore", {
+              method: "POST",
+              body: { resource_type: resource.resourceType, resource_id: resource.resourceId },
+            });
+          } catch (error) {
+            failed.push({ ...resource, error });
+          }
+        }
+        await loadProjectData();
+        if (failed.length) {
+          toast(`Restored ${(action.resources || []).length - failed.length}/${(action.resources || []).length} sheets · ${failed.length} failed`, 6000);
+        } else {
+          toast(`Restored ${(action.resources || []).length} Library sheets`);
+        }
+        return;
+      }
+      return originalUndo();
+    };
+    wrappedUndo.__arlineBulkWrapped = true;
+    globalThis.undoLastAction = wrappedUndo;
+  }
+
+  async function bulkTrashSelectedCompat() {
+    installBulkUndoBridge();
+    const ids = [...state.worldSelection];
+    if (!ids.length) return;
+    if (!confirm(`Move ${ids.length} selected Library sheets to Trash?\n\nThey remain recoverable from Activity Center, or immediately with Ctrl+Z.`)) return;
+
+    const selectedIds = new Set(ids);
+    const selectedVariantIds = new Set(
+      (state.variants || []).filter((variant) => selectedIds.has(variant.family_id)).map((variant) => variant.id),
+    );
+    const resources = ids.map((id) => {
+      const family = (state.families || []).find((item) => item.id === id);
+      return { resourceType: "entity_family", resourceId: id, label: family?.name || id };
+    });
+    const moved = [];
+    const failed = [];
+
+    for (const resource of resources) {
+      try {
+        await api("/api/lifecycle/trash", {
+          method: "POST",
+          body: { resource_type: resource.resourceType, resource_id: resource.resourceId },
+        });
+        moved.push(resource);
+      } catch (error) {
+        failed.push({ ...resource, error });
+      }
+    }
+
+    if (moved.length) {
+      const movedIds = new Set(moved.map((item) => item.resourceId));
+      lastUndo = { type: "restore_bulk", resources: moved };
+      state.selectedReferences = (state.selectedReferences || []).filter((ref) => {
+        if (ref.type === "entity_family" && movedIds.has(ref.id)) return false;
+        if (ref.type === "entity_variant" && selectedVariantIds.has(ref.id)) return false;
+        return true;
+      });
+      updateContextChipUI();
+      scheduleContextStackSync();
+    }
+
+    state.worldSelection = new Set(failed.map((item) => item.resourceId));
+    await loadProjectData();
+    updateWorldBulkBar();
+
+    if (failed.length) {
+      toast(`Moved ${moved.length}/${resources.length} sheets to Trash · ${failed.length} failed`, 6000);
+    } else {
+      toast(`Moved ${moved.length} Library sheets to Trash · Ctrl+Z to undo`, 5000);
+    }
+  }
+
+  function installBulkTrashCompatibility() {
+    if (typeof document === "undefined") return;
+    const bar = document.getElementById("worldBulkBar");
+    if (!bar || document.getElementById("bulkTrashBtn")) return;
+    const button = document.createElement("button");
+    button.id = "bulkTrashBtn";
+    button.type = "button";
+    button.className = "tiny-danger-btn";
+    button.textContent = "Trash";
+    const clearButton = document.getElementById("bulkClearBtn");
+    if (clearButton && typeof bar.insertBefore === "function") bar.insertBefore(button, clearButton);
+    else bar.appendChild(button);
+    button.addEventListener("click", bulkTrashSelectedCompat);
+  }
+
   function installRuntimeCompatibility() {
     if (typeof document !== "undefined") {
       let host = document.getElementById("legacyScopeCompatibility");
@@ -21,6 +120,7 @@
         select.setAttribute("aria-hidden", "true");
         host.appendChild(select);
       }
+      installBulkTrashCompatibility();
     }
 
     // v1.1's streaming generation path clears the sent Composer draft with an
@@ -37,6 +137,10 @@
         },
       });
     }
+
+    // Deferred scripts execute in document order; a zero-delay task runs after
+    // arline.js has installed the original undo function and its lexical state.
+    if (typeof setTimeout === "function") setTimeout(installBulkUndoBridge, 0);
   }
 
   installRuntimeCompatibility();
