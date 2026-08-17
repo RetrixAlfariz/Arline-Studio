@@ -43,10 +43,12 @@ from .v121 import (
     normalize_world_time,
     world_time_in_interval,
 )
+from .v121_events import TimelineProjectionReport, TimelineStateProjector, install_v121_event_projection
 
 # v1.2.x stays on one development line. Install the v1.2.1 behavior over the
 # stable v1.2.0 foundation without changing the public Memory API.
 install_v121()
+install_v121_event_projection()
 
 __all__ = [
     "Authority", "ContextLens", "DisabledEmbeddingProvider",
@@ -58,8 +60,9 @@ __all__ = [
     "QueryCompiler", "QueryPlan", "QueryRoute", "RerankerConfig",
     "RerankerProvider", "RetrievalLane", "RetrievalResult", "SCHEMA_MODELS",
     "ScopeGate", "SemanticClass", "SemanticStatus", "SpatialMemory",
-    "StructuralChunker", "TASK_PROFILES", "TemporalMemory", "TrustLevel",
-    "V121_EXTENSION_VERSION", "compare_world_time", "evidence_wrapper",
-    "get_task_profile", "inspect_retrieved_text", "normalize_world_time",
-    "schema_document", "validate_structured_output", "world_time_in_interval",
+    "StructuralChunker", "TASK_PROFILES", "TemporalMemory", "TimelineProjectionReport",
+    "TimelineStateProjector", "TrustLevel", "V121_EXTENSION_VERSION",
+    "compare_world_time", "evidence_wrapper", "get_task_profile",
+    "inspect_retrieved_text", "normalize_world_time", "schema_document",
+    "validate_structured_output", "world_time_in_interval",
 ]
