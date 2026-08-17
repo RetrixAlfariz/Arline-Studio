@@ -1,8 +1,8 @@
 # Arline v1.2 implementation status
 
 **Development branch:** `develop/v1.2`  
-**Package version:** `1.2.0a1`  
-**Merge policy:** do not merge into `main` until the repository owner explicitly approves v1.2.
+**Package version:** `1.2.0a1` (v1.2.1 development extension reports `1.2.1a1`)  
+**Merge policy:** do not merge into `main` until the repository owner explicitly approves the complete v1.2 line.
 
 ## v1.2.0 milestone — complete foundation
 
@@ -49,13 +49,43 @@ Changing the embedding model or dimension requires a new derived index
 generation. Existing vectors from another embedding model/dimension must not be
 reinterpreted as BGE-M3 vectors.
 
+## v1.2.1 — temporal/hybrid + Character Rails development
+
+v1.2.1 development continues on the same `develop/v1.2` line. The goal is a
+meaningful upgrade of narrative-time recall and writer steering rather than a
+separate release branch.
+
+Implemented in the first v1.2.1 pass:
+
+- dual-axis temporal-state lookup using both story/discourse order and comparable world time;
+- atomic temporal state transitions that supersede the previous interval and current-state projection together;
+- conservative fictional-time comparison: ISO date/time and numeric axes may be ordered, while unrelated opaque labels are never lexically invented into chronology;
+- Scope Gate extension that blocks comparable future world-time evidence outside an allowed Author lens;
+- temporal query traces now carry exact world-time and story-order request bounds;
+- Character Rails are routed as story-continuation requests so existing structured + FTS + optional dense hybrid retrieval can provide character context;
+- resolved character variants contribute canonical profile/voice evidence and first-class relationship evidence to the structured state lane;
+- `/mono`, `/dia`, `/ambience`, and `/intimacy` rail grammar with shared pacing, intensity, intensity-curve, delivery, target, length, and termination concepts;
+- `/dia` is explicitly beat-driven rather than an alternating-speaker or fixed-turn generator;
+- `/mono` defaults to private internal thought, while audible delivery such as `whisper`, `murmur`, or `mutter` becomes speech;
+- rail seeds are writer-only semantic steering: they are stripped before semantic extraction and before chat Memory evidence indexing;
+- prior rail command lines are stripped from session-continuity steering so a one-generation rail does not silently persist;
+- accepted/generated prose remains eligible for the normal extractor/review/Memory path; the command itself never commits canon;
+- synthetic tests cover rail parsing/isolation, compact `@vian@fano` participants, pacing, world-time comparison, dual-axis state reconstruction, supersession, and chat-index rail leakage.
+
+Still planned before v1.2.1 is considered complete:
+
+- controlled real LM Studio BGE-M3 smoke/backfill when a local corpus is available;
+- stronger temporal event projection/backfill from accepted timeline events;
+- benchmarked hybrid lane behavior and diagnostics on the synthetic narrative fixture;
+- richer scene-dynamics planning beyond the first writer rail contract;
+- package/lock metadata bump when the v1.2.1 milestone is closed rather than during the first development pass.
+
 ## Explicit v1.2.0 boundary
 
-Dense retrieval remains optional and reranking is not required. Full world-time
-interval reconstruction, mature POV knowledge continuity, autonomous summary
-refresh, consequence simulation, and semantic branch merge remain later
-v1.2.x/v1.3 work according to the research specification.
-
+Dense retrieval remains optional and reranking is not required. Full mature POV
+knowledge continuity, autonomous summary refresh, consequence simulation, and
+semantic branch merge remain later v1.2.x/v1.3 work according to the research
+specification.
 
 ## v1.2.0 correctness hardening
 
