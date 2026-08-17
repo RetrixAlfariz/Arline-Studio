@@ -26,6 +26,7 @@ from src.pipeline import ArlineAnalyticalPipeline
 from src.runtime_config import DEFAULT_CONFIG_PATH, RuntimeConfig, VALID_INPUT_MODES, VALID_REASONING, VALID_PROJECTION_MODES
 from src.service import ArlineService, ArtifactStore, make_run_id
 from src.storage_backup import backup_sqlite_before_migrations
+from src.workspace.store import WORKSPACE_SCHEMA_VERSION
 from src.workspace import (
     BRANCH_KINDS,
     CANON_STATUSES,
