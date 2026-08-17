@@ -759,16 +759,64 @@ class V120MemoryFoundationTests(unittest.TestCase):
         cfg = root / "arline.toml"
         (root / "writer_system.txt").write_text("Write the requested fiction.", encoding="utf-8")
         (root / "reasoning_guard.txt").write_text("Keep reasoning bounded.", encoding="utf-8")
-        cfg.write_text(
-            f'''[lmstudio]\nbase_url = "http://127.0.0.1:1"\nmodel = ""\napi_key = ""\ntimeout_seconds = 0.2\nauto_load = false\n\n'''
-            f'''[history]\ndatabase_path = "{db.as_posix()}"\ndataset_root = "{(root / 'datasets').as_posix()}"\nrecent_limit = 100\ncontinuity_turns = 2\ncontinuity_chars = 12000\nsmart_hybrid_continuity = true\n\n'''
-            f'''[workspace]\ndatabase_path = "{db.as_posix()}"\ndefault_project_id = ""\ncontext_enabled = true\nmention_limit = 20\npinned_context_limit = 24\nautosave_drafts = true\nlanguage_mode = "follow_prompt"\n\n'''
-            '''[writer]\ninput_mode = "smart_hybrid"\nsystem_prompt_file = "writer_system.txt"\nstory_filename = "story.txt"\nsave_request_packet = false\npost_validate = false\n\n'''
-            '''[reasoning_runtime]\nenforce_model_capabilities = false\nguard_prompt_file = "reasoning_guard.txt"\n\n'''
-            '''[memory]\nenabled = true\nfts_enabled = true\ndense_enabled = false\nautomatic_context = true\ndefault_lens = "scene"\nchunk_chars = 700\nchunk_overlap_chars = 40\nmax_candidates = 40\nfinal_k = 8\nmax_per_source = 3\nrrf_k = 60\ntrace_enabled = true\n\n'''
-            '''[memory.embedding]\nenabled = false\nprovider = "lmstudio"\nmodel = "intfloat/multilingual-e5-base"\ndimension = 768\nquery_prefix = "query: "\npassage_prefix = "passage: "\n''',
-            encoding="utf-8",
-        )
+        config_text = f"""[lmstudio]
+base_url = "http://127.0.0.1:1"
+model = ""
+api_key = ""
+timeout_seconds = 0.2
+auto_load = false
+
+[history]
+database_path = "{db.as_posix()}"
+dataset_root = "{(root / 'datasets').as_posix()}"
+recent_limit = 100
+continuity_turns = 2
+continuity_chars = 12000
+smart_hybrid_continuity = true
+
+[workspace]
+database_path = "{db.as_posix()}"
+default_project_id = ""
+context_enabled = true
+mention_limit = 20
+pinned_context_limit = 24
+autosave_drafts = true
+language_mode = "follow_prompt"
+
+[writer]
+input_mode = "smart_hybrid"
+system_prompt_file = "writer_system.txt"
+story_filename = "story.txt"
+save_request_packet = false
+post_validate = false
+
+[reasoning_runtime]
+enforce_model_capabilities = false
+guard_prompt_file = "reasoning_guard.txt"
+
+[memory]
+enabled = true
+fts_enabled = true
+dense_enabled = false
+automatic_context = true
+default_lens = "scene"
+chunk_chars = 700
+chunk_overlap_chars = 40
+max_candidates = 40
+final_k = 8
+max_per_source = 3
+rrf_k = 60
+trace_enabled = true
+
+[memory.embedding]
+enabled = false
+provider = "lmstudio"
+model = "intfloat/multilingual-e5-base"
+dimension = 768
+query_prefix = "query: "
+passage_prefix = "passage: "
+"""
+        cfg.write_text(config_text, encoding="utf-8")
         return TestClient(create_app(cfg))
 
     def test_memory_vertical_slice_and_scope_isolation(self) -> None:
