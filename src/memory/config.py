@@ -10,10 +10,10 @@ from typing import Any
 class EmbeddingConfig:
     enabled: bool = False
     provider: str = "lmstudio"
-    model: str = "intfloat/multilingual-e5-base"
-    dimension: int = 768
-    query_prefix: str = "query: "
-    passage_prefix: str = "passage: "
+    model: str = "text-embedding-bge-m3"
+    dimension: int = 1024
+    query_prefix: str = ""
+    passage_prefix: str = ""
     batch_size: int = 32
     timeout_seconds: float = 120.0
 
@@ -73,10 +73,10 @@ class MemoryConfig:
             embedding=EmbeddingConfig(
                 enabled=bool(embedding.get("enabled", dense_enabled)),
                 provider=str(embedding.get("provider", "lmstudio")),
-                model=str(embedding.get("model", "intfloat/multilingual-e5-base")),
-                dimension=max(1, int(embedding.get("dimension", 768))),
-                query_prefix=str(embedding.get("query_prefix", "query: ")),
-                passage_prefix=str(embedding.get("passage_prefix", "passage: ")),
+                model=str(embedding.get("model", "text-embedding-bge-m3")),
+                dimension=max(1, int(embedding.get("dimension", 1024))),
+                query_prefix=str(embedding.get("query_prefix", "")),
+                passage_prefix=str(embedding.get("passage_prefix", "")),
                 batch_size=max(1, int(embedding.get("batch_size", 32))),
                 timeout_seconds=max(1.0, float(embedding.get("timeout_seconds", 120.0))),
             ),
