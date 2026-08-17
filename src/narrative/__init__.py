@@ -18,6 +18,7 @@ from .rails import (
     RailKind,
     RailPacing,
 )
+from .dynamics import BeatBudget, SceneDynamicsPlan, SceneDynamicsPlanner
 
 __all__ = [
     "AuthorialFreedom",
@@ -40,4 +41,7 @@ __all__ = [
     "RailIntensity",
     "RailKind",
     "RailPacing",
+    "BeatBudget",
+    "SceneDynamicsPlan",
+    "SceneDynamicsPlanner",
 ]
