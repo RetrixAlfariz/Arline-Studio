@@ -26,13 +26,52 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Make one-shot parser regex-safe
+      - name: Make one-shot JS parser syntax-aware
         run: |
           python - <<'PY'
           from pathlib import Path
           import re
           p = Path('tools/apply_v11_hardening.py')
           s = p.read_text(encoding='utf-8')
+
+          # A function signature may destructure objects. Only a { reached after
+          # the parameter parenthesis closes is the body brace.
+          body_parser = r'''def find_open_brace(text: str, i: int) -> int:
+              n = len(text)
+              paren_depth = 1
+              bracket_depth = 0
+              while i < n:
+                  if text.startswith("//", i) or text.startswith("/*", i):
+                      i = skip_comment(text, i)
+                      continue
+                  if text[i] in "'\"`":
+                      i = skip_string(text, i, text[i])
+                      continue
+                  ch = text[i]
+                  if ch == "(":
+                      paren_depth += 1
+                  elif ch == ")":
+                      paren_depth = max(0, paren_depth - 1)
+                  elif ch == "[":
+                      bracket_depth += 1
+                  elif ch == "]":
+                      bracket_depth = max(0, bracket_depth - 1)
+                  elif ch == "{" and paren_depth == 0 and bracket_depth == 0:
+                      return i
+                  i += 1
+              raise RuntimeError("Function body brace not found")
+
+
+          def find_matching_brace'''
+          s, n = re.subn(
+              r'def find_open_brace\(text: str, i: int\) -> int:.*?\n\n\ndef find_matching_brace',
+              lambda _m: body_parser,
+              s,
+              count=1,
+              flags=re.S,
+          )
+          if n != 1: raise SystemExit(f'function-body parser patch count={n}')
+
           replacement = r'''  const boundary = (ch) => !ch || /\s/.test(ch) || ".,;:!?()[]{}<>/\\\\|+=*~—–-".includes(ch) || ch === '"' || ch === "'" || ch === "\\x60";'''
           s, n = re.subn(r'^  const boundary = \(ch\) => .*?;$', lambda _m: replacement, s, count=1, flags=re.M)
           if n != 1: raise SystemExit(f'boundary patch count={n}')
