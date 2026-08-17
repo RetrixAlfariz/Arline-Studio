@@ -4,6 +4,10 @@
 window.ARLINE_COMMANDS = [
   { id: "continue", label: "/continue", description: "Continue the active scene", action: "insert", text: "/continue " },
   { id: "rewrite", label: "/rewrite", description: "Rewrite selected/current material", action: "insert", text: "/rewrite " },
+  { id: "mono", label: "/mono", description: "Character-aware monologue seed; internal by default, delivery modifiers supported", action: "insert", text: "/mono @character \"intent or thought\" " },
+  { id: "dia", label: "/dia", description: "Character-aware interaction rail; beat-driven rather than fixed alternating turns", action: "insert", text: "/dia @characterA@characterB \"topic or interaction goal\" " },
+  { id: "ambience", label: "/ambience", description: "Guide scene atmosphere, sensory palette, and pacing without changing canon", action: "insert", text: "/ambience slow \"scene atmosphere\" " },
+  { id: "intimacy", label: "/intimacy", description: "Guide character-aware intimate scene dynamics, pacing, and aftermath", action: "insert", text: "/intimacy @character slow \"scene intent\" " },
   { id: "analyze", label: "/analyze", description: "Analyze the current prompt without generation", action: "analyze" },
   { id: "new-scene", label: "Create scene", description: "Create a new scene document", action: "new-document" },
   { id: "new-character", label: "Create character", description: "Create a character family and current-world variant", action: "new-character" },
