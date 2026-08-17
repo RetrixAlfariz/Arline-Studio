@@ -257,6 +257,7 @@ function closeInspector() {
 function activateInspectorTab(tab) {
   $$("[data-inspector-tab]").forEach((node) => node.classList.toggle("active", node.dataset.inspectorTab === tab));
   $$("[data-inspector-panel]").forEach((node) => node.classList.toggle("active", node.dataset.inspectorPanel === tab));
+  if (tab === "review") loadFeedbackLab();
 }
 
 function openSheet() {
@@ -2053,7 +2054,7 @@ const COMMAND_HANDLERS = {
   sandbox: () => createSandbox(),
   snapshot: () => createSnapshot(),
   "world-picker": () => openContextStackEditor(),
-  data: () => setView("data"),
+  data: () => { openInspector("review"); loadFeedbackLab(); },
   inspector: () => openInspector(),
   scratch: () => toggleScratchMode(),
   "fork-chat": () => state.activeSession ? forkSession(state.activeSession.id) : toast("Open a chat first"),
@@ -2299,6 +2300,10 @@ async function navigateHistory(delta) {
 }
 
 function setView(view, options = {}) {
+  if (view === "data") {
+    view = "home";
+    queueMicrotask(() => { openInspector("review"); loadFeedbackLab(); });
+  }
   state.activeView = view;
   document.body.dataset.activeView = view;
   const routeName = view === "draft" ? "manuscript" : view === "world" ? "library" : view;
@@ -2308,7 +2313,6 @@ function setView(view, options = {}) {
   if (view === "home") loadHome();
   if (view === "world") { renderWorldLibraryNavigation(); renderWorldGrid(); }
   if (view === "draft") renderDocuments();
-  if (view === "data") loadFeedbackLab();
   if (options.record !== false) recordNavigation();
   saveLocalPrefs({ lastView: view });
 }
@@ -2934,12 +2938,13 @@ function renderHome() {
   const sceneDoc = scene?.document_id ? state.documents.find((d)=>d.id===scene.document_id) : null;
   byId("homeContinue").innerHTML = scene ? `<button class="home-action-row" data-home-doc="${escapeHTML(scene.document_id||"")}"><span>◎</span><div><b>${escapeHTML(sceneDoc?.title||"Active scene")}</b><small>${escapeHTML(scene.narrative_time||"Narrative cursor")}</small></div><em>Continue →</em></button>` : `<div class="empty-note">No active scene. Set one from Manuscript when you want scene-aware context.</div>`;
   const feedback = data.feedback || {};
-  byId("homeAttention").innerHTML = `<button class="home-action-row" data-home-view="data"><span>◫</span><div><b>${feedback.unreviewed||0} responses to review</b><small>Feedback Lab</small></div><em>Open →</em></button><button class="home-action-row" data-home-activity="1"><span>◌</span><div><b>${(data.issues||[]).length} unresolved issues</b><small>${state.stagedChanges.length} canon changes staged</small></div><em>Inspect →</em></button>`;
+  byId("homeAttention").innerHTML = `<button class="home-action-row" data-home-review="1"><span>◫</span><div><b>${feedback.unreviewed||0} responses to review</b><small>Review & Evals · Settings</small></div><em>Open →</em></button><button class="home-action-row" data-home-activity="1"><span>◌</span><div><b>${(data.issues||[]).length} unresolved issues</b><small>${state.stagedChanges.length} canon changes staged</small></div><em>Inspect →</em></button>`;
   const recentDocs = data.recent_documents || [], recentChats = data.recent_chats || [];
   byId("homeRecent").innerHTML = [...recentDocs.slice(0,4).map((d)=>`<button class="home-action-row" data-home-doc="${d.id}"><span>▤</span><div><b>${escapeHTML(d.title)}</b><small>${escapeHTML(d.document_type)} · ${formatRelative(d.updated_at)}</small></div></button>`),...recentChats.slice(0,4).map((c)=>`<button class="home-action-row" data-home-chat="${c.id}"><span>◉</span><div><b>${escapeHTML(c.title)}</b><small>${formatRelative(c.updated_at)}</small></div></button>`)].join("")||`<div class="empty-note">Start a chat or create your first scene.</div>`;
   const favorites = data.favorites || state.favorites || [];
   byId("homeFavorites").innerHTML = favorites.map((f)=>`<button class="home-action-row" data-home-resource="${escapeHTML(f.resource_type)}:${escapeHTML(f.resource_id)}"><span>★</span><div><b>${escapeHTML(f.label||f.resource_id)}</b><small>${escapeHTML(f.resource_type.replaceAll("_"," "))}</small></div></button>`).join("")||`<div class="empty-note">Pin frequently used sheets, scenes, or worlds here.</div>`;
   $$('[data-home-view]',byId("homeView")).forEach((b)=>b.addEventListener("click",()=>setView(b.dataset.homeView)));
+  $$('[data-home-review]',byId("homeView")).forEach((b)=>b.addEventListener("click",()=>{openInspector("review");loadFeedbackLab();}));
   $$('[data-home-doc]',byId("homeView")).forEach((b)=>b.addEventListener("click",()=>b.dataset.homeDoc&&openDocument(b.dataset.homeDoc)));
   $$('[data-home-chat]',byId("homeView")).forEach((b)=>b.addEventListener("click",()=>openSession(b.dataset.homeChat)));
   $$('[data-home-activity]',byId("homeView")).forEach((b)=>b.addEventListener("click",openActivityCenter));
@@ -3279,10 +3284,10 @@ function attachEvents() {
     renderWorldLibraryNavigation(); renderWorldGrid(); recordNavigation();
   });
   on("newTagBtn", "click", openTagForm);
-  on("openDataBtn", "click", () => setView("data"));
+  on("openDataBtn", "click", () => { openInspector("review"); loadFeedbackLab(); });
 
   on("settingsBtn", "click", () => openInspector("runtime"));
-  on("openFeedbackLabBtn", "click", () => { closeInspector(); setView("data"); });
+  on("openFeedbackLabBtn", "click", () => { openInspector("review"); loadFeedbackLab(); });
   on("settingsSearch", "input", applySettingsFilter);
   on("refreshBackupsBtn", "click", loadBackups);
   on("settingsDensity", "change", (event) => { document.body.dataset.density = event.target.value; saveLocalPrefs({ density:event.target.value }); });

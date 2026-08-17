@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#202220" />
   <title>Arline Studio</title>
-  <link rel="stylesheet" href="/static/arline.css" />
+  <link rel="stylesheet" href="/static/arline.css?v=1.1.1-settings" />
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -94,7 +94,7 @@
           <button id="activityBtn" class="context-scope-button" title="Activity and issues"><span>◌</span><b id="activityCount">0</b></button>
           <button id="contextScopeBtn" class="context-scope-button" title="AI Context Stack"><span>◎</span><b id="contextScopeLabel">0 refs</b></button>
           <div id="connectionBadge" class="connection-badge offline"><span></span><b>LM Studio</b><em>offline</em></div>
-          <button id="openInspectorBtn" class="icon-btn" title="Developer inspector">⚙</button>
+          <button id="openInspectorBtn" class="icon-btn" title="Settings">⚙</button>
         </div>
       </header>
 
@@ -260,29 +260,6 @@
             </div>
           </div>
         </section>
-
-        <!-- FEEDBACK LAB -->
-        <section id="dataView" class="workspace-view" data-view-panel="data">
-          <div class="data-page feedback-lab">
-            <header class="page-header"><div><span class="eyebrow">Learning loop</span><h1>Feedback Lab</h1><p>Review Arline's output. Training and evaluation data are produced underneath as a consequence of your decisions.</p></div><button id="feedbackAdvancedToggle" class="secondary-btn">Data & evaluation</button></header>
-            <div id="datasetCards" class="metric-grid"></div>
-            <nav class="feedback-tabs"><button class="active" data-feedback-tab="queue">Review queue</button><button data-feedback-tab="comparisons">Comparisons</button><button data-feedback-tab="reviewed">Reviewed</button></nav>
-            <section class="feedback-workbench">
-              <div id="feedbackQueue" class="feedback-queue"></div>
-              <div id="feedbackQueueEmpty" class="empty-state"><b>Nothing waiting for review.</b><span>New generated prose will appear here until you accept, edit, or reject it.</span></div>
-            </section>
-            <section id="feedbackAdvanced" class="data-section feedback-advanced hidden">
-              <div class="section-head"><div><h2>Data & evaluation</h2><p>Exports are advanced artifacts; lineage remains attached automatically.</p></div></div>
-              <div class="export-grid">
-                <button data-export="master"><b>Master records</b><span>Full lineage and artifacts</span></button>
-                <button data-export="sft"><b>SFT</b><span>Accepted context → final prose</span></button>
-                <button data-export="preference"><b>Preference</b><span>Chosen vs rejected candidates</span></button>
-                <button data-export="eval"><b>Evaluator</b><span>Context + issue labels</span></button>
-              </div>
-              <div class="policy-card"><code>generated ≠ accepted</code><code>edited + accepted = gold</code><code>rejected = negative</code><code>chat forks = comparison opportunity</code></div>
-            </section>
-          </div>
-        </section>
       </main>
     </section>
 
@@ -344,10 +321,37 @@
         <p class="settings-help">Backups are created before schema migrations. Restore remains an explicit manual safety operation in v1.1.</p>
       </div>
       <div class="inspector-panel" data-inspector-panel="review">
-        <span class="eyebrow">Developer</span><h3>Review & Evals</h3>
-        <p class="settings-help">Output review, comparisons, SFT/preference exports, and evaluator artifacts live here instead of the primary writing navigation.</p>
-        <div id="developerReviewSummary" class="info-card">Open Review & Evals to inspect generated candidates.</div>
-        <button id="openFeedbackLabBtn" class="primary-btn wide">Open Review & Evals</button>
+        <div class="settings-panel-heading">
+          <span class="eyebrow">Developer</span>
+          <h3>Review & Evals</h3>
+          <p class="settings-help">Feedback Lab lives here. Review generated prose, compare forks, and export evaluation data without leaving Settings.</p>
+        </div>
+        <div class="settings-review-lab feedback-lab">
+          <div class="settings-review-head">
+            <div><h4>Feedback Lab</h4><p>Generated output remains separate from accepted training data until you review it.</p></div>
+            <button id="feedbackAdvancedToggle" class="secondary-btn">Data & evaluation</button>
+          </div>
+          <div id="datasetCards" class="metric-grid"></div>
+          <nav class="feedback-tabs" aria-label="Feedback review views">
+            <button class="active" data-feedback-tab="queue">Review queue</button>
+            <button data-feedback-tab="comparisons">Comparisons</button>
+            <button data-feedback-tab="reviewed">Reviewed</button>
+          </nav>
+          <section class="feedback-workbench">
+            <div id="feedbackQueue" class="feedback-queue"></div>
+            <div id="feedbackQueueEmpty" class="empty-state small"><b>Nothing waiting for review.</b><span>New generated prose appears here until you accept, edit, or reject it.</span></div>
+          </section>
+          <section id="feedbackAdvanced" class="feedback-advanced hidden">
+            <div class="section-head"><div><h4>Data & evaluation</h4><p>Exports keep their generation lineage automatically.</p></div></div>
+            <div class="export-grid">
+              <button data-export="master"><b>Master records</b><span>Full lineage and artifacts</span></button>
+              <button data-export="sft"><b>SFT</b><span>Accepted context → final prose</span></button>
+              <button data-export="preference"><b>Preference</b><span>Chosen vs rejected candidates</span></button>
+              <button data-export="eval"><b>Evaluator</b><span>Context + issue labels</span></button>
+            </div>
+            <div class="policy-card"><code>generated ≠ accepted</code><code>edited + accepted = gold</code><code>rejected = negative</code><code>chat forks = comparison opportunity</code></div>
+          </section>
+        </div>
       </div>
       <div class="inspector-panel" data-inspector-panel="trace"><label>Writer-visible fact<select id="traceSelect"><option value="">Analyze first…</option></select></label><pre id="traceOutput" class="code-output active">Select a fact.</pre></div>
       <div class="inspector-panel" data-inspector-panel="validator"><span class="eyebrow">Pre-write</span><pre id="wcfValidation" class="code-output active compact">No validation.</pre><span class="eyebrow gap">Post-write</span><pre id="postValidation" class="code-output active compact">Generate first.</pre></div>
@@ -395,7 +399,7 @@
     <div id="toast" class="toast hidden"></div>
     <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><b id="loadingTitle">Arline is working…</b><span id="loadingDetail">Preparing context</span></div>
   </div>
-  <script src="/static/js/stream.js" defer></script>
-  <script src="/static/arline.js" defer></script>
+  <script src="/static/js/stream.js?v=1.1.1-settings" defer></script>
+  <script src="/static/arline.js?v=1.1.1-settings" defer></script>
 </body>
 </html>
