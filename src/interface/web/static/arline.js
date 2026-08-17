@@ -87,6 +87,8 @@ const state = {
     contextBreakdown: null,
   },
   draftTimer: null,
+  activeGenerationController: null,
+  liveRun: null,
 };
 
 const ISSUE_LABELS = [
@@ -1559,11 +1561,19 @@ async function toggleScratchMode() {
 
 function turnHTML(turn) {
   const story = turn.feedback_status === "edited_accept" && turn.edited_story ? turn.edited_story : turn.story;
-  const stats = turn.stats || {}; const total = stats.total_output_tokens || 0; const reason = stats.reasoning_output_tokens || 0; const visible = Math.max(0, total - reason);
+  const stats = turn.stats || {};
+  const total = stats.total_output_tokens || 0;
+  const reason = stats.reasoning_output_tokens || 0;
+  const visible = Math.max(0, total - reason);
+  const quality = turn.post_validation?.quality_report || null;
+  const runStatus = stats.run_status || "completed";
+  const thinking = turn.reasoning_text && state.config?.show_reasoning !== false
+    ? `<details class="thinking-panel"><summary>Thinking${reason ? ` · ${reason} tokens` : ""}</summary><pre>${escapeHTML(turn.reasoning_text)}</pre></details>` : "";
+  const qualityChip = quality ? `<button class="quality-chip quality-turn ${quality.issue_count ? "warning" : ""}">Quality ${quality.score ?? "—"}${quality.issue_count ? ` · ${quality.issue_count} issues` : ""}</button>` : "";
   return `<article class="turn" data-turn-id="${turn.id}">
     <div class="turn-user"><div class="user-bubble">${escapeHTML(turn.user_prompt)}</div></div>
-    <div class="turn-assistant"><div class="assistant-head"><div class="assistant-meta"><span class="run-chip">${escapeHTML(turn.run_id)}</span><span>${escapeHTML(turn.model || "model")}</span><span>${escapeHTML(turn.mode)} · ${escapeHTML(turn.reasoning)}</span>${turn.feedback_status && turn.feedback_status !== "unreviewed" ? `<span class="feedback-badge ${turn.feedback_status}">${escapeHTML(turn.feedback_status)}</span>` : ""}</div><div class="assistant-actions"><button class="tiny-btn fork-turn">↗ Fork here</button><button class="tiny-btn state-turn">∆ State</button><button class="tiny-btn copy-turn">Copy</button><button class="tiny-btn inspect-turn">Inspect</button><button class="tiny-btn save-turn">Save run</button></div></div>
-    ${turn.feedback_status === "edited_accept" ? `<div class="edited-marker">Human-edited accepted version</div>` : ""}<div class="story-output">${storyHTML(story)}</div>
+    <div class="turn-assistant"><div class="assistant-head"><div class="assistant-meta"><span class="run-chip">${escapeHTML(turn.run_id)}</span><span>${escapeHTML(turn.model || "model")}</span><span>${escapeHTML(turn.mode)} · ${escapeHTML(turn.reasoning)}</span>${runStatus !== "completed" ? `<span class="turn-status-badge ${escapeHTML(runStatus)}">${escapeHTML(runStatus)}</span>` : ""}${turn.feedback_status && turn.feedback_status !== "unreviewed" ? `<span class="feedback-badge ${turn.feedback_status}">${escapeHTML(turn.feedback_status)}</span>` : ""}${qualityChip}</div><div class="assistant-actions"><button class="tiny-btn retry-turn">↻ Retry</button><button class="tiny-btn fork-turn">↗ Fork here</button><button class="tiny-btn state-turn">∆ State</button><button class="tiny-btn copy-turn">Copy</button><button class="tiny-btn inspect-turn">Inspect</button><button class="tiny-btn save-turn">Save run</button></div></div>
+    ${thinking}${turn.feedback_status === "edited_accept" ? `<div class="edited-marker">Human-edited accepted version</div>` : ""}<div class="story-output">${storyHTML(story)}</div>
     <div class="usage-strip">${stats.input_tokens ? `<span class="usage-pill">${stats.input_tokens} in</span>` : ""}${visible ? `<span class="usage-pill">${visible} story</span>` : ""}${reason ? `<span class="usage-pill warning">${reason} reasoning</span>` : ""}${stats.tokens_per_second ? `<span class="usage-pill">${Number(stats.tokens_per_second).toFixed(1)} tok/s</span>` : ""}</div>
     <div class="feedback-row"><button class="accept">✓ Accept</button><button class="edit-accept">✎ Edit & Accept</button><button class="reject">✕ Reject</button><button class="quick-from-turn">＋ Create from prose</button><button class="promote">＋ Stage canon change</button></div></div>
   </article>`;
@@ -1571,17 +1581,27 @@ function turnHTML(turn) {
 
 function bindTurnActions() {
   $$(".turn").forEach((node) => {
-    const turnId = node.dataset.turnId; const storyNode = $(".story-output", node);
-    $(".copy-turn", node).addEventListener("click", () => navigator.clipboard.writeText(storyNode.innerText).then(() => toast("Copied")));
-    $(".inspect-turn", node).addEventListener("click", () => inspectTurn(turnId));
-    $(".save-turn", node).addEventListener("click", () => saveRunFromTurn(turnId));
-    $(".fork-turn", node).addEventListener("click", () => state.activeSession && forkSession(state.activeSession.id, turnId));
-    $(".state-turn", node).addEventListener("click", () => reviewStateProposals(turnId, storyNode.innerText));
-    $(".quick-from-turn", node).addEventListener("click", () => openQuickCreate(window.getSelection()?.toString().trim() || storyNode.innerText.slice(0, 600)));
-    $(".accept", node).addEventListener("click", () => openFeedback(turnId, "accepted"));
-    $(".edit-accept", node).addEventListener("click", () => openFeedback(turnId, "edited_accept", storyNode.innerText));
-    $(".reject", node).addEventListener("click", () => openFeedback(turnId, "rejected"));
-    $(".promote", node).addEventListener("click", () => openStagedChangeForm(turnId, window.getSelection()?.toString().trim() || storyNode.innerText.slice(0, 300)));
+    const turnId = node.dataset.turnId;
+    if (!turnId) return;
+    const storyNode = $(".story-output", node);
+    const turn = state.activeSession?.turns?.find?.((item) => item.id === turnId);
+    $(".copy-turn", node)?.addEventListener("click", () => navigator.clipboard.writeText(storyNode.innerText).then(() => toast("Copied")));
+    $(".inspect-turn", node)?.addEventListener("click", () => inspectTurn(turnId));
+    $(".save-turn", node)?.addEventListener("click", () => saveRunFromTurn(turnId));
+    $(".fork-turn", node)?.addEventListener("click", () => state.activeSession && forkSession(state.activeSession.id, turnId));
+    $(".state-turn", node)?.addEventListener("click", () => reviewStateProposals(turnId, storyNode.innerText));
+    $(".retry-turn", node)?.addEventListener("click", () => {
+      if (!turn) return;
+      byId("promptInput").value = turn.user_prompt || "";
+      refreshPromptHighlight(); updateBudgetUI(); byId("promptInput").focus();
+      generateStory();
+    });
+    $(".quality-turn", node)?.addEventListener("click", () => turn && showQualityReport(turn));
+    $(".quick-from-turn", node)?.addEventListener("click", () => openQuickCreate(window.getSelection()?.toString().trim() || storyNode.innerText.slice(0, 600)));
+    $(".accept", node)?.addEventListener("click", () => openFeedback(turnId, "accepted"));
+    $(".edit-accept", node)?.addEventListener("click", () => openFeedback(turnId, "edited_accept", storyNode.innerText));
+    $(".reject", node)?.addEventListener("click", () => openFeedback(turnId, "rejected"));
+    $(".promote", node)?.addEventListener("click", () => openStagedChangeForm(turnId, window.getSelection()?.toString().trim() || storyNode.innerText.slice(0, 300)));
   });
 }
 
@@ -2059,7 +2079,128 @@ function retconFact(fact){openForm({title:"Retcon fact",eyebrow:"Impact preview"
 
 function setDocumentActiveScene(){if(!state.activeDocument)return toast("Open a project document first");openActiveSceneForm(state.activeDocument.id);}
 
-async function generateStory(){const payload=promptPayload();if(!payload.prompt.trim())return toast("Write a prompt first");if(!payload.model)return toast("Select a model first");loading(true,payload.generation_mode==="beats"?"Writing story beats…":"Writing story…",state.scratchMode?"Scratch mode · canon staging disabled":"Compiling explainable context and calling LM Studio");try{const result=await api("/api/generate",{method:"POST",body:payload});state.activeRunId=result.run_id;state.activeSession={id:result.session_id,title:result.session_title,workspace_refs:payload.references,scratch_mode:result.scratch_mode};state.activeTurn={id:result.turn_id};state.scratchMode=Boolean(result.scratch_mode);loadContextResult(result);byId("postValidation").textContent=pretty(result.post_validation||{});byId("reasoningOutput").textContent=result.reasoning||"No separate reasoning output.";byId("statsOutput").textContent=pretty(result.stats||{});await Promise.all([loadSessions(),openSession(result.session_id),loadDatasetStats()]);byId("promptInput").value="";refreshPromptHighlight();updateBudgetUI();toast(`Generated ${result.run_id}${state.scratchMode?" · scratch":""}`);}catch(error){toast(`Generation failed: ${error.message}`,6000);}finally{loading(false);}}
+function showQualityReport(turn) {
+  const report = turn?.post_validation?.quality_report;
+  if (!report) return toast("No prose-quality report stored for this turn");
+  byId("compareTitle").textContent = `Prose quality · ${report.score ?? "—"}/100`;
+  byId("compareBody").innerHTML = report.issues?.length
+    ? `<div class="proposal-list">${report.issues.map((issue) => `<article><div><b>${escapeHTML(issue.kind.replaceAll("_", " "))}</b><small>${escapeHTML(issue.severity)}</small></div><p>${escapeHTML(issue.message)}</p>${issue.terms ? `<pre>${escapeHTML(pretty(issue.terms))}</pre>` : ""}</article>`).join("")}</div>`
+    : `<div class="empty-state small"><b>No notable surface warnings.</b><span>The validator intentionally flags suspicious prose without rewriting story facts.</span></div>`;
+  byId("compareDialog").showModal();
+}
+
+function createLiveTurn(payload) {
+  byId("chatLanding")?.classList.add("hidden");
+  byId("conversationSection")?.classList.remove("hidden");
+  const feed = byId("conversationFeed");
+  const node = document.createElement("article");
+  node.className = "turn live-turn";
+  node.innerHTML = `<div class="turn-user"><div class="user-bubble">${escapeHTML(payload.prompt)}</div></div><div class="turn-assistant live-run-shell"><div class="assistant-head"><div class="assistant-meta"><span class="run-chip live-run-id">RUN</span><span>${escapeHTML(payload.model || "model")}</span></div><div class="assistant-actions"><button class="tiny-btn live-copy">Copy partial</button></div></div><div class="live-stage-row"><span class="live-stage-dot"></span><b class="live-stage">Preparing context</b><span class="live-stage-progress"><i></i></span></div><details class="thinking-panel live-thinking hidden"><summary>Thinking</summary><pre></pre></details><div class="story-output live-output stream-caret"></div><div class="feedback-row live-recovery hidden"><button class="live-retry">↻ Retry</button><button class="live-copy-partial">Copy partial</button></div></div>`;
+  feed.appendChild(node); node.scrollIntoView({ behavior: "smooth", block: "end" });
+  const live = { node, prompt: payload.prompt, answer: "", reasoning: "", quality: null, sessionId: null, runId: null };
+  $(".live-copy", node)?.addEventListener("click", () => navigator.clipboard.writeText(live.answer).then(() => toast("Partial response copied")));
+  $(".live-copy-partial", node)?.addEventListener("click", () => navigator.clipboard.writeText(live.answer).then(() => toast("Partial response copied")));
+  $(".live-retry", node)?.addEventListener("click", () => { byId("promptInput").value = live.prompt; refreshPromptHighlight(); generateStory(); });
+  return live;
+}
+
+function updateLiveStage(live, message, progress = null) {
+  if (!live?.node) return;
+  $(".live-stage", live.node).textContent = message || "Working";
+  if (progress != null) $(".live-stage-progress i", live.node).style.width = `${Math.max(4, Math.min(100, Number(progress) * 100))}%`;
+}
+
+function setGenerateRunning(running) {
+  const button = byId("generateBtn");
+  button?.classList.toggle("generating", running);
+  if (button) { button.textContent = running ? "■" : "↑"; button.setAttribute("aria-label", running ? "Stop generation" : "Generate"); }
+}
+
+async function finalizeGenerationResult(result, payload) {
+  state.activeRunId = result.run_id;
+  state.activeSession = { id: result.session_id, title: result.session_title, workspace_refs: payload.references, scratch_mode: result.scratch_mode };
+  state.activeTurn = { id: result.turn_id };
+  state.scratchMode = Boolean(result.scratch_mode);
+  loadContextResult(result);
+  byId("postValidation").textContent = pretty(result.post_validation || {});
+  byId("reasoningOutput").textContent = result.reasoning || "No separate reasoning output.";
+  byId("statsOutput").textContent = pretty(result.stats || {});
+  await Promise.all([loadSessions(), openSession(result.session_id), loadDatasetStats()]);
+  updateBudgetUI();
+}
+
+async function generateStory() {
+  if (state.activeGenerationController) {
+    state.activeGenerationController.abort();
+    return;
+  }
+  const payload = promptPayload();
+  if (!payload.prompt.trim()) return toast("Write a prompt first");
+  if (!payload.model) return toast("Select a model first");
+  const live = createLiveTurn(payload);
+  state.liveRun = live;
+  byId("promptInput").value = ""; refreshPromptHighlight(); updateBudgetUI();
+  setGenerateRunning(true);
+
+  try {
+    if (payload.generation_mode === "beats") {
+      updateLiveStage(live, "Writing story beats");
+      const result = await api("/api/generate", { method: "POST", body: payload });
+      live.answer = result.story || "";
+      $(".live-output", live.node).classList.remove("stream-caret");
+      $(".live-output", live.node).innerHTML = storyHTML(live.answer);
+      await finalizeGenerationResult(result, payload);
+      return;
+    }
+
+    const controller = new AbortController();
+    state.activeGenerationController = controller;
+    const response = await fetch("/api/generate/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    let finalResult = null;
+    await window.ArlineStream.consume(response, async ({ type, data }) => {
+      if (type === "run.start") {
+        live.sessionId = data.session_id; live.runId = data.run_id;
+        $(".live-run-id", live.node).textContent = data.run_id || "RUN";
+      } else if (type === "stage") {
+        updateLiveStage(live, data.content || data.state || "Working", data.progress);
+      } else if (type === "reasoning.delta") {
+        live.reasoning += data.content || "";
+        const panel = $(".live-thinking", live.node);
+        panel?.classList.remove("hidden");
+        $("pre", panel).textContent = live.reasoning;
+      } else if (type === "answer.delta") {
+        live.answer += data.content || "";
+        const output = $(".live-output", live.node); output.textContent = live.answer;
+        live.node.scrollIntoView({ behavior: "auto", block: "end" });
+      } else if (type === "quality") {
+        live.quality = data;
+      } else if (type === "done") {
+        finalResult = data;
+      } else if (type === "error") {
+        throw new Error(data.message || data.detail || "Generation failed");
+      }
+    });
+    if (!finalResult) throw new Error("Generation stream ended without a final result");
+    $(".live-output", live.node).classList.remove("stream-caret");
+    $(".live-output", live.node).innerHTML = storyHTML(finalResult.story || live.answer);
+    updateLiveStage(live, "Complete", 1);
+    await finalizeGenerationResult(finalResult, payload);
+  } catch (error) {
+    const aborted = error?.name === "AbortError";
+    updateLiveStage(live, aborted ? "Stopped" : "Generation interrupted");
+    $(".live-output", live.node)?.classList.remove("stream-caret");
+    $(".live-recovery", live.node)?.classList.remove("hidden");
+    toast(aborted ? "Generation stopped; partial prose is preserved when available" : `Generation failed: ${error.message}`, 6000);
+    if (live.sessionId) setTimeout(() => openSession(live.sessionId).catch(() => {}), 650);
+  } finally {
+    state.activeGenerationController = null; state.liveRun = null; setGenerateRunning(false);
+  }
+}
 
 function openWorldSheet(world) {
   byId("sheetEyebrow").textContent="Library · World";byId("sheetTitle").textContent=world.name;byId("sheetSubtitle").textContent=`${world.canon_status} · ${world.inheritance_mode}`;const lineage=world.lineage||[];
@@ -2148,6 +2289,9 @@ async function navigateHistory(delta) {
 
 function setView(view, options = {}) {
   state.activeView = view;
+  document.body.dataset.activeView = view;
+  const routeName = view === "draft" ? "manuscript" : view === "world" ? "library" : view;
+  if (!options.fromHash && location.hash !== `#/${routeName}`) history.replaceState(null, "", `#/${routeName}`);
   $$('[data-view]').forEach((button) => button.classList.toggle("active", button.dataset.view === view));
   $$('[data-view-panel]').forEach((panel) => panel.classList.toggle("active", panel.dataset.viewPanel === view));
   if (view === "home") loadHome();
@@ -2990,6 +3134,29 @@ async function deleteBranch(branch) {
 }
 
 
+function applySettingsFilter() {
+  const query = (byId("settingsSearch")?.value || "").trim().toLowerCase();
+  $$("#inspectorTabs [data-inspector-tab]").forEach((button) => {
+    button.classList.toggle("hidden", Boolean(query) && !button.textContent.toLowerCase().includes(query));
+  });
+}
+
+async function loadBackups() {
+  if (!byId("backupList")) return;
+  try {
+    const data = await api("/api/backups");
+    byId("storageSummary").innerHTML = `<b>${escapeHTML(data.database_name)}</b><br>${Number(data.database_bytes || 0).toLocaleString()} bytes · ${data.backups.length} migration backup(s)`;
+    byId("backupList").innerHTML = data.backups.length ? data.backups.map((item) => `<div class="settings-list-item"><div><b>${escapeHTML(item.name)}</b><small>${formatDate(item.modified_at)} · ${Number(item.bytes).toLocaleString()} bytes</small></div><span class="revision-badge">backup</span></div>`).join("") : `<div class="empty-note">No migration backups yet.</div>`;
+  } catch (error) { byId("backupList").innerHTML = `<div class="empty-note">${escapeHTML(error.message)}</div>`; }
+}
+
+function toggleFocusMode(force = null) {
+  const next = force == null ? !document.body.classList.contains("focus-mode") : Boolean(force);
+  document.body.classList.toggle("focus-mode", next);
+  if (byId("focusModeBtn")) byId("focusModeBtn").textContent = next ? "Exit focus" : "Focus";
+  saveLocalPrefs({ focusMode: next });
+}
+
 function attachEvents() {
   const on = (id, event, handler, options) => byId(id)?.addEventListener(event, handler, options);
   document.addEventListener("pointerdown", (event) => {
@@ -3006,6 +3173,7 @@ function attachEvents() {
   on("navBackBtn", "click", () => navigateHistory(-1));
   on("navForwardBtn", "click", () => navigateHistory(1));
   on("activityBtn", "click", openActivityCenter);
+  on("brandBtn", "click", () => setView("home"));
   on("contextStackEditBtn", "click", openContextStackEditor);
   on("contextStackSummary", "click", openContextStackEditor);
 
@@ -3049,13 +3217,18 @@ function attachEvents() {
     renderWorldLibraryNavigation(); renderWorldGrid(); recordNavigation();
   });
   on("newTagBtn", "click", openTagForm);
-  on("datasetFooterBtn", "click", () => setView("data"));
   on("openDataBtn", "click", () => setView("data"));
 
   on("settingsBtn", "click", () => openInspector("runtime"));
+  on("openFeedbackLabBtn", "click", () => { closeInspector(); setView("data"); });
+  on("settingsSearch", "input", applySettingsFilter);
+  on("refreshBackupsBtn", "click", loadBackups);
+  on("settingsDensity", "change", (event) => { document.body.dataset.density = event.target.value; saveLocalPrefs({ density:event.target.value }); });
+  on("settingsSidebarMode", "change", (event) => { const collapsed=event.target.value === "collapsed"; document.body.classList.toggle("sidebar-collapsed",collapsed); saveLocalPrefs({sidebarCollapsed:collapsed}); });
   on("openInspectorBtn", "click", () => openInspector());
   on("closeInspectorBtn", "click", closeInspector);
   on("inspectorScrim", "click", closeInspector);
+  window.addEventListener("hashchange", () => { const route=location.hash.replace(/^#\//,""); const view=route==="manuscript"?"draft":route==="library"?"world":route; if(["home","chat","draft","world","data"].includes(view) && view!==state.activeView) setView(view,{record:false,fromHash:true}); });
   on("closeSheetBtn", "click", closeSheet);
   on("sheetScrim", "click", closeSheet);
   $$('[data-inspector-tab]').forEach((button) => button.addEventListener("click", () => activateInspectorTab(button.dataset.inspectorTab)));
@@ -3095,6 +3268,7 @@ function attachEvents() {
 
   on("newDocumentBtn", "click", () => openDocumentForm());
   on("saveDraftBtn", "click", () => saveDraft("checkpoint"));
+  on("focusModeBtn", "click", () => toggleFocusMode());
   on("deleteDraftBtn", "click", () => state.activeDocument && deleteDocument(state.activeDocument));
   on("setActiveSceneBtn", "click", setDocumentActiveScene);
   on("newDependencyBtn", "click", openSceneDependencyForm);
@@ -3144,6 +3318,7 @@ function attachEvents() {
     if (mod && event.shiftKey && key === "p") { event.preventDefault(); openCommandPalette(">"); return; }
     if (mod && key === "n") { event.preventDefault(); if (event.shiftKey) newChat(); else openQuickCreate(); return; }
     if (mod && event.shiftKey && key === "i") { event.preventDefault(); openInspector(); return; }
+    if (mod && event.shiftKey && key === "f" && state.activeView === "draft") { event.preventDefault(); toggleFocusMode(); return; }
     if (mod && key === "s" && state.activeView === "draft") { event.preventDefault(); if (state.activeDocument) saveDraft("checkpoint"); else toast("Open a manuscript document first"); return; }
     if (mod && key === "z" && !editing && lastUndo) { event.preventDefault(); undoLastAction(); return; }
     if (event.altKey && event.key === "ArrowLeft") { event.preventDefault(); navigateHistory(-1); return; }
@@ -3151,6 +3326,10 @@ function attachEvents() {
     if (event.key === "Escape") { hideAutocomplete(); closeContextMenu(); scheduleHideReferencePeek(); }
   });
 
+  const prefs = localPrefs();
+  if (byId("settingsDensity")) byId("settingsDensity").value = prefs.density || "comfortable";
+  if (byId("settingsSidebarMode")) byId("settingsSidebarMode").value = prefs.sidebarCollapsed ? "collapsed" : "expanded";
+  if (prefs.focusMode && state.activeView === "draft") toggleFocusMode(true);
   refreshPromptHighlight(); updateScratchUI(); updateNavigationButtons();
 }
 
@@ -3163,8 +3342,10 @@ async function init() {
     applyConfig(config);
     if (byId("contractEditor")) byId("contractEditor").value = contract.content || "";
     await Promise.all([refreshModels(), loadWorkspaceBootstrap(), loadDatasetStats()]);
-    const preferred = localPrefs().lastView || "home";
-    setView(preferred, { record: false });
+    const route = location.hash.replace(/^#\//, "");
+    const routeView = route === "manuscript" ? "draft" : route === "library" ? "world" : ["home","chat"].includes(route) ? route : null;
+    const preferred = routeView || localPrefs().lastView || "home";
+    setView(preferred, { record: false, fromHash: true });
     if (preferred === "home") await loadHome();
     updateNavigationButtons(); updateContextStackUI();
   } catch (error) { toast(`Startup failed: ${error.message}`, 7000); }
