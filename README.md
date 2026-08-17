@@ -2,6 +2,10 @@
 
 Arline Studio is a Project that mainly focused on making story.
 
+## v1.1 status
+
+**Feature scope is frozen.** After the final v1.1 PR is merged, changes on the v1.1 line should be bug fixes, regressions, compatibility fixes, and data-safety fixes only. New memory/RAG, autonomous reasoning, visual-semantic analysis, consequence simulation, relationship dynamics, and other intelligence-layer work belongs to v1.2.
+
 ## v1.1 mental model
 
 - **Library** — what is true: worlds, entity sheets, variants, relationships, canon facts, lore, timeline.
