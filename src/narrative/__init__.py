@@ -9,6 +9,15 @@ from .state import (
 )
 from .voice import DescriptionLens, LanguageProfile, SceneEnergy, VoiceProfileExtractor
 from .brief import NarrativeBrief, NarrativeBriefBuilder
+from .rails import (
+    CharacterRail,
+    CharacterRailParser,
+    ExpressionChannel,
+    RailCompilation,
+    RailIntensity,
+    RailKind,
+    RailPacing,
+)
 
 __all__ = [
     "AuthorialFreedom",
@@ -24,4 +33,11 @@ __all__ = [
     "VoiceProfileExtractor",
     "NarrativeBrief",
     "NarrativeBriefBuilder",
+    "CharacterRail",
+    "CharacterRailParser",
+    "ExpressionChannel",
+    "RailCompilation",
+    "RailIntensity",
+    "RailKind",
+    "RailPacing",
 ]
