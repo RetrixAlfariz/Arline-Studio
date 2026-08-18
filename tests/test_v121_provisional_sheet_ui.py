@@ -9,6 +9,7 @@ STREAM_JS = ROOT / "src/interface/web/static/js/stream.js"
 SHEETS_JS = ROOT / "src/interface/web/static/js/discovery-sheets.js"
 DISCOVERY_WEB = ROOT / "src/discovery/web.py"
 PROVISIONAL = ROOT / "src/discovery/provisional.py"
+PROVISIONAL_RUNTIME = ROOT / "src/discovery/provisional_runtime.py"
 SPATIAL = ROOT / "src/discovery/spatial.py"
 
 
@@ -48,11 +49,30 @@ class V121ProvisionalSheetUITests(unittest.TestCase):
         self.assertIn('prop.get("operation") == "relation"', provisional)
         self.assertIn("SPATIAL_RELATIONS", provisional)
 
+    def test_lightweight_zone_edge_cannot_be_promoted_as_fake_entity(self):
+        source = SHEETS_JS.read_text(encoding="utf-8")
+        runtime = PROVISIONAL_RUNTIME.read_text(encoding="utf-8")
+        self.assertIn('rel.object_type === "spatial_zone"', source)
+        self.assertIn("Lightweight spatial-zone edge", source)
+        self.assertIn('prop.get("object_type") == "spatial_zone"', runtime)
+        self.assertIn("not directly canonizable", runtime)
+
+    def test_provisional_sheet_visibility_is_world_branch_aware(self):
+        source = SHEETS_JS.read_text(encoding="utf-8")
+        self.assertIn("function provisionalVisible", source)
+        self.assertIn("variant.family_id === family.id", source)
+        self.assertIn("variant.world_id === worldId", source)
+        self.assertIn("variant.branch_id === branchId", source)
+        self.assertIn("filteredWorldFamilies", source)
+        self.assertIn("referenceRegistry", source)
+        self.assertIn("another branch lineage", source)
+
     def test_apartment_is_a_type_floor_is_zone_and_unit_is_sheet(self):
         source = SPATIAL.read_text(encoding="utf-8")
         self.assertIn('"location_kind": "apartment_building"', source)
         self.assertIn('"zone_kind": "floor"', source)
         self.assertIn('"location_kind": "apartment_unit"', source)
+        self.assertIn('"floor_number"', source)
         self.assertIn('"area_m2"', source)
         self.assertIn('"room_count"', source)
         self.assertNotIn('subject_label="Apartemen"', source)
