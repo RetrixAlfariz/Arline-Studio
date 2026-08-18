@@ -47,7 +47,17 @@ class V121GarmentDiscoveryTests(unittest.TestCase):
         )
         return workspace, history, memory, project, world_id, branch, session, context
 
-    def test_detected_garment_materializes_as_item_sheet_with_garment_ontology(self):
+    @staticmethod
+    def physical_garments(workspace):
+        result = []
+        for item in workspace.list_entity_families(None, entity_type="item"):
+            core = item.get("shared_core") or {}
+            discovery = core.get("_discovery") or {}
+            if core.get("kind") == "garment" and discovery.get("physical_item_id"):
+                result.append(item)
+        return result
+
+    def test_detected_garment_materializes_as_physical_item_sheet_with_garment_ontology(self):
         with tempfile.TemporaryDirectory() as td:
             workspace, history, memory, project, world_id, branch, session, context = self.fixture(td)
             history.add_turn(
@@ -58,22 +68,30 @@ class V121GarmentDiscoveryTests(unittest.TestCase):
                 reasoning="off", projection_mode="off",
             )
 
-            items = workspace.list_entity_families(None, entity_type="item")
-            dress = next(item for item in items if item["name"].casefold() == "dress")
+            garments = self.physical_garments(workspace)
+            self.assertEqual(len(garments), 1)
+            dress = garments[0]
             core = dress.get("shared_core") or {}
+            discovery = core.get("_discovery") or {}
             self.assertEqual(core.get("kind"), "garment")
             self.assertEqual((core.get("garment") or {}).get("type"), "dress")
-            self.assertEqual((core.get("_discovery") or {}).get("semantic_type"), "garment")
+            self.assertEqual(discovery.get("semantic_type"), "garment")
+            self.assertEqual(discovery.get("identity_model"), "physical_instance_v1")
+            self.assertTrue(str(discovery.get("physical_item_id") or "").startswith("ITEM-"))
+            self.assertEqual(discovery.get("subject_key"), f"item:{discovery['physical_item_id']}")
 
             view = memory.discovery.resource_view(dress["id"], context)
             claims = {item["predicate"]: item for item in view["claims"]}
+            self.assertIn("item.kind", claims)
+            self.assertIn("garment.type", claims)
             self.assertIn("garment.color", claims)
             self.assertIn("garment.length", claims)
             self.assertIn("garment.material", claims)
             self.assertEqual(claims["garment.color"]["semantics"]["group"], "garment")
+            self.assertEqual(claims["garment.type"]["semantics"]["group"], "identity")
             self.assertEqual(claims["garment.material"]["value"], "rayon")
 
-    def test_wearing_relation_can_point_to_garment_item_sheet(self):
+    def test_wearing_relation_points_to_physical_garment_item(self):
         with tempfile.TemporaryDirectory() as td:
             workspace, history, memory, project, world_id, branch, session, context = self.fixture(td)
             history.add_turn(
@@ -84,18 +102,21 @@ class V121GarmentDiscoveryTests(unittest.TestCase):
                 reasoning="off", projection_mode="off",
             )
 
-            items = workspace.list_entity_families(None, entity_type="item")
-            dress = next(item for item in items if item["name"].casefold() == "dress")
+            garments = self.physical_garments(workspace)
+            self.assertEqual(len(garments), 1)
+            dress = garments[0]
+            subject_key = (dress.get("shared_core") or {}).get("_discovery", {}).get("subject_key")
             characters = workspace.list_entity_families(None, entity_type="character")
             alex = next(item for item in characters if item["name"].casefold() == "alex")
             view = memory.discovery.resource_view(alex["id"], context)
             wearing = [
                 item for item in view["relations"]
-                if item.get("object_key") == "garment:dress_1"
+                if item.get("object_key") == subject_key
                 and item.get("predicate") in {"wearing", "garment.wearing"}
             ]
             self.assertTrue(wearing)
             self.assertEqual(wearing[0].get("object_type"), "garment")
+            self.assertTrue(str(wearing[0].get("object_key") or "").startswith("item:ITEM-"))
             self.assertEqual(dress.get("entity_type"), "item")
 
 
