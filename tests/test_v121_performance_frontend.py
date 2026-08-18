@@ -10,22 +10,17 @@ MEMORY = ROOT / "src/interface/web/static/js/memory.js"
 
 
 class V121PerformanceFrontendTests(unittest.TestCase):
-    def test_hidden_discovery_list_is_not_on_project_navigation_hot_path(self):
+    def test_stream_prelude_does_not_patch_global_fetch_on_startup(self):
         source = STREAM.read_text(encoding="utf-8")
-        self.assertIn("discoveryLoadPolicy", source)
-        self.assertIn("deferredDiscoveryResponse", source)
-        self.assertIn('url.pathname === "/api/memory/discoveries"', source)
-        self.assertIn('state.activeWorldTab !== "discoveries"', source)
-        self.assertIn("installLazyDiscoveryProjectLoad", source)
-        self.assertIn("suppressDepth", source)
+        self.assertNotIn("globalThis.fetch =", source)
+        self.assertNotIn("discoveryLoadPolicy", source)
+        self.assertNotIn("deferredDiscoveryResponse", source)
 
-    def test_lazy_guard_never_blocks_an_explicit_discoveries_view(self):
-        source = STREAM.read_text(encoding="utf-8")
-        self.assertIn("hiddenView &&", source)
-        self.assertIn("startupSkips = 0", source)
+    def test_existing_discovery_navigation_remains_explicit(self):
         memory = MEMORY.read_text(encoding="utf-8")
         self.assertIn('state.activeWorldTab="discoveries"', memory)
         self.assertIn("loadDiscoveries()", memory)
+        self.assertIn("openDiscoveryView", memory)
 
     def test_existing_streaming_and_dynamic_sheet_contracts_remain_loaded(self):
         source = STREAM.read_text(encoding="utf-8")
