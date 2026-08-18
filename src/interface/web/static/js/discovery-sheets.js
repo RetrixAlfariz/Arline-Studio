@@ -59,15 +59,39 @@
     return Boolean(family?.shared_core?._discovery?.provisional);
   }
 
+  function activeBranchLineageIds() {
+    const state = appState();
+    const branches = state.activeWorld?.branches || [];
+    const lineage = new Set();
+    let cursor = state.activeBranch?.id || null;
+    while (cursor && !lineage.has(cursor)) {
+      lineage.add(cursor);
+      const branch = state.activeBranch?.id === cursor
+        ? state.activeBranch
+        : branches.find((item) => item.id === cursor);
+      cursor = branch?.parent_branch_id || null;
+    }
+    return lineage;
+  }
+
   function provisionalVisible(family) {
     if (!isProvisional(family)) return true;
     const state = appState();
+    const meta = family?.shared_core?._discovery || {};
     const worldId = state.activeWorld?.id || null;
     const branchId = state.activeBranch?.id || null;
-    if (!worldId) return false;
+    if (!worldId || !branchId) return false;
+    if (meta.source_world_id && meta.source_world_id !== worldId) return false;
+
+    const sourceBranchIds = Array.isArray(meta.source_branch_ids) ? meta.source_branch_ids : [];
+    if (sourceBranchIds.length) {
+      const lineage = activeBranchLineageIds();
+      return sourceBranchIds.some((id) => lineage.has(id));
+    }
+
+    // Compatibility fallback for workspaces materialized before source branch
+    // metadata existed. New projections use source_branch_ids above.
     const variants = (state.variants || []).filter((variant) => variant.family_id === family.id && variant.world_id === worldId);
-    // Base/main projection is inherited by world branches. Branch-only
-    // provisional identities stay hidden from unrelated sibling branches.
     return variants.some((variant) => !variant.branch_id || variant.branch_id === branchId);
   }
 
@@ -222,7 +246,7 @@
     else wrapSheet();
   }
 
-  window.ArlineProvisionalSheets = Object.freeze({decorate, provisionalVisible});
+  window.ArlineProvisionalSheets = Object.freeze({decorate, provisionalVisible, activeBranchLineageIds});
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, {once:true});
   else init();
 })();
