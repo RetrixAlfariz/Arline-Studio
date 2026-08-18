@@ -1,16 +1,17 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any
 
 from src.memory.query import MemoryQueryEngine
 from src.memory.security import evidence_wrapper
+from src.memory.service import MemoryService
 
 
 _INSTALLED = False
 _ORIGINAL_STRUCTURED = MemoryQueryEngine._structured_state
 _ORIGINAL_RRF = MemoryQueryEngine._rrf
 _ORIGINAL_PACK = MemoryQueryEngine._pack
+_ORIGINAL_STATUS = MemoryService.status
 
 
 def _structured_with_discovery(self: MemoryQueryEngine, plan, lane):
@@ -64,6 +65,25 @@ def _pack_with_discovery(plan, selected, excluded):
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _status_with_discovery(self: MemoryService):
+    status = dict(_ORIGINAL_STATUS(self))
+    discovery = getattr(self, "discovery", None)
+    if discovery is None:
+        status["discovery"] = {"propositions": 0, "instances": 0, "active_instances": 0, "canon": 0}
+        return status
+    try:
+        status["discovery"] = discovery.store.status()
+    except Exception as exc:
+        status["discovery"] = {
+            "propositions": 0,
+            "instances": 0,
+            "active_instances": 0,
+            "canon": 0,
+            "error": str(exc),
+        }
+    return status
+
+
 def install_discovery_memory_bridge() -> None:
     global _INSTALLED
     if _INSTALLED:
@@ -71,4 +91,5 @@ def install_discovery_memory_bridge() -> None:
     MemoryQueryEngine._structured_state = _structured_with_discovery
     MemoryQueryEngine._rrf = _rrf_with_discovery
     MemoryQueryEngine._pack = staticmethod(_pack_with_discovery)
+    MemoryService.status = _status_with_discovery
     _INSTALLED = True
