@@ -14,7 +14,7 @@ from .provisional import (
     _zone_labels,
 )
 from .service import DiscoveryService
-from .store import loads, utc_now
+from .store import loads
 
 
 _INSTALLED = False
@@ -234,6 +234,7 @@ def install_provisional_runtime_fix(service: DiscoveryService) -> None:
     original_resource_view = service.resource_view
     original_materialize_turn = service.materialize_turn
     original_materialize_existing = service.materialize_existing
+    original_promote_canon = service.promote_canon
 
     def resource_view_with_full_spatial(resource_id: str, context: MemoryQueryContext):
         result = original_resource_view(resource_id, context)
@@ -252,9 +253,19 @@ def install_provisional_runtime_fix(service: DiscoveryService) -> None:
         repair_existing_branch_projections(service, max(limit, 10000))
         return result
 
+    def promote_canon_guard(proposition_id: str, context: MemoryQueryContext, *, note: str = ""):
+        prop = service.store.get_proposition(proposition_id)
+        if prop.get("operation") == "relation" and prop.get("object_type") == "spatial_zone":
+            raise ValueError(
+                "Lightweight spatial-zone edges are not directly canonizable. "
+                "Canonize the scalar floor/slot attribute and the entity-to-entity containment relation instead."
+            )
+        return original_promote_canon(proposition_id, context, note=note)
+
     service.resource_view = resource_view_with_full_spatial
     service.materialize_turn = materialize_turn_with_branch
     service.materialize_existing = materialize_existing_with_branch
+    service.promote_canon = promote_canon_guard
     repair_existing_branch_projections(service)
     service._provisional_runtime_fix_installed = True
     _INSTALLED = True
