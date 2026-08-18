@@ -107,9 +107,6 @@
     if (!projectSelect || !worldSelect || projectSelect.dataset.scopeBridge === "1") return;
     projectSelect.dataset.scopeBridge = "1";
     projectSelect.addEventListener("change", async (event) => {
-      // The original v1.1 enhancement listener refreshes from the active
-      // workspace and can accidentally snap this select back. Capture the
-      // event first so Destination remains the user's explicit choice.
       event.stopImmediatePropagation();
       const projectId = projectSelect.value;
       if (!projectId) return;
@@ -148,6 +145,15 @@
     document.body.appendChild(script);
   }
 
+  function loadProvisionalSheetEnhancements() {
+    if (typeof document === "undefined" || typeof document.querySelector !== "function") return;
+    if (document.querySelector('script[data-arline-provisional-sheets="1"]')) return;
+    const script = document.createElement("script");
+    script.src = "/static/js/discovery-sheets.js?v=1.2.1-provisional";
+    script.dataset.arlineProvisionalSheets = "1";
+    document.body.appendChild(script);
+  }
+
   function installRuntimeCompatibility() {
     if (typeof document !== "undefined") {
       let host = document.getElementById("legacyScopeCompatibility");
@@ -170,18 +176,15 @@
       }
       installBulkTrashCompatibility();
 
-      // Load feature-level Quick Create enhancements only after every deferred
-      // frontend script has executed, so its capture hooks augment the existing
-      // v1.1 handlers instead of racing them during startup.
-      if (document.readyState === "complete") loadQuickCreateEnhancements();
-      else if (typeof document.addEventListener === "function") document.addEventListener("DOMContentLoaded", loadQuickCreateEnhancements, { once: true });
-      else if (typeof setTimeout === "function") setTimeout(loadQuickCreateEnhancements, 0);
+      const loadEnhancements = () => {
+        loadQuickCreateEnhancements();
+        loadProvisionalSheetEnhancements();
+      };
+      if (document.readyState === "complete") loadEnhancements();
+      else if (typeof document.addEventListener === "function") document.addEventListener("DOMContentLoaded", loadEnhancements, { once: true });
+      else if (typeof setTimeout === "function") setTimeout(loadEnhancements, 0);
     }
 
-    // v1.1's streaming generation path clears the sent Composer draft with an
-    // unqualified `sentDraftKey` identifier, but the local binding was dropped
-    // during the final UI refactor. Keep that identifier live until arline.js
-    // owns the fix directly; the getter always resolves the current scope key.
     if (!Object.prototype.hasOwnProperty.call(globalThis, "sentDraftKey")) {
       Object.defineProperty(globalThis, "sentDraftKey", {
         configurable: true,
@@ -193,8 +196,6 @@
       });
     }
 
-    // Deferred scripts execute in document order; a zero-delay task runs after
-    // arline.js has installed the original undo function and its lexical state.
     if (typeof setTimeout === "function") setTimeout(installBulkUndoBridge, 0);
   }
 
