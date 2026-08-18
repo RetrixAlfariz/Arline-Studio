@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#202220" />
   <title>Arline Studio</title>
-  <link rel="stylesheet" href="/static/arline.css?v=1.2.0-memory" />
+  <link rel="stylesheet" href="/static/arline.css?v=1.2.1-rails" />
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -207,52 +207,199 @@
             <aside class="draft-sidecar">
               <div class="pane-head"><div><span class="eyebrow">Inspector</span><h2>Scene</h2></div><button id="newDependencyBtn" class="icon-btn" title="Scene dependency">＋</button></div>
               <div class="sidecar-section"><div class="section-title-row"><span class="section-label">Checkpoints</span><span class="revision-badge">History</span></div><div id="revisionList" class="revision-list"></div></div>
-              <div class="sidecar-section"><div class="section-title-row"><span class="section-label">Scene dependencies</span><span id="dependencyStatus" class="revision-badge">0</span></div><div id="dependencyList" class="dependency-list"></div></div>
+              <div class="sidecar-section"><div class="section-title-row"><span class="section-label">Scene dependencies</span><span id="dependencyStatus" class="revision-badge">0</span></div><div id="dependencyList" class="dependency-list"><div class="empty-note">Select a scene to manage prerequisites.</div></div></div>
+              <div class="sidecar-section"><span class="section-label">Review & proposals</span><div id="suggestionCards" class="suggestion-cards"><div class="empty-note">State proposals and assistant alternatives related to this writing can be reviewed here without changing canon automatically.</div></div></div>
             </aside>
           </div>
         </section>
 
-        <!-- LIBRARY -->
+        <!-- WORLD -->
         <section id="worldView" class="workspace-view" data-view-panel="world">
-          <div class="library-layout">
-            <aside class="library-rail">
-              <div class="pane-head"><div><span class="eyebrow">Library</span><h2>World Bible</h2></div><button id="libraryCreateBtn" class="icon-btn">＋</button></div>
-              <div id="libraryFolders" class="library-folder-tree"></div>
-              <div id="libraryCollections"></div>
-            </aside>
-            <section class="library-main">
-              <div class="library-toolbar"><div><span class="eyebrow">Library</span><h1 id="worldViewTitle">Characters</h1></div><div class="library-toolbar-actions"><button id="libraryGridBtn" class="tiny-btn active">Grid</button><button id="libraryListBtn" class="tiny-btn">List</button></div></div>
-              <div id="worldGrid" class="world-grid"></div>
-            </section>
+          <div class="world-layout">
+            <header class="world-header">
+              <div><span class="eyebrow">Library</span><h1 id="worldTitle">Main</h1><p id="worldDescription">Canonical entities, variants, relationships, timeline, and lore.</p></div>
+              <div class="world-actions">
+                <button id="continuityBtn" class="secondary-btn">Continuity</button>
+                <button id="compareBranchBtn" class="secondary-btn">Compare branches</button>
+                <button id="compareWorldBtn" class="secondary-btn">Compare worlds</button>
+                <button id="snapshotBtn" class="secondary-btn">Snapshot</button>
+                <button id="sandboxBtn" class="secondary-btn">What-if</button>
+                <button id="newEntityBtn" class="primary-btn">＋ New</button>
+              </div>
+            </header>
+            <nav class="world-tabs" id="worldTabs">
+              <button class="active" data-world-tab="character">Characters</button>
+              <button data-world-tab="location">Locations</button>
+              <button data-world-tab="item">Items</button>
+              <button data-world-tab="organization">Organizations</button>
+              <button data-world-tab="relationship">Relationships</button>
+              <button data-world-tab="lore">Lore</button>
+              <button data-world-tab="canon">Canon facts</button>
+              <button data-world-tab="timeline">Timeline</button>
+              <button data-world-tab="worlds">Worlds & branches</button>
+            </nav>
+            <div class="world-content world-library-shell">
+              <aside class="world-library-rail">
+                <div class="section-title-row"><span class="section-label">Library</span><button id="newWorldFolderBtn" class="mini-icon-btn" title="New Library folder">＋</button></div>
+                <button id="worldAllFolderBtn" class="library-tree-root active" type="button">◇ All entries</button>
+                <div id="worldFolderTree" class="world-folder-tree"></div>
+                <div class="section-title-row world-library-subhead"><span class="section-label">Collections</span><button id="newCollectionBtn" class="mini-icon-btn" title="New collection">＋</button></div>
+                <div id="worldCollections" class="world-collection-list"></div>
+                <div class="section-title-row world-library-subhead"><span class="section-label">Views</span><button id="newSavedViewBtn" class="mini-icon-btn" title="Save current view">＋</button></div>
+                <div id="worldSavedViews" class="world-saved-views"></div>
+              </aside>
+              <section class="world-library-main">
+                <div class="world-filter-row">
+                  <label class="search-field"><span>⌕</span><input id="worldSearch" placeholder="Search the Library…" /></label><div id="libraryViewControls" class="library-view-controls" aria-label="Library view"><button data-library-view="list" title="List view">☷</button><button class="active" data-library-view="grid" title="Grid view">▦</button><button data-library-view="gallery" title="Gallery view">▧</button></div>
+                  <div id="worldTagFilters" class="inline-tags"></div>
+                  <div id="worldBulkBar" class="world-bulk-bar hidden"><b id="worldBulkCount">0 selected</b><button id="bulkMoveBtn" class="tiny-btn">Move</button><button id="bulkCollectionBtn" class="tiny-btn">Collection</button><button id="bulkArchiveBtn" class="tiny-btn">Archive</button><button id="bulkClearBtn" class="tiny-btn">Clear</button></div>
+                </div>
+                <div id="worldGrid" class="world-grid"></div>
+                <div id="worldEmpty" class="empty-state"><b>Nothing here yet.</b><span>Describe a character, location, item, or idea normally and Arline will structure it underneath.</span><button id="worldEmptyCreateBtn" class="tiny-btn">＋ Quick create</button></div>
+              </section>
+            </div>
           </div>
         </section>
       </main>
     </section>
 
-    <!-- Inspector -->
-    <div id="inspectorScrim" class="side-panel-scrim hidden"></div>
+    <!-- Developer Inspector -->
     <aside id="inspector" class="inspector" aria-hidden="true">
-      <div class="inspector-head"><div><span class="eyebrow">Arline</span><h2>Settings</h2></div><button id="closeInspectorBtn" class="icon-btn">×</button></div>
-      <div class="inspector-tabs"><button data-inspector-tab="runtime" class="active">Runtime</button><button data-inspector-tab="context">Context</button><button data-inspector-tab="review">Review</button></div>
-      <div class="inspector-panel active" data-inspector-panel="runtime"><div id="runtimeInspector"></div></div>
-      <div class="inspector-panel" data-inspector-panel="context"><div id="contextInspector"></div></div>
-      <div class="inspector-panel" data-inspector-panel="review"><div id="reviewInspector"></div></div>
+      <div class="inspector-head"><div><span class="eyebrow">Arline Studio</span><h2>Settings</h2></div><button id="closeInspectorBtn" class="icon-btn">×</button></div>
+      <nav class="inspector-tabs settings-nav" id="inspectorTabs">
+        <label class="settings-search"><span>⌕</span><input id="settingsSearch" placeholder="Search settings" /></label>
+        <span class="settings-group-label">Settings</span>
+        <button data-inspector-tab="general">General</button>
+        <button class="active" data-inspector-tab="runtime">Models & Runtime</button>
+        <button data-inspector-tab="sampling">Generation</button>
+        <button data-inspector-tab="context">Context</button>
+        <button data-inspector-tab="storage">Data & Storage</button>
+        <span class="settings-group-label" data-settings-group="developer">Developer</span>
+        <button data-inspector-tab="review">Review & Evals</button>
+        <button data-inspector-tab="trace">Trace</button>
+        <button data-inspector-tab="validator">Validator</button>
+        <button data-inspector-tab="contract">Contract</button>
+        <button data-inspector-tab="debug">Debug</button>
+      </nav>
+      <div class="inspector-panel" data-inspector-panel="general">
+        <span class="eyebrow">Interface</span><h3>Workspace appearance</h3>
+        <label>Density<select id="settingsDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
+        <label>Sidebar default<select id="settingsSidebarMode"><option value="expanded">Expanded</option><option value="collapsed">Compact rail</option></select></label>
+        <label class="settings-toggle-row"><span><b>Developer tools</b><small>Show Review & Evals, Trace, Validator, Contract, and Debug settings.</small></span><input id="developerToolsToggle" type="checkbox" checked /></label>
+        <div id="aboutCard" class="info-card about-card"><b>Arline Studio</b><div><span>Version</span><strong id="aboutVersion">1.1.0</strong></div><div><span>Workspace schema</span><strong id="aboutSchema">—</strong></div><div><span>Migration backups</span><strong id="aboutBackups">—</strong></div></div>
+        <div class="info-card"><b>Navigation and AI context are separate.</b><br>Opening a Library sheet never adds it to model context unless you reference or pin it.</div>
+        <div class="shortcut-grid"><span>⌘/Ctrl K</span><b>Search</b><span>⌘/Ctrl N</span><b>Quick create</b><span>Ctrl Shift F</span><b>Focus mode</b></div>
+      </div>
+      <div class="inspector-panel active" data-inspector-panel="runtime">
+        <label>LM Studio server<input id="serverUrl" value="http://127.0.0.1:1234" /></label>
+        <label>API token<input id="apiKey" type="password" placeholder="optional" /></label>
+        <button id="refreshModelsBtn" class="secondary-btn wide">Refresh models</button>
+        <div id="modelInfo" class="info-card">Select a model to inspect its capabilities.</div>
+        <label>GPU offload ratio<div class="range-row"><input id="gpuRatio" type="range" min="0" max="1" step="0.05" value="1"><output id="gpuRatioOut">1.00</output></div></label>
+        <label>Context length<input id="contextLength" type="number" min="1024" step="1024" value="32768" /></label>
+        <div class="button-row"><button id="saveSettingsBtn" class="secondary-btn">Save</button><button id="reloadModelBtn" class="secondary-btn">Apply / Reload</button></div>
+      </div>
+      <div class="inspector-panel" data-inspector-panel="sampling">
+        <label>Generation mode<select id="generationMode"><option value="single">Single response</option><option value="beats">Continue by beats</option></select></label>
+        <div id="beatControls" class="nested-card hidden"><label>Beats<input id="beatCount" type="number" min="1" max="20" value="4" /></label><label>Tokens per beat<input id="beatTokens" type="number" min="256" step="256" value="2048" /></label><label>Total story target<input id="totalStoryTokens" type="number" min="256" step="256" value="8192" /></label></div>
+        <label>Temperature<div class="range-row"><input id="temperature" type="range" min="0" max="2" step="0.05" value="0.8"><output id="temperatureOut">0.80</output></div></label>
+        <label>Top P<div class="range-row"><input id="topP" type="range" min="0" max="1" step="0.01" value="0.95"><output id="topPOut">0.95</output></div></label>
+        <label>Top K<input id="topK" type="number" min="1" value="40" /></label>
+        <label>Min P<div class="range-row"><input id="minP" type="range" min="0" max="1" step="0.01" value="0"><output id="minPOut">0.00</output></div></label>
+        <label>Repeat penalty<div class="range-row"><input id="repeatPenalty" type="range" min="0.8" max="1.5" step="0.01" value="1.05"><output id="repeatPenaltyOut">1.05</output></div></label>
+        <div class="budget-card"><h3>Token budget</h3><label>Visible story target<input id="visibleTokens" type="number" min="256" step="256" value="4096" /></label><label>Reasoning headroom<input id="reasoningReserve" type="number" min="0" step="256" value="4096" /></label><label>Safety reserve<input id="safetyReserve" type="number" min="0" step="256" value="2048" disabled /></label><div class="budget-total"><span>API output ceiling</span><strong id="totalBudget">4096</strong></div><div id="contextBudgetBar" class="budget-bar"><i></i></div><div id="contextBreakdown" class="context-breakdown">Analyze to inspect context allocation.</div></div>
+      </div>
+      <div class="inspector-panel" data-inspector-panel="context">
+        <label>Projection mode<select id="projectionMode"><option value="off">Off</option><option value="conservative">Conservative</option><option value="balanced" selected>Balanced</option><option value="vivid">Vivid</option></select></label>
+        <div id="scopeVisualization" class="scope-visualization">No active context.</div><div id="contextWhy" class="context-why"><div class="empty-note">Analyze to see why each context item was included.</div></div>
+        <div class="subtabs"><button class="active" data-subtab="wcf">WCF</button><button data-subtab="brief">Brief</button><button data-subtab="workspace">Workspace</button><button data-subtab="projection">Projection</button><button data-subtab="aif">AIF</button></div>
+        <pre id="wcfOutput" class="code-output active" data-subpanel="wcf">Analyze first.</pre><pre id="briefOutput" class="code-output" data-subpanel="brief">No brief.</pre><pre id="workspaceContextOutput" class="code-output" data-subpanel="workspace">No workspace context.</pre><pre id="projectionOutput" class="code-output" data-subpanel="projection">No projections.</pre><pre id="aifOutput" class="code-output" data-subpanel="aif">No AIF-Core.</pre>
+      </div>
+      <div class="inspector-panel" data-inspector-panel="storage">
+        <span class="eyebrow">Local-first data</span><h3>Data & Storage</h3>
+        <div id="storageSummary" class="info-card">Loading storage information…</div>
+        <div class="section-title-row"><span class="section-label">Migration backups</span><button id="refreshBackupsBtn" class="tiny-btn">Refresh</button></div>
+        <div id="backupList" class="settings-list"><div class="empty-note">No backups loaded.</div></div>
+        <div class="section-title-row settings-doctor-head"><span class="section-label">Workspace health</span><button id="runDataDoctorBtn" class="tiny-btn">Run check</button></div>
+        <div id="dataDoctorResult" class="info-card data-doctor-result"><b>Not checked yet.</b><br>Doctor is read-only: it reports dangling references, duplicate identities, and stale workspace pointers without repairing canon automatically.</div>
+        <p class="settings-help">Backups are created before schema migrations. Restore remains an explicit manual safety operation in v1.1.</p>
+      </div>
+      <div class="inspector-panel" data-inspector-panel="review">
+        <div class="settings-panel-heading">
+          <span class="eyebrow">Developer</span>
+          <h3>Review & Evals</h3>
+          <p class="settings-help">Feedback Lab lives here. Review generated prose, compare forks, and export evaluation data without leaving Settings.</p>
+        </div>
+        <div class="settings-review-lab feedback-lab">
+          <div class="settings-review-head">
+            <div><h4>Feedback Lab</h4><p>Generated output remains separate from accepted training data until you review it.</p></div>
+            <button id="feedbackAdvancedToggle" class="secondary-btn">Data & evaluation</button>
+          </div>
+          <div id="datasetCards" class="metric-grid"></div>
+          <nav class="feedback-tabs" aria-label="Feedback review views">
+            <button class="active" data-feedback-tab="queue">Review queue</button>
+            <button data-feedback-tab="comparisons">Comparisons</button>
+            <button data-feedback-tab="reviewed">Reviewed</button>
+          </nav>
+          <section class="feedback-workbench">
+            <div id="feedbackQueue" class="feedback-queue"></div>
+            <div id="feedbackQueueEmpty" class="empty-state small"><b>Nothing waiting for review.</b><span>New generated prose appears here until you accept, edit, or reject it.</span></div>
+          </section>
+          <section id="feedbackAdvanced" class="feedback-advanced hidden">
+            <div class="section-head"><div><h4>Data & evaluation</h4><p>Exports keep their generation lineage automatically.</p></div></div>
+            <div class="export-grid">
+              <button data-export="master"><b>Master records</b><span>Full lineage and artifacts</span></button>
+              <button data-export="sft"><b>SFT</b><span>Accepted context → final prose</span></button>
+              <button data-export="preference"><b>Preference</b><span>Chosen vs rejected candidates</span></button>
+              <button data-export="eval"><b>Evaluator</b><span>Context + issue labels</span></button>
+            </div>
+            <div class="policy-card"><code>generated ≠ accepted</code><code>edited + accepted = gold</code><code>rejected = negative</code><code>chat forks = comparison opportunity</code></div>
+          </section>
+        </div>
+      </div>
+      <div class="inspector-panel" data-inspector-panel="trace"><label>Writer-visible fact<select id="traceSelect"><option value="">Analyze first…</option></select></label><pre id="traceOutput" class="code-output active">Select a fact.</pre></div>
+      <div class="inspector-panel" data-inspector-panel="validator"><span class="eyebrow">Pre-write</span><pre id="wcfValidation" class="code-output active compact">No validation.</pre><span class="eyebrow gap">Post-write</span><pre id="postValidation" class="code-output active compact">Generate first.</pre></div>
+      <div class="inspector-panel" data-inspector-panel="contract"><textarea id="contractEditor" class="contract-editor"></textarea><button id="saveContractBtn" class="primary-btn wide">Save writer contract</button></div>
+      <div class="inspector-panel" data-inspector-panel="debug"><span class="eyebrow">Model reasoning</span><pre id="reasoningOutput" class="code-output active compact">No reasoning output.</pre><span class="eyebrow gap">Stats</span><pre id="statsOutput" class="code-output active compact">No generation stats.</pre></div>
     </aside>
+    <div id="inspectorScrim" class="scrim hidden"></div>
 
-    <!-- Sheet panel -->
-    <div id="sheetScrim" class="side-panel-scrim hidden"></div>
-    <aside id="sheetPanel" class="sheet-panel" aria-hidden="true"><div id="sheetContent"></div></aside>
+    <!-- Entity / relationship / world sheet -->
+    <aside id="sheetPanel" class="sheet-panel" aria-hidden="true">
+      <div class="sheet-head"><div><span id="sheetEyebrow" class="eyebrow">Entity</span><h2 id="sheetTitle">Sheet</h2><p id="sheetSubtitle"></p></div><button id="closeSheetBtn" class="icon-btn">×</button></div>
+      <div id="sheetBody" class="sheet-body"></div>
+      <div id="sheetFooter" class="sheet-footer"></div>
+    </aside>
+    <div id="sheetScrim" class="scrim hidden"></div>
 
     <!-- Command palette -->
     <dialog id="commandDialog" class="command-dialog">
-      <div class="command-search-row"><span>⌕</span><input id="commandSearch" placeholder="Search files, characters, or commands…" autocomplete="off"/><kbd>Esc</kbd></div>
+      <div class="command-search-row"><span>⌕</span><input id="commandSearch" placeholder="Search chats, entities, worlds, or run a command…" autocomplete="off"/><kbd>Esc</kbd></div>
       <div id="commandResults" class="command-results"></div>
+      <div class="command-footer"><span>↑↓ navigate</span><span>Enter select</span><span>@ references</span><span>/ actions</span></div>
     </dialog>
 
-    <!-- Forms and other dialogs -->
-    <dialog id="formDialog" class="form-dialog"><form method="dialog"><div id="formBody"></div></form></dialog>
-    <dialog id="feedbackDialog" class="feedback-dialog"><div id="feedbackBody"></div></dialog>
+    <!-- Generic form modal -->
+    <dialog id="formDialog" class="form-dialog"><form method="dialog"><div class="dialog-head"><div><span id="formEyebrow" class="eyebrow">Create</span><h2 id="formTitle">New item</h2><p id="formDescription"></p></div><button value="cancel" class="icon-btn">×</button></div><div id="formFields" class="form-fields"></div><div class="dialog-actions"><button value="cancel" class="secondary-btn">Cancel</button><button id="formSubmitBtn" value="default" class="primary-btn">Save</button></div></form></dialog>
+
+    <!-- Quick Create -->
+    <dialog id="quickCreateDialog" class="quick-create-dialog">
+      <form method="dialog" id="quickCreateForm">
+        <div class="dialog-head"><div><span class="eyebrow">Natural creation</span><h2>Create something</h2><p>Describe it normally. Arline handles the schema underneath.</p></div><button value="cancel" class="icon-btn">×</button></div>
+        <textarea id="quickCreateInput" rows="5" placeholder="Taman Bunga di belakang kampus"></textarea>
+        <div id="quickCreatePreview" class="quick-create-preview"><span class="preview-icon">◇</span><div><b>Start typing…</b><small>Entity, world, project file, or project will be inferred.</small></div></div>
+        <div class="quick-create-options"><label>Force type<select id="quickCreateKind"><option value="">Auto detect</option><option value="entity">Entity / sheet</option><option value="world">World</option><option value="project">Project</option><option value="folder">Project folder</option><option value="document">Project document</option></select></label><button id="quickCreateAdvancedBtn" type="button" class="ghost-btn">Advanced…</button></div>
+        <div class="dialog-actions"><button value="cancel" class="secondary-btn">Cancel</button><button id="quickCreateSubmitBtn" value="default" class="primary-btn">Create</button></div>
+      </form>
+    </dialog>
+    <div id="referencePeek" class="reference-peek hidden"></div>
+
+    <!-- Feedback modal -->
+    <dialog id="feedbackDialog" class="feedback-dialog"><form method="dialog"><div class="dialog-head"><div><span class="eyebrow">Feedback Lab</span><h2 id="feedbackTitle">Review candidate</h2></div><button value="cancel" class="icon-btn">×</button></div><fieldset><legend>Issue labels</legend><div id="issueGrid" class="issue-grid"></div></fieldset><label>Note<textarea id="feedbackNote" rows="3"></textarea></label><label id="editedStoryLabel" class="hidden">Your accepted revision<textarea id="editedStory" rows="18"></textarea></label><div class="dialog-actions"><button value="cancel" class="secondary-btn">Cancel</button><button id="feedbackSubmitBtn" value="default" class="primary-btn">Save feedback</button></div></form></dialog>
+
+    <!-- Compare modal -->
     <dialog id="compareDialog" class="compare-dialog"><div class="dialog-head"><div><span class="eyebrow">Diff</span><h2 id="compareTitle">Compare</h2></div><button id="closeCompareBtn" class="icon-btn">×</button></div><div id="compareBody" class="compare-body"></div></dialog>
+
 
     <dialog id="welcomeDialog" class="welcome-dialog">
       <div class="dialog-head"><div><span class="eyebrow">Welcome to Arline</span><h2>What do you want to do first?</h2><p>Start naturally. The structured workspace is created underneath.</p></div><button id="welcomeSkipX" class="icon-btn">×</button></div>
@@ -271,9 +418,9 @@
     <div id="toast" class="toast hidden"></div>
     <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><b id="loadingTitle">Arline is working…</b><span id="loadingDetail">Preparing context</span></div>
   </div>
-  <script src="/static/js/stream.js?v=1.2.0-memory" defer></script>
+  <script src="/static/js/stream.js?v=1.2.1-rails" defer></script>
   <script src="/static/js/commands.js?v=1.2.1-rails" defer></script>
   <script src="/static/arline.js?v=1.2.1-rails" defer></script>
-  <script src="/static/js/memory.js?v=1.2.0-memory" defer></script>
+  <script src="/static/js/memory.js?v=1.2.1-rails" defer></script>
 </body>
 </html>
