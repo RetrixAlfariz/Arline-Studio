@@ -10,7 +10,9 @@ from src.memory.models import MemoryQueryContext
 from .backfill import backfill_discoveries
 from .general import install_general_discovery
 from .memory import install_discovery_memory_bridge
+from .provisional import install_provisional_discovery
 from .service import DiscoveryService
+from .spatial import install_spatial_discovery
 from .store import DiscoveryStore
 
 
@@ -22,6 +24,11 @@ class DiscoveryDecisionPayload(BaseModel):
     story_order: float | None = None
     world_time: Any = None
     note: str = ""
+
+
+class DiscoveryEditPayload(DiscoveryDecisionPayload):
+    value: Any
+    mode: str = "correction"
 
 
 def _context(*, project_id=None, world_id=None, branch_id=None, session_id=None,
@@ -44,7 +51,10 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
     if not all(hasattr(memory_service, name) for name in required):
         return None
 
+    # Install from general to specialized. The spatial layer wraps the generic
+    # capture path, then provisional materialization wraps turn capture itself.
     install_general_discovery()
+    install_spatial_discovery()
 
     existing = getattr(memory_service, "discovery", None)
     if isinstance(existing, DiscoveryService):
@@ -62,6 +72,8 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
         memory_service.query_engine.compiler.discovery = discovery
         install_discovery_memory_bridge()
 
+    install_provisional_discovery(discovery)
+
     def persisted_turn_report(turn_id: str, source_kind: str = "user_prompt") -> dict[str, Any]:
         """Report what is persisted, not only what the latest idempotent call added."""
         with discovery.store.connection() as con:
@@ -71,11 +83,13 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
                 (turn_id, source_kind),
             ).fetchall()
         proposition_ids = {str(row["proposition_id"]) for row in rows}
+        materialization = discovery.materialize_turn(turn_id)
         return {
             "turn_id": turn_id,
             "source_kind": source_kind,
             "propositions": len(proposition_ids),
             "instances": len(rows),
+            "materialization": materialization,
         }
 
     def report_failure(key: str, exc: Exception) -> None:
@@ -223,9 +237,38 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
         project_id: str | None = Query(None),
         limit_sessions: int = Query(500, ge=1, le=500),
     ):
-        return backfill_discoveries(
+        report = backfill_discoveries(
             discovery, project_id=project_id, limit_sessions=limit_sessions
         ).to_dict()
+        report["materialization"] = discovery.materialize_existing()
+        return report
+
+    @router.get("/discoveries/resource/{resource_type}/{resource_id}")
+    def discovery_resource_view(
+        resource_type: str,
+        resource_id: str,
+        project_id: str | None = Query(None), world_id: str | None = Query(None),
+        branch_id: str | None = Query(None), session_id: str | None = Query(None),
+        story_order: float | None = Query(None),
+    ):
+        if resource_type == "entity_variant":
+            try:
+                resource_id = discovery.workspace.get_variant(resource_id)["family_id"]
+                resource_type = "entity_family"
+            except KeyError as exc:
+                raise HTTPException(404, "Entity variant not found") from exc
+        if resource_type != "entity_family":
+            raise HTTPException(400, "Provisional Discovery resource view currently supports entity sheets")
+        try:
+            return discovery.resource_view(
+                resource_id,
+                _context(
+                    project_id=project_id, world_id=world_id, branch_id=branch_id,
+                    session_id=session_id, story_order=story_order,
+                ),
+            )
+        except KeyError as exc:
+            raise HTTPException(404, "Entity sheet not found") from exc
 
     @router.get("/discoveries/{proposition_id}")
     def get_discovery(
@@ -243,6 +286,24 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
             )
         except KeyError as exc:
             raise HTTPException(404, "Discovery proposition not found") from exc
+
+    @router.post("/discoveries/{proposition_id}/edit")
+    def edit_discovery(proposition_id: str, payload: DiscoveryEditPayload):
+        try:
+            return discovery.record_explicit_edit(
+                proposition_id,
+                payload.value,
+                _context(
+                    project_id=payload.project_id, world_id=payload.world_id,
+                    branch_id=payload.branch_id, session_id=payload.session_id,
+                    story_order=payload.story_order, world_time=payload.world_time,
+                ),
+                mode=payload.mode,
+            )
+        except KeyError as exc:
+            raise HTTPException(404, "Discovery proposition not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @router.post("/discoveries/{proposition_id}/canon")
     def promote_discovery(proposition_id: str, payload: DiscoveryDecisionPayload):
