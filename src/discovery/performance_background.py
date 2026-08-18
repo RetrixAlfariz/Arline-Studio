@@ -58,15 +58,21 @@ def install_background_materialization(service) -> None:
     def schedule(delay: float = interval_seconds, *, force: bool = False) -> None:
         nonlocal timer
         with lock:
-            if state.scheduled or state.running:
+            if state.running:
                 return
+            if state.scheduled:
+                if not force:
+                    return
+                if timer is not None:
+                    timer.cancel()
+                state.scheduled = False
             if state.completed and not force:
                 return
             if force and state.completed:
                 state.completed = False
             state.scheduled = True
             publish()
-            timer = Timer(max(0.05, float(delay)), run_batch)
+            timer = Timer(max(0.01, float(delay)), run_batch)
             timer.daemon = True
             timer.start()
 
@@ -80,8 +86,9 @@ def install_background_materialization(service) -> None:
             publish()
         try:
             report = original(limit=batch_limit)
-            processed = int(report.get("processed") or report.get("claims") or 0)
-            pending = int(report.get("pending") or 0)
+            branch_report = report.get("branch_repair") if isinstance(report.get("branch_repair"), dict) else {}
+            processed = int(report.get("processed") or report.get("claims") or 0) + int(branch_report.get("processed") or 0)
+            pending = int(bool(report.get("pending")))
             with lock:
                 state.processed += processed
                 state.pending = pending
@@ -103,7 +110,7 @@ def install_background_materialization(service) -> None:
         # Explicit callers (backfill/repair) asked for work now, so run one
         # bounded pass synchronously and leave any residue to the daemon.
         report = original(limit=limit)
-        pending = int(report.get("pending") or 0)
+        pending = int(bool(report.get("pending")))
         with lock:
             state.pending = pending
             if pending <= 0:
