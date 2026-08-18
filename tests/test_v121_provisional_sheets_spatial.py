@@ -193,7 +193,7 @@ class V121ProvisionalSheetSpatialTests(unittest.TestCase):
             refreshed = f.memory.discovery.resource_view(alex["id"], f.context(session["id"]))
             self.assertTrue(any(item["change_kind"] == "state_transition" for item in refreshed["changes"]))
 
-    def test_branch_only_provisional_sheet_uses_branch_variant_and_sibling_has_no_claims(self):
+    def test_branch_only_provisional_sheet_has_no_ghost_base_and_follows_lineage(self):
         with tempfile.TemporaryDirectory() as td:
             f = Fixture(td)
             branch_a = f.workspace.create_branch(
@@ -201,6 +201,9 @@ class V121ProvisionalSheetSpatialTests(unittest.TestCase):
             )
             branch_b = f.workspace.create_branch(
                 f.world_id, "Branch B", parent_branch_id=f.branch["id"], kind="alternate"
+            )
+            branch_child = f.workspace.create_branch(
+                f.world_id, "Branch A Child", parent_branch_id=branch_a["id"], kind="alternate"
             )
             session_a = f.session(branch_id=branch_a["id"])
             f.turn(session_a["id"], "Character BranchOnly lives in Nova Annex.")
@@ -210,10 +213,15 @@ class V121ProvisionalSheetSpatialTests(unittest.TestCase):
             )
             variants = f.workspace.list_variants(family_id=family["id"], world_id=f.world_id)
             self.assertTrue(any(item.get("branch_id") == branch_a["id"] for item in variants))
+            self.assertFalse(any(item.get("branch_id") is None for item in variants))
             self.assertFalse(any(item.get("branch_id") == branch_b["id"] for item in variants))
+            meta = (f.workspace.get_entity_family(family["id"]).get("shared_core") or {}).get("_discovery", {})
+            self.assertEqual(meta.get("source_branch_ids"), [branch_a["id"]])
 
             view_a = f.memory.discovery.resource_view(family["id"], f.context(session_a["id"], branch_id=branch_a["id"]))
             self.assertTrue(view_a["claims"])
+            view_child = f.memory.discovery.resource_view(family["id"], f.context(None, branch_id=branch_child["id"]))
+            self.assertTrue(view_child["claims"])
             view_b = f.memory.discovery.resource_view(family["id"], f.context(None, branch_id=branch_b["id"]))
             self.assertFalse(view_b["claims"])
             self.assertFalse(view_b["relations"])
