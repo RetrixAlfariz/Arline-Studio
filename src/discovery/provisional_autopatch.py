@@ -3,6 +3,7 @@ from __future__ import annotations
 from . import provisional
 from . import service as service_module
 from . import spatial as spatial_module
+from .garment import install_garment_materialization
 from .identity import install_identity_resolution
 from .library_scope import install_library_scope_lineage
 from .promotion import install_promotion_hardening
@@ -12,11 +13,12 @@ from .semantics import install_claim_semantics
 from .spatial_v2 import install_spatial_v2
 
 
-# These two extensions must be installed before web.attach_discovery() binds the
-# generic/spatial capture hooks. They only replace deterministic resolver
-# functions; no store mutation happens at import time.
+# These extensions must be installed before web.attach_discovery() binds the
+# capture/materialization hooks. They replace deterministic resolver adapters;
+# no source truth is mutated at import time.
 install_identity_resolution(service_module, provisional)
 install_spatial_v2(spatial_module)
+install_garment_materialization(provisional)
 
 
 if not getattr(provisional, "_RUNTIME_FIX_WRAPPED", False):
