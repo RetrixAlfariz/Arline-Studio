@@ -10,14 +10,17 @@ SHEETS_JS = ROOT / "src/interface/web/static/js/discovery-sheets.js"
 DISCOVERY_WEB = ROOT / "src/discovery/web.py"
 PROVISIONAL = ROOT / "src/discovery/provisional.py"
 PROVISIONAL_RUNTIME = ROOT / "src/discovery/provisional_runtime.py"
+PROMOTION = ROOT / "src/discovery/promotion.py"
+SEMANTICS = ROOT / "src/discovery/semantics.py"
 SPATIAL = ROOT / "src/discovery/spatial.py"
+SPATIAL_V2 = ROOT / "src/discovery/spatial_v2.py"
 
 
 class V121ProvisionalSheetUITests(unittest.TestCase):
     def test_runtime_loads_provisional_sheet_enhancement(self):
         stream = STREAM_JS.read_text(encoding="utf-8")
         sheet = SHEETS_JS.read_text(encoding="utf-8")
-        self.assertIn("/static/js/discovery-sheets.js?v=1.2.1-provisional", stream)
+        self.assertIn("/static/js/discovery-sheets.js?v=1.2.1-maturity", stream)
         self.assertIn("data-arline-provisional-sheets", stream)
         self.assertIn('document.readyState === "loading"', sheet)
         self.assertIn("ArlineProvisionalSheets", sheet)
@@ -40,6 +43,19 @@ class V121ProvisionalSheetUITests(unittest.TestCase):
         self.assertIn('@router.post("/discoveries/{proposition_id}/edit")', api)
         self.assertIn('mode: str = "correction"', api)
 
+    def test_typed_semantics_and_projection_are_visible_in_sheet(self):
+        source = SHEETS_JS.read_text(encoding="utf-8")
+        semantics = SEMANTICS.read_text(encoding="utf-8")
+        promotion = PROMOTION.read_text(encoding="utf-8")
+        self.assertIn("function semanticText", source)
+        self.assertIn("canon_target", source)
+        self.assertIn("claim?.semantics?.canonizable", source)
+        self.assertIn("result?.projection?.status", source)
+        self.assertIn("Canon saved · projected to", source)
+        self.assertIn('"projection": "variant.current_state"', semantics)
+        self.assertIn('"canon_target": "timeline_or_fact"', semantics)
+        self.assertIn("_project_canon", promotion)
+
     def test_relations_are_first_class_non_canon_sheet_data(self):
         source = SHEETS_JS.read_text(encoding="utf-8")
         provisional = PROVISIONAL.read_text(encoding="utf-8")
@@ -52,10 +68,13 @@ class V121ProvisionalSheetUITests(unittest.TestCase):
     def test_lightweight_zone_edge_cannot_be_promoted_as_fake_entity(self):
         source = SHEETS_JS.read_text(encoding="utf-8")
         runtime = PROVISIONAL_RUNTIME.read_text(encoding="utf-8")
-        self.assertIn('rel.object_type === "spatial_zone"', source)
+        promotion = PROMOTION.read_text(encoding="utf-8")
+        semantics = SEMANTICS.read_text(encoding="utf-8")
+        self.assertIn("relation?.semantics?.canonizable === false", source)
         self.assertIn("Lightweight spatial-zone edge", source)
         self.assertIn('prop.get("object_type") == "spatial_zone"', runtime)
-        self.assertIn("not directly canonizable", runtime)
+        self.assertIn("Lightweight spatial-zone edges cannot become canonical", promotion)
+        self.assertIn('lightweight = object_type == "spatial_zone"', semantics)
 
     def test_provisional_sheet_visibility_uses_source_branch_lineage(self):
         source = SHEETS_JS.read_text(encoding="utf-8")
@@ -79,6 +98,15 @@ class V121ProvisionalSheetUITests(unittest.TestCase):
         self.assertIn('"area_m2"', source)
         self.assertIn('"room_count"', source)
         self.assertNotIn('subject_label="Apartemen"', source)
+
+    def test_generic_spatial_grammar_stays_precision_first(self):
+        source = SPATIAL_V2.read_text(encoding="utf-8")
+        self.assertIn('"gedung": "building"', source)
+        self.assertIn('"asrama": "dormitory"', source)
+        self.assertIn('"ruang": "room"', source)
+        self.assertIn('"zone_kind": "floor"', source)
+        self.assertIn("detect_generic_location_hierarchy", source)
+        self.assertIn("result = legacy(text)", source)
 
 
 if __name__ == "__main__":
