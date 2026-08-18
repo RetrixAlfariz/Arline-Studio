@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from . import garment as garment_module
 from . import performance as performance_module
 from . import physical_item_refinement as physical_refinement_module
 from . import physical_items as physical_items_module
@@ -23,6 +24,7 @@ from .spatial_v2 import install_spatial_v2
 from .startup import (
     deferred_materialization_report,
     install_combined_historical_drain,
+    install_deferred_garment_migration,
     install_incremental_branch_repair,
     install_minimal_performance_schema,
 )
@@ -41,10 +43,19 @@ if not getattr(provisional, "_RUNTIME_FIX_WRAPPED", False):
     _original_install = provisional.install_provisional_discovery
 
     def _install_with_runtime_fix(service):
-        # Preserve semantic garment paths, resolve repeatable garment classes
-        # into stable physical ITEM identities, repair explicit anaphora, and
-        # block ambiguous references from falling back to legacy type identities.
-        install_garment_runtime(service)
+        # Preserve semantic garment paths without scanning legacy observations
+        # during application startup. The legacy namespace cleanup is scheduled
+        # only after the final runtime hooks are installed below.
+        real_garment_migration = garment_module._migrate_unmaterialized_garment_predicates
+        garment_module._migrate_unmaterialized_garment_predicates = lambda _service: 0
+        try:
+            install_garment_runtime(service)
+        finally:
+            garment_module._migrate_unmaterialized_garment_predicates = real_garment_migration
+
+        # Resolve repeatable garment classes into stable physical ITEM identities,
+        # repair explicit anaphora, and block ambiguous references from falling
+        # back to legacy type identities.
         install_physical_item_identity(service)
         install_physical_item_refinement(service)
         install_physical_item_ambiguity_guard(service)
@@ -111,6 +122,11 @@ if not getattr(provisional, "_RUNTIME_FIX_WRAPPED", False):
         # Query/list/resource caches are installed after every correctness and
         # scope wrapper so all fast paths preserve the final authority contract.
         finalize_discovery_performance(service)
+
+        # Legacy non-Canon garment cleanup is derived compatibility work. It is
+        # allowed to run only after attach has finished and is remembered with a
+        # persistent meta marker so later startups do not rescan the table.
+        install_deferred_garment_migration(garment_module, service)
 
     provisional.install_provisional_discovery = _install_with_runtime_fix
     provisional._RUNTIME_FIX_WRAPPED = True
