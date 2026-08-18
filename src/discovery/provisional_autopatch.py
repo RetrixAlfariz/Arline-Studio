@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from . import physical_item_refinement as physical_refinement_module
 from . import provisional
 from . import service as service_module
 from . import spatial as spatial_module
@@ -7,6 +8,7 @@ from .garment import install_garment_materialization, install_garment_runtime
 from .identity import install_identity_resolution
 from .library_scope import install_library_scope_lineage
 from .physical_item_ambiguity import install_physical_item_ambiguity_guard
+from .physical_item_merge import install_safe_anaphora_merge
 from .physical_item_refinement import install_physical_item_refinement
 from .physical_items import install_physical_item_identity
 from .promotion import install_promotion_hardening
@@ -22,6 +24,7 @@ from .spatial_v2 import install_spatial_v2
 install_identity_resolution(service_module, provisional)
 install_spatial_v2(spatial_module)
 install_garment_materialization(provisional)
+install_safe_anaphora_merge(physical_refinement_module)
 
 
 if not getattr(provisional, "_RUNTIME_FIX_WRAPPED", False):
