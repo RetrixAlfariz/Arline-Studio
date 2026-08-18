@@ -202,11 +202,13 @@ class V121ProvisionalSheetSpatialTests(unittest.TestCase):
             branch_b = f.workspace.create_branch(
                 f.world_id, "Branch B", parent_branch_id=f.branch["id"], kind="what_if"
             )
+            session_a = f.session(branch_id=branch_a["id"])
+            f.turn(session_a["id"], "Character BranchOnly lives in Nova Annex.")
+            # Fork the child only after BranchOnly exists in Branch A. The child
+            # may inherit pre-fork evidence; a sibling still may not.
             branch_child = f.workspace.create_branch(
                 f.world_id, "Branch A Child", parent_branch_id=branch_a["id"], kind="what_if"
             )
-            session_a = f.session(branch_id=branch_a["id"])
-            f.turn(session_a["id"], "Character BranchOnly lives in Nova Annex.")
             family = next(
                 item for item in f.workspace.list_entity_families(None, entity_type="character")
                 if item["name"] == "BranchOnly"
