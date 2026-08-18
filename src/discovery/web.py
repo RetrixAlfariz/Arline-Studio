@@ -334,6 +334,8 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
             )
         except KeyError as exc:
             raise HTTPException(404, "Discovery proposition not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @router.post("/discoveries/{proposition_id}/reset")
     def reset_discovery(proposition_id: str, payload: DiscoveryDecisionPayload):
@@ -347,6 +349,8 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
             )
         except KeyError as exc:
             raise HTTPException(404, "Discovery proposition not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @router.post("/discoveries/capture-turn/{turn_id}")
     def recapture_turn(turn_id: str):
