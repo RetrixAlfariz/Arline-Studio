@@ -3,20 +3,28 @@
   const esc = (value) => String(value ?? "").replace(/[&<>'"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
   const icon = (state) => ({detected:"◌",reviewed:"◇",canon:"◆",dismissed:"×"})[state] || "◌";
 
+  function scope() { return window.ArlineMemoryRuntime?.activeScope?.() || {}; }
+
   function scopeParams() {
-    const scope = window.ArlineMemoryRuntime?.activeScope?.() || {};
+    const current = scope();
     const params = new URLSearchParams();
-    if (scope.projectId) params.set("project_id", scope.projectId);
-    if (scope.worldId) params.set("world_id", scope.worldId);
-    if (scope.branchId) params.set("branch_id", scope.branchId);
-    if (scope.sessionId) params.set("session_id", scope.sessionId);
-    if (scope.storyOrder != null) params.set("story_order", String(scope.storyOrder));
+    if (current.projectId) params.set("project_id", current.projectId);
+    if (current.worldId) params.set("world_id", current.worldId);
+    if (current.branchId) params.set("branch_id", current.branchId);
+    if (current.sessionId) params.set("session_id", current.sessionId);
+    if (current.storyOrder != null) params.set("story_order", String(current.storyOrder));
     return params;
   }
 
-  async function getJSON(url) {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  async function request(url, options = {}) {
+    const response = await fetch(url, {
+      ...options,
+      headers: {"Content-Type":"application/json", ...(options.headers || {})},
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || `${response.status} ${response.statusText}`);
+    }
     return response.json();
   }
 
@@ -26,12 +34,76 @@
     return JSON.stringify(value);
   }
 
+  function parseValue(raw) {
+    const text = String(raw ?? "").trim();
+    if (!text) return "";
+    try { return JSON.parse(text); }
+    catch (_) { return text; }
+  }
+
+  function decisionPayload(extra = {}) {
+    const current = scope();
+    return {
+      project_id: current.projectId || null,
+      world_id: current.worldId || null,
+      branch_id: current.branchId || null,
+      session_id: current.sessionId || null,
+      story_order: current.storyOrder ?? null,
+      world_time: current.worldTime ?? null,
+      ...extra,
+    };
+  }
+
   function styles() {
     if (byId("provisionalSheetStyles")) return;
     const style = document.createElement("style");
     style.id = "provisionalSheetStyles";
-    style.textContent = `.prov-banner{padding:11px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));border-radius:10px;margin-bottom:12px}.prov-banner small,.prov-row small{display:block;opacity:.65;margin-top:3px}.prov-path{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0}.prov-path span:not(:last-child)::after{content:'›';opacity:.45;margin-left:6px}.prov-list{display:grid;gap:7px}.prov-row{padding:9px;border:1px solid var(--line);border-radius:9px}.prov-row-head{display:flex;justify-content:space-between;gap:8px}.prov-row code{font-size:9px;opacity:.55}.prov-value{display:block;margin-top:4px;word-break:break-word}.prov-change{padding:7px 0;border-bottom:1px solid var(--line)}`;
+    style.textContent = `.prov-banner{padding:11px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));border-radius:10px;margin-bottom:12px}.prov-banner small,.prov-row small{display:block;opacity:.65;margin-top:3px}.prov-path{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0}.prov-path span:not(:last-child)::after{content:'›';opacity:.45;margin-left:6px}.prov-list{display:grid;gap:7px}.prov-row{padding:9px;border:1px solid var(--line);border-radius:9px}.prov-row-head{display:flex;justify-content:space-between;gap:8px}.prov-row code{font-size:9px;opacity:.55}.prov-value{display:block;margin-top:4px;word-break:break-word}.prov-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}.prov-change{padding:7px 0;border-bottom:1px solid var(--line)}.prov-help{font-size:11px;opacity:.7;line-height:1.5;margin:4px 0 9px}`;
     document.head.appendChild(style);
+  }
+
+  async function editClaim(claim, familyId, mode) {
+    const modeLabel = mode === "story_change" ? "new story-state value" : "corrected value";
+    const raw = window.prompt(`Enter ${modeLabel} for ${claim.predicate}.\n\nCorrection means the previous value was wrong. Story change means the previous value stays historically true.`, valueText(claim.value));
+    if (raw == null) return;
+    try {
+      await request(`/api/memory/discoveries/${encodeURIComponent(claim.id)}/edit`, {
+        method: "POST",
+        body: JSON.stringify(decisionPayload({
+          value: parseValue(raw),
+          mode,
+          note: mode === "story_change" ? "Explicit story change from provisional sheet" : "Explicit correction from provisional sheet",
+        })),
+      });
+      window.toast?.(mode === "story_change" ? "Story change recorded with a new claim/change ID" : "Correction recorded as user-reviewed knowledge", 4500);
+      await decorate(familyId);
+      await window.ArlineMemoryRuntime?.loadDiscoveries?.({render:false});
+    } catch (error) { window.toast?.(error.message, 6000); }
+  }
+
+  async function makeCanon(claim, familyId) {
+    if (!confirm(`Make “${claim.predicate} = ${valueText(claim.value)}” canon?\n\nOnly this claim is promoted. Other detected or reviewed fields remain non-canon.`)) return;
+    try {
+      await request(`/api/memory/discoveries/${encodeURIComponent(claim.id)}/canon`, {
+        method: "POST",
+        body: JSON.stringify(decisionPayload({note:"Explicit user canon promotion from provisional sheet"})),
+      });
+      window.toast?.("Claim promoted to user-authorized canon", 4000);
+      await decorate(familyId);
+      await window.ArlineMemoryRuntime?.loadDiscoveries?.({render:false});
+    } catch (error) { window.toast?.(error.message, 6000); }
+  }
+
+  async function makeRelationCanon(relation, familyId) {
+    if (!confirm(`Make relation “${relation.subject_label} ${String(relation.predicate || "related_to").replaceAll("_"," ")} ${relation.object_label || relation.object_key}” canon?`)) return;
+    try {
+      await request(`/api/memory/discoveries/${encodeURIComponent(relation.id)}/canon`, {
+        method: "POST",
+        body: JSON.stringify(decisionPayload({note:"Explicit user canon promotion of provisional relation"})),
+      });
+      window.toast?.("Relation promoted to user-authorized canon", 4000);
+      await decorate(familyId);
+    } catch (error) { window.toast?.(error.message, 6000); }
   }
 
   async function decorate(familyId) {
@@ -39,9 +111,9 @@
     if (!body) return;
     body.querySelector("#provisionalDiscoverySection")?.remove();
     try {
-      const data = await getJSON(`/api/memory/discoveries/resource/entity_family/${encodeURIComponent(familyId)}?${scopeParams()}`);
+      const data = await request(`/api/memory/discoveries/resource/entity_family/${encodeURIComponent(familyId)}?${scopeParams()}`);
       if (!data.provisional && !(data.claims || []).length && !(data.relations || []).length) return;
-      const claims = (data.claims || []).filter((item) => item.predicate !== "entity.exists");
+      const claims = (data.claims || []).filter((item) => !["entity.exists","zone.exists"].includes(item.predicate));
       const relations = data.relations || [];
       const changes = data.changes || [];
       const path = data.spatial_path || [];
@@ -49,13 +121,30 @@
       section.id = "provisionalDiscoverySection";
       section.className = "sheet-section";
       section.innerHTML = `
-        <div class="prov-banner"><b>${icon(data.knowledge_state)} ${esc(data.knowledge_state || "detected")} Library sheet</b><small>The sheet ID is stable. Each detected value keeps its own claim ID and provenance; none becomes Canon without an explicit user action.</small></div>
+        <div class="prov-banner"><b>${icon(data.knowledge_state)} ${esc(data.knowledge_state || "detected")} Library sheet</b><small>The sheet ID is stable and callable with @. Each value/relation keeps its own proposition ID and provenance; sheet existence never implies Canon.</small></div>
         ${path.length > 1 ? `<div class="sheet-section-head"><h3>Spatial path</h3></div><div class="prov-path">${path.map((node) => `<span><b>${esc(node.label)}</b>${node.zone_kind ? ` <small>${esc(node.zone_kind)}</small>` : ""}</span>`).join("")}</div>` : ""}
         <div class="sheet-section-head"><h3>Discovered knowledge</h3><span>${claims.length}</span></div>
-        <div class="prov-list">${claims.length ? claims.map((claim) => `<div class="prov-row"><div class="prov-row-head"><b>${icon(claim.knowledge_state)} ${esc(claim.predicate)}</b><code>${esc(claim.id)}</code></div><span class="prov-value">${esc(valueText(claim.value))}</span><small>${esc(claim.knowledge_state)} · ${Number(claim.support_count || 0)} active source${Number(claim.support_count || 0) === 1 ? "" : "s"}</small></div>`).join("") : `<div class="empty-note">No scoped discovered fields.</div>`}</div>
-        ${relations.length ? `<div class="sheet-section-head gap"><h3>Relations</h3><span>${relations.length}</span></div><div class="prov-list">${relations.map((rel) => `<div class="prov-row"><div class="prov-row-head"><b>${icon(rel.knowledge_state)} ${esc(rel.subject_label)} ${esc(String(rel.predicate || "related_to").replaceAll("_"," "))} ${esc(rel.object_label || rel.object_key || "?")}</b><code>${esc(rel.id)}</code></div><small>${esc(rel.knowledge_state)} · source-backed provisional relation</small></div>`).join("")}</div>` : ""}
+        <p class="prov-help"><b>Correct</b> replaces a wrong observation. <b>Story change</b> preserves the old observation historically and creates a transition. A manual edit becomes Reviewed; only <b>Make Canon</b> grants Canon authority.</p>
+        <div class="prov-list">${claims.length ? claims.map((claim) => `<div class="prov-row" data-prov-claim="${esc(claim.id)}"><div class="prov-row-head"><b>${icon(claim.knowledge_state)} ${esc(claim.predicate)}</b><code>${esc(claim.id)}</code></div><span class="prov-value">${esc(valueText(claim.value))}</span><small>${esc(claim.knowledge_state)} · ${Number(claim.support_count || 0)} active source${Number(claim.support_count || 0) === 1 ? "" : "s"} · ${esc(claim.provenance_state || "active")}</small><div class="prov-actions">${claim.knowledge_state !== "canon" ? `<button class="tiny-btn" data-prov-action="correct">Correct</button><button class="tiny-btn" data-prov-action="story">Story change</button><button class="tiny-btn" data-prov-action="canon">Make Canon</button>` : `<span class="protected-note">◆ Canon</span>`}</div></div>`).join("") : `<div class="empty-note">No scoped discovered fields.</div>`}</div>
+        ${relations.length ? `<div class="sheet-section-head gap"><h3>Relations</h3><span>${relations.length}</span></div><div class="prov-list">${relations.map((rel) => `<div class="prov-row" data-prov-relation="${esc(rel.id)}"><div class="prov-row-head"><b>${icon(rel.knowledge_state)} ${esc(rel.subject_label)} ${esc(String(rel.predicate || "related_to").replaceAll("_"," "))} ${esc(rel.object_label || rel.object_key || "?")}</b><code>${esc(rel.id)}</code></div><small>${esc(rel.knowledge_state)} · source-backed provisional relation</small>${rel.knowledge_state !== "canon" ? `<div class="prov-actions"><button class="tiny-btn" data-rel-action="canon">Make Canon</button></div>` : ""}</div>`).join("")}</div>` : ""}
         ${changes.length ? `<div class="sheet-section-head gap"><h3>Change history</h3><span>${changes.length}</span></div>${changes.map((change) => `<div class="prov-change"><b>${esc(change.change_kind.replaceAll("_"," "))}</b><small>${esc(change.from_proposition_id)} → ${esc(change.to_proposition_id)}</small><code>${esc(change.id)}</code></div>`).join("")}` : ""}`;
       body.appendChild(section);
+
+      const claimMap = new Map((data.claims || []).map((item) => [item.id, item]));
+      section.querySelectorAll("[data-prov-action]").forEach((button) => button.addEventListener("click", async () => {
+        const row = button.closest("[data-prov-claim]");
+        const claim = claimMap.get(row?.dataset.provClaim);
+        if (!claim) return;
+        if (button.dataset.provAction === "correct") await editClaim(claim, familyId, "correction");
+        else if (button.dataset.provAction === "story") await editClaim(claim, familyId, "story_change");
+        else if (button.dataset.provAction === "canon") await makeCanon(claim, familyId);
+      }));
+      const relationMap = new Map(relations.map((item) => [item.id, item]));
+      section.querySelectorAll("[data-rel-action='canon']").forEach((button) => button.addEventListener("click", async () => {
+        const row = button.closest("[data-prov-relation]");
+        const relation = relationMap.get(row?.dataset.provRelation);
+        if (relation) await makeRelationCanon(relation, familyId);
+      }));
     } catch (error) {
       console.warn("Provisional Discovery sheet unavailable", error);
     }
