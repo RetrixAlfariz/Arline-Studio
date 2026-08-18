@@ -106,6 +106,11 @@ def describe_claim(proposition: dict[str, Any]) -> dict[str, Any]:
             "projection": "variant.current_state",
             "projection_path": predicate.removeprefix("state."),
         })
+    elif predicate.startswith("garment."):
+        result.update({
+            "group": "garment", "projection": "variant.attributes",
+            "projection_path": predicate,
+        })
     elif predicate in SPATIAL_SCALARS or predicate.startswith("location."):
         result.update({"group": "spatial"})
     elif predicate.startswith("personality."):
