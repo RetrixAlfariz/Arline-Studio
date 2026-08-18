@@ -1,6 +1,69 @@
 "use strict";
 
 (function () {
+  // Narrative Discovery is useful everywhere, but its full proposition list is
+  // not part of the critical workspace-navigation path. The old runtime loaded
+  // and scope-evaluated that list every time project data changed, even while
+  // the user stayed in Chat or Manuscript. Keep the first boot/project-switch
+  // requests local and defer the real list until Discoveries is actually open.
+  const discoveryLoadPolicy = {
+    suppressDepth: 0,
+    startupSkips: 2,
+  };
+  const nativeFetch = globalThis.fetch.bind(globalThis);
+
+  function isDiscoveryListRequest(input, init = {}) {
+    try {
+      const request = typeof Request !== "undefined" && input instanceof Request ? input : null;
+      const method = String(init.method || request?.method || "GET").toUpperCase();
+      const raw = typeof input === "string" || input instanceof URL ? String(input) : request?.url;
+      if (!raw || method !== "GET") return false;
+      const url = new URL(raw, globalThis.location?.href || "http://127.0.0.1/");
+      return url.pathname === "/api/memory/discoveries";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function deferredDiscoveryResponse() {
+    const memory = globalThis.ArlineMemory || {};
+    return new Response(JSON.stringify({
+      items: Array.isArray(memory.discoveries) ? memory.discoveries : [],
+      counts: memory.discoveryCounts || {},
+      deferred: true,
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  globalThis.fetch = function discoveryAwareFetch(input, init = {}) {
+    if (isDiscoveryListRequest(input, init)) {
+      const state = globalThis.ArlineRuntime?.getState?.() || {};
+      const hiddenView = state.activeWorldTab !== "discoveries";
+      if (hiddenView && (discoveryLoadPolicy.suppressDepth > 0 || discoveryLoadPolicy.startupSkips > 0)) {
+        if (discoveryLoadPolicy.startupSkips > 0) discoveryLoadPolicy.startupSkips -= 1;
+        return Promise.resolve(deferredDiscoveryResponse());
+      }
+    }
+    return nativeFetch(input, init);
+  };
+
+  function installLazyDiscoveryProjectLoad() {
+    const current = globalThis.loadProjectData;
+    if (typeof current !== "function" || current.__arlineDiscoveryLazyWrapped) return;
+    const wrapped = async function (...args) {
+      discoveryLoadPolicy.suppressDepth += 1;
+      try {
+        return await current.apply(this, args);
+      } finally {
+        discoveryLoadPolicy.suppressDepth = Math.max(0, discoveryLoadPolicy.suppressDepth - 1);
+      }
+    };
+    wrapped.__arlineDiscoveryLazyWrapped = true;
+    globalThis.loadProjectData = wrapped;
+  }
+
   function installBulkUndoBridge() {
     if (typeof globalThis.undoLastAction !== "function" || globalThis.undoLastAction.__arlineBulkWrapped) return;
     const originalUndo = globalThis.undoLastAction;
@@ -179,6 +242,9 @@
       const loadEnhancements = () => {
         loadQuickCreateEnhancements();
         loadProvisionalSheetEnhancements();
+        // Memory wraps loadProjectData on the same DOMContentLoaded turn. Wait a
+        // tick so this lazy wrapper remains outermost around that final runtime.
+        if (typeof setTimeout === "function") setTimeout(installLazyDiscoveryProjectLoad, 25);
       };
       if (document.readyState === "complete") loadEnhancements();
       else if (typeof document.addEventListener === "function") document.addEventListener("DOMContentLoaded", loadEnhancements, { once: true });
@@ -196,7 +262,12 @@
       });
     }
 
-    if (typeof setTimeout === "function") setTimeout(installBulkUndoBridge, 0);
+    if (typeof setTimeout === "function") {
+      setTimeout(installBulkUndoBridge, 0);
+      // Do not suppress a deliberate user-opened Discovery view later merely
+      // because a minimal test/startup did not consume both boot skips.
+      setTimeout(() => { discoveryLoadPolicy.startupSkips = 0; }, 3500);
+    }
   }
 
   installRuntimeCompatibility();
