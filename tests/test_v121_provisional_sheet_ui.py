@@ -14,13 +14,15 @@ PROMOTION = ROOT / "src/discovery/promotion.py"
 SEMANTICS = ROOT / "src/discovery/semantics.py"
 SPATIAL = ROOT / "src/discovery/spatial.py"
 SPATIAL_V2 = ROOT / "src/discovery/spatial_v2.py"
+GARMENT = ROOT / "src/discovery/garment.py"
+PHYSICAL_ITEMS = ROOT / "src/discovery/physical_items.py"
 
 
 class V121ProvisionalSheetUITests(unittest.TestCase):
     def test_runtime_loads_provisional_sheet_enhancement(self):
         stream = STREAM_JS.read_text(encoding="utf-8")
         sheet = SHEETS_JS.read_text(encoding="utf-8")
-        self.assertIn("/static/js/discovery-sheets.js?v=1.2.1-maturity", stream)
+        self.assertIn("/static/js/discovery-sheets.js?v=1.2.1-physical-items", stream)
         self.assertIn("data-arline-provisional-sheets", stream)
         self.assertIn('document.readyState === "loading"', sheet)
         self.assertIn("ArlineProvisionalSheets", sheet)
@@ -32,6 +34,19 @@ class V121ProvisionalSheetUITests(unittest.TestCase):
         self.assertIn("claim.id", source)
         self.assertIn("change.from_proposition_id", source)
         self.assertIn("change.to_proposition_id", source)
+
+    def test_physical_item_identity_is_visible_and_separate_from_garment_type(self):
+        source = SHEETS_JS.read_text(encoding="utf-8")
+        garment = GARMENT.read_text(encoding="utf-8")
+        physical = PHYSICAL_ITEMS.read_text(encoding="utf-8")
+        self.assertIn("function physicalIdentity", source)
+        self.assertIn("physical_item_id", source)
+        self.assertIn("Item › Garment ›", source)
+        self.assertIn("relationPhysicalId", source)
+        self.assertIn("Physical ITEM identity is stable", source)
+        self.assertIn('"identity_model": "physical_instance_v1"', garment)
+        self.assertIn('return f"ITEM-{digest}"', physical)
+        self.assertIn('return f"item:{item_id}"', physical)
 
     def test_user_can_choose_correction_story_change_or_canon(self):
         source = SHEETS_JS.read_text(encoding="utf-8")
