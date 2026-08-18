@@ -8,6 +8,7 @@ from . import provisional
 from . import provisional_runtime as provisional_runtime_module
 from . import service as service_module
 from . import spatial as spatial_module
+from .continuity import install_continuity_runtime
 from .garment import install_garment_materialization, install_garment_runtime
 from .identity import install_identity_resolution
 from .library_scope import install_library_scope_lineage
@@ -122,6 +123,12 @@ if not getattr(provisional, "_RUNTIME_FIX_WRAPPED", False):
         # Query/list/resource caches are installed after every correctness and
         # scope wrapper so all fast paths preserve the final authority contract.
         finalize_discovery_performance(service)
+
+        # v1.2.2 starts here: supersession/conflict/form reconstruction is a
+        # derived post-capture layer. It never mutates Canon and it is installed
+        # after every v1.2.1 scope/identity/performance wrapper so it observes the
+        # exact persisted evidence that the user can actually see.
+        install_continuity_runtime(service)
 
         # Legacy non-Canon garment cleanup is derived compatibility work. It is
         # allowed to run only after attach has finished and is remembered with a
