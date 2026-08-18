@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from . import performance as performance_module
 from . import physical_item_refinement as physical_refinement_module
 from . import physical_items as physical_items_module
 from . import provisional
@@ -19,6 +20,12 @@ from .provisional_materialize import materialize_proposition_branch_aware
 from .provisional_runtime import install_provisional_runtime_fix
 from .semantics import install_claim_semantics
 from .spatial_v2 import install_spatial_v2
+from .startup import (
+    deferred_materialization_report,
+    install_combined_historical_drain,
+    install_incremental_branch_repair,
+    install_minimal_performance_schema,
+)
 
 
 # These extensions must be installed before web.attach_discovery() binds the
@@ -42,23 +49,61 @@ if not getattr(provisional, "_RUNTIME_FIX_WRAPPED", False):
         install_physical_item_refinement(service)
         install_physical_item_ambiguity_guard(service)
 
-        # Performance primitives must wrap the complete semantic capture chain,
-        # but must be installed before provisional startup projection runs. This
-        # turns full analytical re-runs and global materialization scans into
-        # revision-aware, bounded incremental work without weakening provenance.
+        # Cache tables are cheap. Optional secondary indexes over historical
+        # evidence are not a prerequisite for application readiness and therefore
+        # are intentionally excluded from the startup critical path.
+        install_minimal_performance_schema(performance_module, service)
+
+        # Performance primitives wrap the complete semantic capture chain before
+        # the provisional installer binds service methods.
         prepare_discovery_performance(
             service,
             provisional,
             provisional_runtime_module,
             physical_items_module,
         )
+        install_incremental_branch_repair(provisional_runtime_module, service)
 
-        # materialize_turn/materialize_existing resolve this module-global at
-        # call time, so replace it before the original installer performs its
-        # first existing-discovery projection.
+        # New/changed propositions are branch-aware from their first projection.
         provisional._materialize_proposition = materialize_proposition_branch_aware
-        _original_install(service)
-        install_provisional_runtime_fix(service)
+
+        # The original installer historically scanned/materialized every existing
+        # Discovery before returning. During initial attach we temporarily replace
+        # that one global with a zero-I/O report. The service method it installs
+        # resolves the module global at call time, so restoring the real function
+        # immediately afterwards preserves explicit/backfill behavior.
+        real_materialize_existing = provisional.materialize_existing
+
+        def startup_materialize_existing(_service, *, limit: int = 5000):
+            return deferred_materialization_report(provisional)
+
+        provisional.materialize_existing = startup_materialize_existing
+        try:
+            _original_install(service)
+        finally:
+            provisional.materialize_existing = real_materialize_existing
+
+        # Runtime branch hardening also used to scan all historical evidence as
+        # soon as it was installed. Suppress only that installer-time sweep;
+        # restore the incremental batch repair before any user/background call.
+        real_repair_existing = provisional_runtime_module.repair_existing_branch_projections
+        provisional_runtime_module.repair_existing_branch_projections = lambda *_args, **_kwargs: {
+            "processed": 0,
+            "pending": -1,
+            "deferred": True,
+        }
+        try:
+            install_provisional_runtime_fix(service)
+        finally:
+            provisional_runtime_module.repair_existing_branch_projections = real_repair_existing
+
+        # Reinstall our capped historical repair after the runtime installer and
+        # combine it with the bounded materialization drain used by backfill and
+        # the daemon worker. Per-turn projection remains immediate.
+        service._incremental_branch_repair_installed = False
+        install_incremental_branch_repair(provisional_runtime_module, service)
+        install_combined_historical_drain(provisional, service)
+
         install_library_scope_lineage(service)
         install_claim_semantics(service)
         install_promotion_hardening(service)
