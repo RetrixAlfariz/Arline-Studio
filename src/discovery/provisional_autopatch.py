@@ -6,6 +6,7 @@ from . import spatial as spatial_module
 from .garment import install_garment_materialization, install_garment_runtime
 from .identity import install_identity_resolution
 from .library_scope import install_library_scope_lineage
+from .physical_items import install_physical_item_identity
 from .promotion import install_promotion_hardening
 from .provisional_materialize import materialize_proposition_branch_aware
 from .provisional_runtime import install_provisional_runtime_fix
@@ -25,9 +26,11 @@ if not getattr(provisional, "_RUNTIME_FIX_WRAPPED", False):
     _original_install = provisional.install_provisional_discovery
 
     def _install_with_runtime_fix(service):
-        # Normalize semantic garment predicates before any new turn capture or
-        # startup materialization reuses existing Discovery rows.
+        # Preserve semantic garment paths, then resolve repeatable garment classes
+        # into stable physical ITEM identities before provisional materialization
+        # can create any name-deduplicated legacy sheet for a new source turn.
         install_garment_runtime(service)
+        install_physical_item_identity(service)
         # materialize_turn/materialize_existing resolve this module-global at
         # call time, so replace it before the original installer performs its
         # first existing-discovery projection.
