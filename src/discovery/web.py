@@ -44,8 +44,6 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
     if not all(hasattr(memory_service, name) for name in required):
         return None
 
-    # The deterministic analytical extractor remains primary; this supplement
-    # fills its generic-NER gap for ordinary named characters/locations/items.
     install_general_discovery()
 
     existing = getattr(memory_service, "discovery", None)
@@ -63,6 +61,22 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
         memory_service.query_engine.discovery = discovery
         memory_service.query_engine.compiler.discovery = discovery
         install_discovery_memory_bridge()
+
+    def persisted_turn_report(turn_id: str, source_kind: str = "user_prompt") -> dict[str, Any]:
+        """Report what is persisted, not only what the latest idempotent call added."""
+        with discovery.store.connection() as con:
+            rows = con.execute(
+                "SELECT id,proposition_id FROM discovery_instances "
+                "WHERE source_turn_id=? AND source_kind=? AND active=1",
+                (turn_id, source_kind),
+            ).fetchall()
+        proposition_ids = {str(row["proposition_id"]) for row in rows}
+        return {
+            "turn_id": turn_id,
+            "source_kind": source_kind,
+            "propositions": len(proposition_ids),
+            "instances": len(rows),
+        }
 
     def report_failure(key: str, exc: Exception) -> None:
         reporter = getattr(memory_service, "_report_refresh_failure", None)
@@ -83,16 +97,12 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
         def add_turn_with_discovery(*args, **kwargs):
             turn = original_add_turn(*args, **kwargs)
             try:
-                report = discovery.capture_turn(turn["id"], source_kind="user_prompt")
-                # The caller can now surface an immediate UI indication without
-                # running extraction a second time. This field is transient and
-                # is not persisted into HistoryStore.
-                turn["_discovery_report"] = report.to_dict()
+                discovery.capture_turn(turn["id"], source_kind="user_prompt")
+                turn["_discovery_report"] = persisted_turn_report(turn["id"], "user_prompt")
             except Exception as exc:
                 turn["_discovery_report"] = {
                     "turn_id": turn.get("id"), "source_kind": "user_prompt",
-                    "propositions": 0, "instances": 0, "skipped": 0,
-                    "error": str(exc),
+                    "propositions": 0, "instances": 0, "error": str(exc),
                 }
                 report_failure(f"turn:{turn.get('id')}", exc)
             return turn
@@ -100,18 +110,20 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
         def feedback_with_discovery(turn_id: str, **kwargs):
             turn = original_feedback(turn_id, **kwargs)
             try:
-                report = None
+                source_kind = None
                 status = turn.get("feedback_status") or kwargs.get("status")
                 if status == "accepted":
                     discovery.store.set_source_kind_active(
                         turn_id, "user_edited_prose", active=False, reason="feedback_replaced"
                     )
-                    report = discovery.capture_turn(turn_id, source_kind="accepted_generation")
+                    source_kind = "accepted_generation"
+                    discovery.capture_turn(turn_id, source_kind=source_kind)
                 elif status == "edited_accept":
                     discovery.store.set_source_kind_active(
                         turn_id, "accepted_generation", active=False, reason="feedback_replaced"
                     )
-                    report = discovery.capture_turn(turn_id, source_kind="user_edited_prose")
+                    source_kind = "user_edited_prose"
+                    discovery.capture_turn(turn_id, source_kind=source_kind)
                 elif status == "rejected":
                     discovery.store.set_source_kind_active(
                         turn_id, "accepted_generation", active=False, reason="feedback_rejected"
@@ -119,8 +131,8 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
                     discovery.store.set_source_kind_active(
                         turn_id, "user_edited_prose", active=False, reason="feedback_rejected"
                     )
-                if report is not None:
-                    turn["_discovery_report"] = report.to_dict()
+                if source_kind:
+                    turn["_discovery_report"] = persisted_turn_report(turn_id, source_kind)
             except Exception as exc:
                 report_failure(f"feedback:{turn_id}", exc)
             return turn
@@ -135,11 +147,8 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
         def delete_scope_with_discovery(*, project_id=None, world_id=None, branch_id=None):
             try:
                 sessions = history.list_sessions(
-                    limit=500,
-                    include_archived=True,
-                    project_id=project_id,
-                    world_id=world_id,
-                    branch_id=branch_id,
+                    limit=500, include_archived=True,
+                    project_id=project_id, world_id=world_id, branch_id=branch_id,
                 )
                 for session in sessions:
                     discovery.set_session_active(session["id"], active=False, reason="scope_deleted")
@@ -159,13 +168,10 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
                 result = original_trash(resource_type, resource_id, **kwargs)
                 if resource_type == "session":
                     try:
-                        discovery.set_session_active(
-                            resource_id, active=False, reason="source_trashed"
-                        )
+                        discovery.set_session_active(resource_id, active=False, reason="source_trashed")
                     except Exception as exc:
                         report_failure(f"trash:{resource_id}", exc)
                 return result
-
             foundation_store.trash = trash_with_discovery
 
         if callable(original_restore):
@@ -173,8 +179,6 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
                 result = original_restore(resource_type, resource_id, **kwargs)
                 if resource_type == "session":
                     try:
-                        # Restore only lifecycle-invalidated evidence; rejected,
-                        # revised, and deleted-source instances stay invalid.
                         with discovery.store._lock, discovery.store.connection() as con:
                             con.execute(
                                 "UPDATE discovery_instances SET active=1,invalidation_reason=NULL,updated_at=datetime('now') "
@@ -184,7 +188,6 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
                     except Exception as exc:
                         report_failure(f"restore:{resource_id}", exc)
                 return result
-
             foundation_store.restore = restore_with_discovery
 
         memory_service._v121_discovery_hooks_bound = True
@@ -202,16 +205,12 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
         limit: int = Query(500, ge=1, le=2000),
     ):
         context = _context(
-            project_id=project_id,
-            world_id=world_id,
-            branch_id=branch_id,
-            session_id=session_id,
+            project_id=project_id, world_id=world_id,
+            branch_id=branch_id, session_id=session_id,
         )
         items = discovery.list(
-            context,
-            include_dismissed=include_dismissed,
-            include_orphaned=include_orphaned,
-            limit=limit,
+            context, include_dismissed=include_dismissed,
+            include_orphaned=include_orphaned, limit=limit,
         )
         counts: dict[str, int] = {}
         for item in items:
@@ -231,19 +230,15 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
     @router.get("/discoveries/{proposition_id}")
     def get_discovery(
         proposition_id: str,
-        project_id: str | None = Query(None),
-        world_id: str | None = Query(None),
-        branch_id: str | None = Query(None),
-        session_id: str | None = Query(None),
+        project_id: str | None = Query(None), world_id: str | None = Query(None),
+        branch_id: str | None = Query(None), session_id: str | None = Query(None),
     ):
         try:
             return discovery.get(
                 proposition_id,
                 _context(
-                    project_id=project_id,
-                    world_id=world_id,
-                    branch_id=branch_id,
-                    session_id=session_id,
+                    project_id=project_id, world_id=world_id,
+                    branch_id=branch_id, session_id=session_id,
                 ),
             )
         except KeyError as exc:
@@ -255,12 +250,9 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
             return discovery.promote_canon(
                 proposition_id,
                 _context(
-                    project_id=payload.project_id,
-                    world_id=payload.world_id,
-                    branch_id=payload.branch_id,
-                    session_id=payload.session_id,
-                    story_order=payload.story_order,
-                    world_time=payload.world_time,
+                    project_id=payload.project_id, world_id=payload.world_id,
+                    branch_id=payload.branch_id, session_id=payload.session_id,
+                    story_order=payload.story_order, world_time=payload.world_time,
                 ),
                 note=payload.note,
             )
@@ -275,12 +267,9 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
             return discovery.dismiss(
                 proposition_id,
                 _context(
-                    project_id=payload.project_id,
-                    world_id=payload.world_id,
-                    branch_id=payload.branch_id,
-                    session_id=payload.session_id,
-                ),
-                note=payload.note,
+                    project_id=payload.project_id, world_id=payload.world_id,
+                    branch_id=payload.branch_id, session_id=payload.session_id,
+                ), note=payload.note,
             )
         except KeyError as exc:
             raise HTTPException(404, "Discovery proposition not found") from exc
@@ -291,12 +280,9 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
             return discovery.reset_decision(
                 proposition_id,
                 _context(
-                    project_id=payload.project_id,
-                    world_id=payload.world_id,
-                    branch_id=payload.branch_id,
-                    session_id=payload.session_id,
-                ),
-                note=payload.note,
+                    project_id=payload.project_id, world_id=payload.world_id,
+                    branch_id=payload.branch_id, session_id=payload.session_id,
+                ), note=payload.note,
             )
         except KeyError as exc:
             raise HTTPException(404, "Discovery proposition not found") from exc
@@ -304,7 +290,8 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
     @router.post("/discoveries/capture-turn/{turn_id}")
     def recapture_turn(turn_id: str):
         try:
-            return discovery.capture_turn(turn_id, source_kind="user_prompt").to_dict()
+            discovery.capture_turn(turn_id, source_kind="user_prompt")
+            return persisted_turn_report(turn_id, "user_prompt")
         except KeyError as exc:
             raise HTTPException(404, "Turn not found") from exc
 
