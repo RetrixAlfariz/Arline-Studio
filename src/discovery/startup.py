@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from threading import Timer
 from typing import Any
 
 from .store import utc_now
 
 
 HISTORICAL_BRANCH_REPAIR_BATCH = 192
+GARMENT_MIGRATION_META_KEY = "garment_namespace_migration_v1"
 
 
 def install_minimal_performance_schema(performance_module, service) -> None:
@@ -60,6 +62,46 @@ def install_minimal_performance_schema(performance_module, service) -> None:
     performance_module._ensure_performance_schema = ensure
     ensure(service)
     service.ensure_discovery_performance_schema = lambda: ensure(service)
+
+
+def install_deferred_garment_migration(garment_module, service, *, delay: float = 4.0) -> None:
+    """Move legacy non-Canon garment cleanup out of application startup."""
+    if getattr(service, "_deferred_garment_migration_installed", False):
+        return
+
+    with service.store.connection() as con:
+        row = con.execute(
+            "SELECT value FROM discovery_meta WHERE key=?",
+            (GARMENT_MIGRATION_META_KEY,),
+        ).fetchone()
+    if row and str(row["value"]) == "done":
+        service._deferred_garment_migration_installed = True
+        return
+
+    migrate = garment_module._migrate_unmaterialized_garment_predicates
+
+    def run() -> None:
+        try:
+            migrated = int(migrate(service) or 0)
+            with service.store._lock, service.store.connection() as con:
+                con.execute(
+                    "INSERT INTO discovery_meta(key,value) VALUES(?,?) "
+                    "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    (GARMENT_MIGRATION_META_KEY, "done"),
+                )
+            metrics = dict(getattr(service, "_performance_metrics", {}) or {})
+            metrics["garment_namespace_migrated"] = migrated
+            service._performance_metrics = metrics
+        except Exception as exc:
+            metrics = dict(getattr(service, "_performance_metrics", {}) or {})
+            metrics["garment_namespace_migration_error"] = str(exc)
+            service._performance_metrics = metrics
+
+    timer = Timer(max(0.1, float(delay)), run)
+    timer.daemon = True
+    timer.start()
+    service._garment_migration_timer = timer
+    service._deferred_garment_migration_installed = True
 
 
 def deferred_materialization_report(provisional_module) -> dict[str, Any]:
