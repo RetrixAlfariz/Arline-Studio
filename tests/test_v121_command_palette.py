@@ -78,7 +78,7 @@ class V121CommandPaletteTests(unittest.TestCase):
         self.assertIn("Speaker order is adaptive", block)
         self.assertIn("never a turn quota", block)
         self.assertIn("Actions, silence, interruptions", block)
-        self.assertIn("active POV", block)
+        self.assertIn("POV-authorized characters", block)
 
 
 if __name__ == "__main__":
