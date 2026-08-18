@@ -44,10 +44,10 @@ def _key(kind: str, label: str) -> str:
     return f"{prefix}:{_slug(label)}"
 
 
-# Proper-name shape is deliberately case-sensitive. Cue words use scoped
-# (?i:...) groups below; compiling the whole expression with re.I would turn
-# every lowercase noun after `di` / `in` into a fake named Library object.
-PROPER = r"[A-ZÀ-ÖØ-Þ][\wÀ-ÿ'’.-]*(?:\s+[A-ZÀ-ÖØ-Þ][\wÀ-ÿ'’.-]*){0,3}"
+# Proper-name shape is deliberately case-sensitive. A period is not accepted
+# inside the word token because sentence boundaries like `Nova City. Alex`
+# must never collapse into one entity label.
+PROPER = r"[A-ZÀ-ÖØ-Þ][\wÀ-ÿ'’-]*(?:\s+[A-ZÀ-ÖØ-Þ][\wÀ-ÿ'’-]*){0,3}"
 
 TYPE_WORDS: dict[str, str] = {
     "character": "character", "karakter": "character", "person": "character", "orang": "character",
@@ -76,15 +76,17 @@ TRAIT_WORDS = {
 STOP_LABELS = {
     "the", "this", "that", "he", "she", "they", "aku", "saya", "dia", "sebuah", "seorang",
     "dan", "lalu", "kemudian", "setelah", "sebelum", "ketika", "saat", "karena", "namun",
+    "later", "then", "after", "before", "when", "because", "however",
 }
 
 
 def _normalize_label(label: str, kind: str) -> str:
-    clean = " ".join(label.strip().split())
-    parts = clean.split()
+    parts = " ".join(label.strip().split()).split()
+    while len(parts) > 1 and parts[0].casefold() in STOP_LABELS:
+        parts = parts[1:]
     if len(parts) > 1 and TYPE_WORDS.get(parts[0].casefold()) == kind:
-        clean = " ".join(parts[1:])
-    return clean
+        parts = parts[1:]
+    return " ".join(parts)
 
 
 def _add_entity(out: list[GeneralCandidate], seen: set[tuple[str, str]], kind: str, label: str,
@@ -111,17 +113,10 @@ def _add_entity(out: list[GeneralCandidate], seen: set[tuple[str, str]], kind: s
 
 
 def detect_general(text: str, *, existing: list[dict[str, Any]] | None = None) -> list[GeneralCandidate]:
-    """Conservative generic discovery supplement for ordinary narrative prose.
-
-    The analytical pipeline remains primary. This layer fills its arbitrary-name
-    gap for clearly named characters/locations/items/organizations and a small
-    set of explicit trait/state constructions. It never grants canon authority.
-    """
+    """Conservative supplement for arbitrary named narrative components."""
     out: list[GeneralCandidate] = []
     seen_entities: set[tuple[str, str]] = set()
 
-    # Existing Library identities are safe anchors and may be matched regardless
-    # of how the user capitalizes them in prose.
     for family in existing or []:
         label = str(family.get("name") or "").strip()
         kind = str(family.get("entity_type") or "lore")
@@ -250,16 +245,11 @@ def _capture_text_general(self: DiscoveryService, text: str, *, source_kind: str
     except Exception:
         existing = []
     candidates = detect_general(evidence, existing=existing)
-    if not candidates:
-        return report
-
     revision = checksum(evidence)
     world_time, story_order = self._turn_time_scope(turn)
     base_qualifies = source_kind in self.REVIEW_SOURCE_KINDS if qualifies_review is None else bool(qualifies_review)
     origin_turn_id = str(lineage.get("forked_from_turn_id") or turn["id"])
     origin_session_id = str(lineage.get("forked_from_session_id") or session["id"])
-    added_props: set[str] = set()
-    added_instances = 0
 
     for index, item in enumerate(candidates, 1):
         link = self._subject_link(
@@ -298,14 +288,17 @@ def _capture_text_general(self: DiscoveryService, text: str, *, source_kind: str
             explicitness="explicit",
             qualifies_review=bool(base_qualifies and item.confidence >= 0.7),
         )
-        added_props.add(proposition["id"])
-        added_instances += 1
 
-    return CaptureReport(
-        report.turn_id, report.source_kind,
-        report.propositions + len(added_props), report.instances + added_instances,
-        report.skipped,
-    )
+    # Report the stable persisted state for this logical source. A second
+    # idempotent capture must therefore return the same counts as the first.
+    with self.store.connection() as con:
+        rows = con.execute(
+            "SELECT id,proposition_id FROM discovery_instances "
+            "WHERE source_turn_id=? AND source_kind=? AND source_revision=? AND active=1",
+            (turn["id"], source_kind, revision),
+        ).fetchall()
+    prop_ids = {str(row["proposition_id"]) for row in rows}
+    return CaptureReport(turn["id"], source_kind, len(prop_ids), len(rows), report.skipped)
 
 
 def install_general_discovery() -> None:
