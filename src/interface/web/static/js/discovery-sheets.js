@@ -3,6 +3,7 @@
   const esc = (value) => String(value ?? "").replace(/[&<>'"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
   const icon = (state) => ({detected:"◌",reviewed:"◇",canon:"◆",dismissed:"×"})[state] || "◌";
 
+  function appState() { return window.ArlineRuntime?.getState?.() || {}; }
   function scope() { return window.ArlineMemoryRuntime?.activeScope?.() || {}; }
 
   function scopeParams() {
@@ -54,11 +55,55 @@
     };
   }
 
+  function isProvisional(family) {
+    return Boolean(family?.shared_core?._discovery?.provisional);
+  }
+
+  function provisionalVisible(family) {
+    if (!isProvisional(family)) return true;
+    const state = appState();
+    const worldId = state.activeWorld?.id || null;
+    const branchId = state.activeBranch?.id || null;
+    if (!worldId) return false;
+    const variants = (state.variants || []).filter((variant) => variant.family_id === family.id && variant.world_id === worldId);
+    // Base/main projection is inherited by world branches. Branch-only
+    // provisional identities stay hidden from unrelated sibling branches.
+    return variants.some((variant) => !variant.branch_id || variant.branch_id === branchId);
+  }
+
+  function installVisibilityGuards() {
+    const originalFiltered = window.filteredWorldFamilies;
+    if (typeof originalFiltered === "function" && !originalFiltered.__provisionalVisibilityWrapped) {
+      const wrapped = function(...args) {
+        const rows = originalFiltered.apply(this, args);
+        return Array.isArray(rows) ? rows.filter(provisionalVisible) : rows;
+      };
+      wrapped.__provisionalVisibilityWrapped = true;
+      window.filteredWorldFamilies = wrapped;
+    }
+    const originalRegistry = window.referenceRegistry;
+    if (typeof originalRegistry === "function" && !originalRegistry.__provisionalVisibilityWrapped) {
+      const wrapped = function(...args) {
+        const rows = originalRegistry.apply(this, args);
+        if (!Array.isArray(rows)) return rows;
+        const state = appState();
+        const hiddenFamilies = new Set((state.families || []).filter((family) => isProvisional(family) && !provisionalVisible(family)).map((family) => family.id));
+        const hiddenVariants = new Set((state.variants || []).filter((variant) => hiddenFamilies.has(variant.family_id)).map((variant) => variant.id));
+        return rows.filter((row) => !(
+          (row.type === "entity_family" && hiddenFamilies.has(row.id)) ||
+          (row.type === "entity_variant" && hiddenVariants.has(row.id))
+        ));
+      };
+      wrapped.__provisionalVisibilityWrapped = true;
+      window.referenceRegistry = wrapped;
+    }
+  }
+
   function styles() {
     if (byId("provisionalSheetStyles")) return;
     const style = document.createElement("style");
     style.id = "provisionalSheetStyles";
-    style.textContent = `.prov-banner{padding:11px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));border-radius:10px;margin-bottom:12px}.prov-banner small,.prov-row small{display:block;opacity:.65;margin-top:3px}.prov-path{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0}.prov-path span:not(:last-child)::after{content:'›';opacity:.45;margin-left:6px}.prov-list{display:grid;gap:7px}.prov-row{padding:9px;border:1px solid var(--line);border-radius:9px}.prov-row-head{display:flex;justify-content:space-between;gap:8px}.prov-row code{font-size:9px;opacity:.55}.prov-value{display:block;margin-top:4px;word-break:break-word}.prov-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}.prov-change{padding:7px 0;border-bottom:1px solid var(--line)}.prov-help{font-size:11px;opacity:.7;line-height:1.5;margin:4px 0 9px}`;
+    style.textContent = `.prov-banner{padding:11px;border:1px solid color-mix(in srgb,var(--accent) 35%,var(--line));border-radius:10px;margin-bottom:12px}.prov-banner small,.prov-row small{display:block;opacity:.65;margin-top:3px}.prov-path{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0}.prov-path span:not(:last-child)::after{content:'›';opacity:.45;margin-left:6px}.prov-list{display:grid;gap:7px}.prov-row{padding:9px;border:1px solid var(--line);border-radius:9px}.prov-row-head{display:flex;justify-content:space-between;gap:8px}.prov-row code{font-size:9px;opacity:.55}.prov-value{display:block;margin-top:4px;word-break:break-word}.prov-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}.prov-change{padding:7px 0;border-bottom:1px solid var(--line)}.prov-help{font-size:11px;opacity:.7;line-height:1.5;margin:4px 0 9px}.prov-zone-note{font-size:11px;opacity:.62;margin-top:6px}`;
     document.head.appendChild(style);
   }
 
@@ -95,6 +140,9 @@
   }
 
   async function makeRelationCanon(relation, familyId) {
+    if (relation.object_type === "spatial_zone") {
+      return window.toast?.("Floor/slot zone edges stay lightweight. Canonize floor_number and the direct containment relation instead.", 5500);
+    }
     if (!confirm(`Make relation “${relation.subject_label} ${String(relation.predicate || "related_to").replaceAll("_"," ")} ${relation.object_label || relation.object_key}” canon?`)) return;
     try {
       await request(`/api/memory/discoveries/${encodeURIComponent(relation.id)}/canon`, {
@@ -126,7 +174,7 @@
         <div class="sheet-section-head"><h3>Discovered knowledge</h3><span>${claims.length}</span></div>
         <p class="prov-help"><b>Correct</b> replaces a wrong observation. <b>Story change</b> preserves the old observation historically and creates a transition. A manual edit becomes Reviewed; only <b>Make Canon</b> grants Canon authority.</p>
         <div class="prov-list">${claims.length ? claims.map((claim) => `<div class="prov-row" data-prov-claim="${esc(claim.id)}"><div class="prov-row-head"><b>${icon(claim.knowledge_state)} ${esc(claim.predicate)}</b><code>${esc(claim.id)}</code></div><span class="prov-value">${esc(valueText(claim.value))}</span><small>${esc(claim.knowledge_state)} · ${Number(claim.support_count || 0)} active source${Number(claim.support_count || 0) === 1 ? "" : "s"} · ${esc(claim.provenance_state || "active")}</small><div class="prov-actions">${claim.knowledge_state !== "canon" ? `<button class="tiny-btn" data-prov-action="correct">Correct</button><button class="tiny-btn" data-prov-action="story">Story change</button><button class="tiny-btn" data-prov-action="canon">Make Canon</button>` : `<span class="protected-note">◆ Canon</span>`}</div></div>`).join("") : `<div class="empty-note">No scoped discovered fields.</div>`}</div>
-        ${relations.length ? `<div class="sheet-section-head gap"><h3>Relations</h3><span>${relations.length}</span></div><div class="prov-list">${relations.map((rel) => `<div class="prov-row" data-prov-relation="${esc(rel.id)}"><div class="prov-row-head"><b>${icon(rel.knowledge_state)} ${esc(rel.subject_label)} ${esc(String(rel.predicate || "related_to").replaceAll("_"," "))} ${esc(rel.object_label || rel.object_key || "?")}</b><code>${esc(rel.id)}</code></div><small>${esc(rel.knowledge_state)} · source-backed provisional relation</small>${rel.knowledge_state !== "canon" ? `<div class="prov-actions"><button class="tiny-btn" data-rel-action="canon">Make Canon</button></div>` : ""}</div>`).join("")}</div>` : ""}
+        ${relations.length ? `<div class="sheet-section-head gap"><h3>Relations</h3><span>${relations.length}</span></div><div class="prov-list">${relations.map((rel) => `<div class="prov-row" data-prov-relation="${esc(rel.id)}"><div class="prov-row-head"><b>${icon(rel.knowledge_state)} ${esc(rel.subject_label)} ${esc(String(rel.predicate || "related_to").replaceAll("_"," "))} ${esc(rel.object_label || rel.object_key || "?")}</b><code>${esc(rel.id)}</code></div><small>${esc(rel.knowledge_state)} · source-backed provisional relation</small>${rel.object_type === "spatial_zone" ? `<div class="prov-zone-note">Lightweight spatial-zone edge · review via the scalar floor/slot claim and direct entity containment.</div>` : rel.knowledge_state !== "canon" ? `<div class="prov-actions"><button class="tiny-btn" data-rel-action="canon">Make Canon</button></div>` : ""}</div>`).join("")}</div>` : ""}
         ${changes.length ? `<div class="sheet-section-head gap"><h3>Change history</h3><span>${changes.length}</span></div>${changes.map((change) => `<div class="prov-change"><b>${esc(change.change_kind.replaceAll("_"," "))}</b><small>${esc(change.from_proposition_id)} → ${esc(change.to_proposition_id)}</small><code>${esc(change.id)}</code></div>`).join("")}` : ""}`;
       body.appendChild(section);
 
@@ -150,10 +198,15 @@
     }
   }
 
-  function wrap() {
+  function wrapSheet() {
     const original = window.openEntitySheet;
     if (typeof original !== "function" || original.__provSheetWrapped) return;
     const wrapped = async function(familyId) {
+      const family = (appState().families || []).find((item) => item.id === familyId);
+      if (family && !provisionalVisible(family)) {
+        window.toast?.("This provisional sheet belongs to another branch lineage.", 4500);
+        return;
+      }
       const result = await original.apply(this, arguments);
       await decorate(familyId);
       return result;
@@ -164,11 +217,12 @@
 
   function init() {
     styles();
-    if (typeof setTimeout === "function") setTimeout(wrap, 0);
-    else wrap();
+    installVisibilityGuards();
+    if (typeof setTimeout === "function") setTimeout(() => { installVisibilityGuards(); wrapSheet(); }, 0);
+    else wrapSheet();
   }
 
-  window.ArlineProvisionalSheets = Object.freeze({decorate});
+  window.ArlineProvisionalSheets = Object.freeze({decorate, provisionalVisible});
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, {once:true});
   else init();
 })();
