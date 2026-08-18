@@ -197,13 +197,13 @@ class V121ProvisionalSheetSpatialTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             f = Fixture(td)
             branch_a = f.workspace.create_branch(
-                f.world_id, "Branch A", parent_branch_id=f.branch["id"], kind="alternate"
+                f.world_id, "Branch A", parent_branch_id=f.branch["id"], kind="what_if"
             )
             branch_b = f.workspace.create_branch(
-                f.world_id, "Branch B", parent_branch_id=f.branch["id"], kind="alternate"
+                f.world_id, "Branch B", parent_branch_id=f.branch["id"], kind="what_if"
             )
             branch_child = f.workspace.create_branch(
-                f.world_id, "Branch A Child", parent_branch_id=branch_a["id"], kind="alternate"
+                f.world_id, "Branch A Child", parent_branch_id=branch_a["id"], kind="what_if"
             )
             session_a = f.session(branch_id=branch_a["id"])
             f.turn(session_a["id"], "Character BranchOnly lives in Nova Annex.")
