@@ -162,6 +162,13 @@
     window.openEntitySheet = wrapped;
   }
 
+  function init() {
+    styles();
+    if (typeof setTimeout === "function") setTimeout(wrap, 0);
+    else wrap();
+  }
+
   window.ArlineProvisionalSheets = Object.freeze({decorate});
-  document.addEventListener("DOMContentLoaded", () => { styles(); setTimeout(wrap, 0); });
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, {once:true});
+  else init();
 })();
