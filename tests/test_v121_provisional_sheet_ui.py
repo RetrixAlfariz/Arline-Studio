@@ -57,15 +57,18 @@ class V121ProvisionalSheetUITests(unittest.TestCase):
         self.assertIn('prop.get("object_type") == "spatial_zone"', runtime)
         self.assertIn("not directly canonizable", runtime)
 
-    def test_provisional_sheet_visibility_is_world_branch_aware(self):
+    def test_provisional_sheet_visibility_uses_source_branch_lineage(self):
         source = SHEETS_JS.read_text(encoding="utf-8")
+        runtime = PROVISIONAL_RUNTIME.read_text(encoding="utf-8")
         self.assertIn("function provisionalVisible", source)
-        self.assertIn("variant.family_id === family.id", source)
-        self.assertIn("variant.world_id === worldId", source)
-        self.assertIn("variant.branch_id === branchId", source)
+        self.assertIn("activeBranchLineageIds", source)
+        self.assertIn("source_branch_ids", source)
+        self.assertIn("parent_branch_id", source)
         self.assertIn("filteredWorldFamilies", source)
         self.assertIn("referenceRegistry", source)
         self.assertIn("another branch lineage", source)
+        self.assertIn('meta["source_branch_ids"]', runtime)
+        self.assertIn("_source_branch_ids", runtime)
 
     def test_apartment_is_a_type_floor_is_zone_and_unit_is_sheet(self):
         source = SPATIAL.read_text(encoding="utf-8")
