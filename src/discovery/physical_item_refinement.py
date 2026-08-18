@@ -5,7 +5,7 @@ from typing import Any
 from src.narrative.rails import CharacterRailParser
 
 from . import physical_items as items
-from .store import loads, utc_now
+from .store import checksum, loads, utc_now
 
 
 GENERIC_CHARACTER_LABELS = {"self", "character", "person", "someone", "unknown"}
@@ -202,11 +202,9 @@ def install_physical_item_refinement(service) -> None:
             return report
 
         by_start: dict[int, str] = {}
-        type_by_key: dict[str, str] = {}
         for row in rows:
             if row.get("span_start") is not None:
                 by_start[int(row["span_start"])] = row["subject_key"]
-            type_by_key[row["subject_key"]] = row["garment_type"]
 
         previous_by_type: dict[str, str] = {}
         for mention in mentions:
