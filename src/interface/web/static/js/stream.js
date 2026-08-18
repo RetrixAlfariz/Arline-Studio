@@ -149,7 +149,7 @@
     if (typeof document === "undefined" || typeof document.querySelector !== "function") return;
     if (document.querySelector('script[data-arline-provisional-sheets="1"]')) return;
     const script = document.createElement("script");
-    script.src = "/static/js/discovery-sheets.js?v=1.2.1-maturity";
+    script.src = "/static/js/discovery-sheets.js?v=1.2.1-physical-items";
     script.dataset.arlineProvisionalSheets = "1";
     document.body.appendChild(script);
   }
