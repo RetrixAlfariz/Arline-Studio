@@ -44,6 +44,9 @@ def _key(kind: str, label: str) -> str:
     return f"{prefix}:{_slug(label)}"
 
 
+# Proper-name shape is deliberately case-sensitive. Cue words use scoped
+# (?i:...) groups below; compiling the whole expression with re.I would turn
+# every lowercase noun after `di` / `in` into a fake named Library object.
 PROPER = r"[A-ZÀ-ÖØ-Þ][\wÀ-ÿ'’.-]*(?:\s+[A-ZÀ-ÖØ-Þ][\wÀ-ÿ'’.-]*){0,3}"
 
 TYPE_WORDS: dict[str, str] = {
@@ -71,15 +74,23 @@ TRAIT_WORDS = {
 }
 
 STOP_LABELS = {
-    "The", "This", "That", "He", "She", "They", "Aku", "Saya", "Dia", "Sebuah", "Seorang",
-    "Dan", "Lalu", "Kemudian", "Setelah", "Sebelum", "Ketika", "Saat", "Karena", "Namun",
+    "the", "this", "that", "he", "she", "they", "aku", "saya", "dia", "sebuah", "seorang",
+    "dan", "lalu", "kemudian", "setelah", "sebelum", "ketika", "saat", "karena", "namun",
 }
+
+
+def _normalize_label(label: str, kind: str) -> str:
+    clean = " ".join(label.strip().split())
+    parts = clean.split()
+    if len(parts) > 1 and TYPE_WORDS.get(parts[0].casefold()) == kind:
+        clean = " ".join(parts[1:])
+    return clean
 
 
 def _add_entity(out: list[GeneralCandidate], seen: set[tuple[str, str]], kind: str, label: str,
                 start: int, end: int, span: str, confidence: float = 0.8) -> None:
-    label = " ".join(label.strip().split())
-    if not label or label in STOP_LABELS or len(label) < 2:
+    label = _normalize_label(label, kind)
+    if not label or label.casefold() in STOP_LABELS or len(label) < 2:
         return
     signature = (kind, label.casefold())
     if signature in seen:
@@ -102,14 +113,15 @@ def _add_entity(out: list[GeneralCandidate], seen: set[tuple[str, str]], kind: s
 def detect_general(text: str, *, existing: list[dict[str, Any]] | None = None) -> list[GeneralCandidate]:
     """Conservative generic discovery supplement for ordinary narrative prose.
 
-    The older structural pipeline remains primary. This layer only fills the
-    obvious gap for arbitrary proper names / locations / named things and a few
-    explicit state/trait constructions. Everything it emits is still non-canon.
+    The analytical pipeline remains primary. This layer fills its arbitrary-name
+    gap for clearly named characters/locations/items/organizations and a small
+    set of explicit trait/state constructions. It never grants canon authority.
     """
     out: list[GeneralCandidate] = []
     seen_entities: set[tuple[str, str]] = set()
 
-    # Existing Library identities are the safest generic anchors.
+    # Existing Library identities are safe anchors and may be matched regardless
+    # of how the user capitalizes them in prose.
     for family in existing or []:
         label = str(family.get("name") or "").strip()
         kind = str(family.get("entity_type") or "lore")
@@ -119,8 +131,6 @@ def detect_general(text: str, *, existing: list[dict[str, Any]] | None = None) -
         if match:
             _add_entity(out, seen_entities, kind, label, match.start(), match.end(), match.group(0), 0.99)
 
-    # Explicit @ references that resolve to existing Library identities are safe;
-    # unknown @ names default to character only when the name appears as an actor.
     existing_by_name = {str(item.get("name") or "").casefold(): item for item in existing or []}
     for match in re.finditer(r"@([\wÀ-ÿ.'-]{2,})", text):
         label = match.group(1)
@@ -130,48 +140,45 @@ def detect_general(text: str, *, existing: list[dict[str, Any]] | None = None) -
             if kind in {"character", "location", "item", "organization"}:
                 _add_entity(out, seen_entities, kind, family.get("name") or label, match.start(), match.end(), match.group(0), 0.99)
 
-    # "character Alex", "kota Surabaya", "pedang bernama Aster", etc.
     type_pattern = "|".join(sorted((re.escape(word) for word in TYPE_WORDS), key=len, reverse=True))
     typed = re.compile(
-        rf"\b(?P<type>{type_pattern})\b\s*(?:(?:bernama|named|called|berjulukan)\s+)?(?P<label>{PROPER})",
-        re.I,
+        rf"\b(?P<type>(?i:{type_pattern}))\b\s*"
+        rf"(?:(?i:bernama|named|called|berjulukan)\s+)?(?P<label>{PROPER})"
     )
     for match in typed.finditer(text):
         kind = TYPE_WORDS.get(match.group("type").casefold())
-        label = match.group("label").strip()
         if kind:
-            _add_entity(out, seen_entities, kind, label, match.start(), match.end(), match.group(0), 0.9)
+            _add_entity(out, seen_entities, kind, match.group("label"), match.start(), match.end(), match.group(0), 0.9)
 
-    # Proper-name actor followed by a clear predicate. This intentionally does
-    # not treat every capitalized token as a character.
     actor = re.compile(
-        rf"(?<![\w@])(?P<label>{PROPER})\s+(?P<verb>adalah|is|was|berkata|said|says|"
-        rf"tinggal|lives|resides|berjalan|walks|memakai|wears|menggunakan|uses|"
-        rf"menjadi|became|becomes|berubah|transforms?|tersenyum|smiles|menatap|looks)\b",
-        re.I,
+        rf"(?<![\w@])(?P<label>{PROPER})\s+"
+        rf"(?P<verb>(?i:adalah|is|was|berkata|said|says|tinggal|lives|resides|"
+        rf"berjalan|walks|memakai|wears|menggunakan|uses|menjadi|became|becomes|"
+        rf"berubah|transforms?|tersenyum|smiles|menatap|looks))\b"
     )
     for match in actor.finditer(text):
         _add_entity(out, seen_entities, "character", match.group("label"), match.start(), match.end(), match.group(0), 0.82)
 
-    # Explicit locations after spatial prepositions. Require a proper name to
-    # avoid creating every incidental "room/chair/table" as Library objects.
+    loc_types = (
+        "kota|city|desa|village|kampus|campus|kafe|cafe|café|sekolah|school|"
+        "apartemen|apartment|rumah|house|hutan|forest"
+    )
     loc = re.compile(
-        rf"\b(?:di|ke|dari|in|at|to|from)\s+(?:(?:kota|city|desa|village|kampus|campus|"
-        rf"kafe|cafe|café|sekolah|school|apartemen|apartment|rumah|house|hutan|forest)\s+)?(?P<label>{PROPER})",
-        re.I,
+        rf"\b(?i:di|ke|dari|in|at|to|from)\s+"
+        rf"(?:(?i:{loc_types})\s+)?(?P<label>{PROPER})"
     )
     for match in loc.finditer(text):
         _add_entity(out, seen_entities, "location", match.group("label"), match.start(), match.end(), match.group(0), 0.88)
 
-    # Explicit personality descriptors only. We do not infer personality from
-    # body, gender presentation, appearance, or one-off behavior.
     trait_words = "|".join(re.escape(item) for item in sorted(TRAIT_WORDS, key=len, reverse=True))
     trait = re.compile(
-        rf"(?<![\w@])(?P<label>{PROPER})\s+(?:adalah|is|was)\s+(?:(?:orang\s+yang|a|an)\s+)?(?P<trait>{trait_words})\b",
-        re.I,
+        rf"(?<![\w@])(?P<label>{PROPER})\s+(?i:adalah|is|was)\s+"
+        rf"(?:(?i:orang\s+yang|a|an)\s+)?(?P<trait>(?i:{trait_words}))\b"
     )
     for match in trait.finditer(text):
-        label = match.group("label").strip()
+        label = _normalize_label(match.group("label"), "character")
+        if not label or label.casefold() in STOP_LABELS:
+            continue
         _add_entity(out, seen_entities, "character", label, match.start(), match.end(), match.group(0), 0.9)
         out.append(GeneralCandidate(
             subject_type="character", subject_key=_key("character", label), subject_label=label,
@@ -179,15 +186,15 @@ def detect_general(text: str, *, existing: list[dict[str, Any]] | None = None) -
             start=match.start(), end=match.end(), span_text=match.group(0), confidence=0.94,
         ))
 
-    # Generic form/state transformation. This stores the explicit description,
-    # not a fabricated ontology of what the transformed body/personality means.
     transition = re.compile(
-        rf"(?<![\w@])(?P<label>{PROPER})\s+(?:berubah\s+menjadi|menjadi|became|becomes|"
-        rf"transformed?\s+into|transforms?\s+into)\s+(?P<value>[^.!?\n]{{2,180}})",
-        re.I,
+        rf"(?<![\w@])(?P<label>{PROPER})\s+"
+        rf"(?i:berubah\s+menjadi|menjadi|became|becomes|transformed?\s+into|transforms?\s+into)\s+"
+        rf"(?P<value>[^.!?\n]{{2,180}})"
     )
     for match in transition.finditer(text):
-        label = match.group("label").strip()
+        label = _normalize_label(match.group("label"), "character")
+        if not label or label.casefold() in STOP_LABELS:
+            continue
         value = " ".join(match.group("value").strip().split())
         _add_entity(out, seen_entities, "character", label, match.start(), match.end(), match.group(0), 0.85)
         out.append(GeneralCandidate(
@@ -197,14 +204,16 @@ def detect_general(text: str, *, existing: list[dict[str, Any]] | None = None) -
             temporal_state="historical_or_current",
         ))
 
-    # Residence relation with an explicit named place.
     residence = re.compile(
-        rf"(?<![\w@])(?P<char>{PROPER})\s+(?:tinggal|lives|resides)\s+(?:di|in|at)\s+"
-        rf"(?:(?:kota|city|apartemen|apartment|rumah|house)\s+)?(?P<loc>{PROPER})",
-        re.I,
+        rf"(?<![\w@])(?P<char>{PROPER})\s+(?i:tinggal|lives|resides)\s+"
+        rf"(?i:di|in|at)\s+(?:(?i:kota|city|apartemen|apartment|rumah|house)\s+)?"
+        rf"(?P<loc>{PROPER})"
     )
     for match in residence.finditer(text):
-        char = match.group("char").strip(); place = match.group("loc").strip()
+        char = _normalize_label(match.group("char"), "character")
+        place = _normalize_label(match.group("loc"), "location")
+        if not char or not place or char.casefold() in STOP_LABELS or place.casefold() in STOP_LABELS:
+            continue
         _add_entity(out, seen_entities, "character", char, match.start(), match.end(), match.group(0), 0.9)
         _add_entity(out, seen_entities, "location", place, match.start(), match.end(), match.group(0), 0.9)
         out.append(GeneralCandidate(
@@ -268,8 +277,6 @@ def _capture_text_general(self: DiscoveryService, text: str, *, source_kind: str
             target_resource_type=link.get("resource_type") if link else None,
             target_resource_id=link.get("resource_id") if link else None,
         )
-        # Do not count the same logical proposition twice when the structural
-        # pipeline already extracted it from this exact turn/source revision.
         existing_instances = self.store.list_instances(proposition["id"])
         if any(
             inst.get("source_turn_id") == turn["id"]
@@ -291,7 +298,8 @@ def _capture_text_general(self: DiscoveryService, text: str, *, source_kind: str
             explicitness="explicit",
             qualifies_review=bool(base_qualifies and item.confidence >= 0.7),
         )
-        added_props.add(proposition["id"]); added_instances += 1
+        added_props.add(proposition["id"])
+        added_instances += 1
 
     return CaptureReport(
         report.turn_id, report.source_kind,
