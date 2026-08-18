@@ -81,14 +81,34 @@ Implemented in the current v1.2.1 pass:
 - dedicated Character Rails documentation records the command grammar and isolation contract;
 - synthetic tests cover rail parsing/isolation, compact `@vian@fano` participants, Scene Dynamics budgets/channels, optional hybrid dense routing, Library profile + relationship retrieval, world-time Scope Gate behavior, dual-axis state reconstruction, Timeline projection/backfill idempotency, Timeline add auto-refresh failure isolation, supersession, and chat-index rail leakage.
 
+### Narrative Discovery / provisional Library maturity
+
+Narrative Discovery is now a provenance layer feeding stable, usable Library
+sheets rather than a separate pile of review cards.
+
+- detected characters, locations, items, organizations, lore and rules can materialize as stable provisional Library sheets immediately while remaining explicitly non-Canon;
+- a sheet identity is stable, while each discovered assertion/relation has its own `PROP-*` provenance and value changes have independent `CHANGE-*` records;
+- user `Correct` and `Story change` actions are distinct: corrections replace a wrong observation, while story changes preserve the prior observation as history/transition;
+- relations are first-class provisional knowledge and can be promoted independently from their endpoint entities;
+- every evaluated Discovery claim carries deterministic typed semantics (`group`, `value_kind`, temporal role, Canon target, Canon eligibility and derived projection target);
+- identity resolution is conservative and shared by capture/materialization: exact current name, then exact alias, then exact unique variant display name; ambiguous identities abstain instead of fuzzy auto-merging;
+- Canon promotion is scope-preflighted, idempotent and failure-safe: canonical Fact/Relationship/Timeline materialization happens before Discovery authority is committed, repeated clicks reuse the same canonical resource, and main-branch data follows the Workspace `branch_id=NULL` storage invariant;
+- once a Discovery claim has crossed into Canon, Discovery cannot reset or dismiss it; subsequent edits use canonical Fact/Relationship/Timeline retcon/delete workflows;
+- canonical static/current facts may project into the structured Family/Variant sheet as a rebuildable current view while Fact/Timeline remains the authority source;
+- provisional Library visibility follows source world-branch lineage and fork cutoffs, including Library browsing without an active chat, while sibling branches remain isolated;
+- apartment containment keeps `Apartemen` as a type and floors as lightweight zones; city/building/unit remain callable Location sheets;
+- the same precision-first containment grammar now supports explicit buildings, hotels, houses and dormitories with named units/rooms and floor zones without turning every structural floor into a full Library entity;
+- lightweight zone edges are deliberately non-canonizable as entity relationships; scalar floor/slot facts and direct entity containment remain the canonical surface;
+- frontend provisional sheets expose semantic group/Canon target, one-way Canon authority wording and the derived projection target after promotion.
+
 ### Validation
 
 Temporary validation PRs target `develop/v1.2` only and are never merged; they
 exist solely because the connector exposes PR-triggered workflow runs more
-reliably than push-triggered runs. Validation run `32079202074` completed
-successfully across the Python regression suite, Python compilation, JavaScript
-syntax checks, executable Memory runtime scope smoke, and repository hygiene for
-the current source feature set. The temporary PR was closed without merging.
+reliably than push-triggered runs. Discovery maturity core validation run
+`32144628610` completed successfully across the Python regression suite, Python
+compilation, JavaScript syntax checks, executable Memory runtime scope smoke,
+and repository hygiene. The temporary PR was closed without merging.
 
 No feature code is merged into `main` by this validation process.
 
