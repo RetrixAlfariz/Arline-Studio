@@ -96,6 +96,7 @@ def detect_location_hierarchy(text: str) -> list[GeneralCandidate]:
 
     floor_key = None
     floor_label = None
+    floor_number = None
     if floor_match:
         floor_number = int(floor_match.group("floor"))
         floor_label = f"Floor {floor_number}"
@@ -132,23 +133,28 @@ def detect_location_hierarchy(text: str) -> list[GeneralCandidate]:
                 "location", unit_key, unit_label, "location.kind", "apartment_unit",
                 "update", unit_match.start(), unit_match.end(), unit_match.group(0), 0.99,
             ),
+            # Direct entity-to-entity containment remains canonizable without
+            # promoting the lightweight Floor zone into a fake Library sheet.
+            GeneralCandidate(
+                "location", unit_key, unit_label, "part_of", True, "relation",
+                span_start, span_end, span, 0.98,
+                object_type="location", object_key=building_key, object_label=building,
+            ),
         ]
         if floor_key:
-            out.append(
+            out += [
                 GeneralCandidate(
                     "location", unit_key, unit_label, "located_on", True, "relation",
                     span_start, span_end, span, 0.99,
                     object_type="spatial_zone", object_key=floor_key, object_label=floor_label,
-                )
-            )
-        else:
-            out.append(
+                ),
+                # Floor is also a scalar unit attribute. The zone edge is useful
+                # for traversal while this scalar can be reviewed/canonized alone.
                 GeneralCandidate(
-                    "location", unit_key, unit_label, "part_of", True, "relation",
-                    span_start, span_end, span, 0.96,
-                    object_type="location", object_key=building_key, object_label=building,
-                )
-            )
+                    "location", unit_key, unit_label, "floor_number", floor_number, "update",
+                    floor_match.start(), floor_match.end(), floor_match.group(0), 0.99,
+                ),
+            ]
         if area_match:
             raw = area_match.group("area").replace(",", ".")
             area = float(raw)
