@@ -81,6 +81,16 @@ def describe_claim(proposition: dict[str, Any]) -> dict[str, Any]:
             "group": "identity", "temporal": "static",
             "projection": "family.shared_core", "projection_path": "kind",
         })
+    elif predicate == "item.kind":
+        result.update({
+            "group": "identity", "temporal": "static",
+            "projection": "family.shared_core", "projection_path": "kind",
+        })
+    elif predicate == "garment.type":
+        result.update({
+            "group": "identity", "temporal": "static",
+            "projection": "family.shared_core", "projection_path": "garment.type",
+        })
     elif predicate.startswith("identity."):
         result.update({
             "group": "identity", "temporal": "static",
