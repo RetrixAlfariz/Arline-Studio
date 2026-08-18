@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from . import provisional
+from .library_scope import install_library_scope_lineage
 from .provisional_materialize import materialize_proposition_branch_aware
 from .provisional_runtime import install_provisional_runtime_fix
 
@@ -15,6 +16,7 @@ if not getattr(provisional, "_RUNTIME_FIX_WRAPPED", False):
         provisional._materialize_proposition = materialize_proposition_branch_aware
         _original_install(service)
         install_provisional_runtime_fix(service)
+        install_library_scope_lineage(service)
 
     provisional.install_provisional_discovery = _install_with_runtime_fix
     provisional._RUNTIME_FIX_WRAPPED = True
