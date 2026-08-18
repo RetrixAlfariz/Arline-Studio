@@ -2,17 +2,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import HTTPException, Query
 from pydantic import BaseModel
 
 from src.memory.models import MemoryQueryContext
 
-from .backfill import DiscoveryBackfillService
-from .general import install_general_capture
+from .backfill import backfill_discoveries
+from .general import install_general_discovery
 from .memory import install_discovery_memory_bridge
+from .performance_background import install_background_materialization
 from .provisional import install_provisional_discovery
 from .service import DiscoveryService
-from .spatial import install_spatial_capture
+from .spatial import install_spatial_discovery
 from .store import DiscoveryStore
 
 
@@ -21,9 +22,9 @@ class DiscoveryDecisionPayload(BaseModel):
     world_id: str | None = None
     branch_id: str | None = None
     session_id: str | None = None
-    world_time: Any = None
     story_order: float | None = None
-    note: str | None = None
+    world_time: Any = None
+    note: str = ""
 
 
 class DiscoveryEditPayload(DiscoveryDecisionPayload):
@@ -31,52 +32,52 @@ class DiscoveryEditPayload(DiscoveryDecisionPayload):
     mode: str = "correction"
 
 
-def _context(
-    *,
-    project_id: str | None,
-    world_id: str | None,
-    branch_id: str | None,
-    session_id: str | None,
-    world_time: Any = None,
-    story_order: float | None = None,
-) -> MemoryQueryContext:
+def _context(*, project_id=None, world_id=None, branch_id=None, session_id=None,
+             story_order=None, world_time=None) -> MemoryQueryContext:
     return MemoryQueryContext(
-        project_id=project_id,
-        world_id=world_id,
-        branch_id=branch_id,
-        session_id=session_id,
-        world_time=world_time,
-        story_order=story_order,
+        project_id=project_id, world_id=world_id, branch_id=branch_id,
+        session_id=session_id, story_order=story_order, world_time=world_time,
         context_lens="scene",
-        retrieval_mode="discovery_review",
     )
 
 
-def attach_discovery(
-    router: APIRouter,
-    *,
-    memory_service,
-    memory_store,
-    workspace,
-    history,
-    foundation=None,
-) -> None:
-    if getattr(memory_service, "discovery", None) is not None:
-        discovery = memory_service.discovery
+def attach_discovery(router, *, memory_service, foundation=None) -> DiscoveryService | None:
+    """Attach Narrative Discovery to a real MemoryService application instance.
+
+    `create_memory_router()` is also exercised with tiny fake services in unit
+    tests. Discovery is an optional extension there, so missing Memory ownership
+    dependencies must be a clean no-op rather than changing the router contract.
+    """
+    required = ("store", "workspace", "history", "query_engine")
+    if not all(hasattr(memory_service, name) for name in required):
+        return None
+
+    # Install from general to specialized. The spatial layer wraps the generic
+    # capture path, then provisional materialization wraps turn capture itself.
+    install_general_discovery()
+    install_spatial_discovery()
+
+    existing = getattr(memory_service, "discovery", None)
+    if isinstance(existing, DiscoveryService):
+        discovery = existing
     else:
-        store = DiscoveryStore(memory_store.path)
+        discovery_store = DiscoveryStore(memory_service.store.path)
         discovery = DiscoveryService(
-            store=store,
-            workspace=workspace,
-            history=history,
-            gate=memory_service.query_engine.gate,
+            store=discovery_store,
+            workspace=memory_service.workspace,
+            history=memory_service.history,
+            foundation=foundation or getattr(memory_service, "foundation", None),
         )
         memory_service.discovery = discovery
         memory_service.query_engine.discovery = discovery
         memory_service.query_engine.compiler.discovery = discovery
         install_discovery_memory_bridge()
 
+    # The provisional installer is performance-wrapped by provisional_autopatch:
+    # startup projection is bounded and revision-aware. Any residue is drained
+    # later by a daemon worker; installing that worker performs no DB scan.
     install_provisional_discovery(discovery)
+    install_background_materialization(discovery)
 
     def persisted_turn_report(
         turn_id: str,
@@ -84,14 +85,7 @@ def attach_discovery(
         *,
         materialize: bool = False,
     ) -> dict[str, Any]:
-        """Report persisted evidence without re-running semantic extraction.
-
-        Turn capture already performs turn-local incremental materialization. The
-        previous implementation called materialize again here and the browser
-        then called capture-turn again, multiplying work for every generation.
-        A caller may request a cached/idempotent materialization check explicitly,
-        but normal reporting is read-only.
-        """
+        """Report persisted evidence without re-running extraction/materialization."""
         with discovery.store.connection() as con:
             rows = con.execute(
                 "SELECT id,proposition_id FROM discovery_instances "
@@ -116,19 +110,21 @@ def attach_discovery(
             reporter(f"discovery:{key}", exc)
 
     if not getattr(memory_service, "_v121_discovery_hooks_bound", False):
-        history_store = memory_service.history
+        history = memory_service.history
         foundation_store = foundation or getattr(memory_service, "foundation", None)
 
-        original_add_turn = history_store.add_turn
-        original_feedback = history_store.set_feedback
-        original_delete_session = history_store.delete_session
-        original_delete_scope = history_store.delete_sessions_by_scope
+        original_add_turn = history.add_turn
+        original_feedback = history.set_feedback
+        original_delete_session = history.delete_session
+        original_delete_scope = history.delete_sessions_by_scope
         original_trash = getattr(foundation_store, "trash", None) if foundation_store is not None else None
         original_restore = getattr(foundation_store, "restore", None) if foundation_store is not None else None
 
         def add_turn_with_discovery(*args, **kwargs):
             turn = original_add_turn(*args, **kwargs)
             try:
+                # capture_turn already performs the turn-local incremental
+                # projection exactly once. Reporting below is read-only.
                 discovery.capture_turn(turn["id"], source_kind="user_prompt")
                 turn["_discovery_report"] = persisted_turn_report(turn["id"], "user_prompt")
             except Exception as exc:
@@ -170,40 +166,35 @@ def attach_discovery(
             return turn
 
         def delete_session_with_discovery(session_id: str):
-            result = original_delete_session(session_id)
             try:
                 discovery.set_session_active(session_id, active=False, reason="source_deleted")
             except Exception as exc:
                 report_failure(f"session:{session_id}", exc)
-            return result
+            return original_delete_session(session_id)
 
-        def delete_scope_with_discovery(**kwargs):
+        def delete_scope_with_discovery(*, project_id=None, world_id=None, branch_id=None):
             try:
-                before = history_store.list_sessions(
-                    project_id=kwargs.get("project_id"),
-                    world_id=kwargs.get("world_id"),
-                    branch_id=kwargs.get("branch_id"),
-                    include_archived=True,
+                sessions = history.list_sessions(
+                    limit=500, include_archived=True,
+                    project_id=project_id, world_id=world_id, branch_id=branch_id,
                 )
-            except Exception:
-                before = []
-            result = original_delete_scope(**kwargs)
-            for session in before:
-                try:
-                    discovery.set_session_active(session["id"], active=False, reason="source_deleted")
-                except Exception as exc:
-                    report_failure(f"scope-session:{session.get('id')}", exc)
-            return result
+                for session in sessions:
+                    discovery.set_session_active(session["id"], active=False, reason="scope_deleted")
+            except Exception as exc:
+                report_failure("scope", exc)
+            return original_delete_scope(
+                project_id=project_id, world_id=world_id, branch_id=branch_id
+            )
 
-        history_store.add_turn = add_turn_with_discovery
-        history_store.set_feedback = feedback_with_discovery
-        history_store.delete_session = delete_session_with_discovery
-        history_store.delete_sessions_by_scope = delete_scope_with_discovery
+        history.add_turn = add_turn_with_discovery
+        history.set_feedback = feedback_with_discovery
+        history.delete_session = delete_session_with_discovery
+        history.delete_sessions_by_scope = delete_scope_with_discovery
 
-        if foundation_store is not None and callable(original_trash):
-            def trash_with_discovery(resource_type: str, resource_id: str, *args, **kwargs):
-                result = original_trash(resource_type, resource_id, *args, **kwargs)
-                if resource_type == "chat_session":
+        if callable(original_trash):
+            def trash_with_discovery(resource_type: str, resource_id: str, **kwargs):
+                result = original_trash(resource_type, resource_id, **kwargs)
+                if resource_type == "session":
                     try:
                         discovery.set_session_active(resource_id, active=False, reason="source_trashed")
                     except Exception as exc:
@@ -211,39 +202,25 @@ def attach_discovery(
                 return result
             foundation_store.trash = trash_with_discovery
 
-        if foundation_store is not None and callable(original_restore):
-            def restore_with_discovery(resource_type: str, resource_id: str, *args, **kwargs):
-                result = original_restore(resource_type, resource_id, *args, **kwargs)
-                if resource_type == "chat_session":
+        if callable(original_restore):
+            def restore_with_discovery(resource_type: str, resource_id: str, **kwargs):
+                result = original_restore(resource_type, resource_id, **kwargs)
+                if resource_type == "session":
                     try:
-                        discovery.store.restore_source_reason(
-                            session_id=resource_id, reason="source_trashed"
-                        )
+                        with discovery.store._lock, discovery.store.connection() as con:
+                            con.execute(
+                                "UPDATE discovery_instances SET active=1,invalidation_reason=NULL,updated_at=datetime('now') "
+                                "WHERE source_session_id=? AND invalidation_reason='source_trashed'",
+                                (resource_id,),
+                            )
                     except Exception as exc:
                         report_failure(f"restore:{resource_id}", exc)
                 return result
             foundation_store.restore = restore_with_discovery
 
         memory_service._v121_discovery_hooks_bound = True
-
-    # The semantic type/grammar extensions wrap capture only after the lifecycle
-    # hook has been bound to the final DiscoveryService method chain.
-    install_general_capture(discovery)
-    install_spatial_capture(discovery)
-
-    backfill_service = DiscoveryBackfillService(
-        discovery=discovery,
-        history=history,
-        foundation=foundation,
-    )
-
-    @router.get("/discoveries/status")
-    def discovery_status():
-        status = discovery.store.status()
-        performance = getattr(discovery, "_performance_metrics", None)
-        if performance:
-            status["performance"] = performance
-        return status
+        memory_service._v121_original_add_turn = original_add_turn
+        memory_service._v121_original_feedback = original_feedback
 
     @router.get("/discoveries")
     def list_discoveries(
@@ -253,159 +230,21 @@ def attach_discovery(
         session_id: str | None = Query(None),
         include_dismissed: bool = Query(False),
         include_orphaned: bool = Query(False),
-        limit: int = Query(250, ge=1, le=1000),
+        limit: int = Query(250, ge=1, le=2000),
     ):
         context = _context(
-            project_id=project_id,
-            world_id=world_id,
-            branch_id=branch_id,
-            session_id=session_id,
+            project_id=project_id, world_id=world_id,
+            branch_id=branch_id, session_id=session_id,
         )
         items = discovery.list(
-            context,
-            include_dismissed=include_dismissed,
-            include_orphaned=include_orphaned,
-            limit=limit,
+            context, include_dismissed=include_dismissed,
+            include_orphaned=include_orphaned, limit=limit,
         )
         counts: dict[str, int] = {}
         for item in items:
-            state = item["knowledge_state"]
-            counts[state] = counts.get(state, 0) + 1
-        return {"items": items, "counts": counts, "limit": limit}
-
-    @router.get("/discoveries/{proposition_id}")
-    def get_discovery(
-        proposition_id: str,
-        project_id: str | None = Query(None),
-        world_id: str | None = Query(None),
-        branch_id: str | None = Query(None),
-        session_id: str | None = Query(None),
-    ):
-        try:
-            item = discovery.get(
-                proposition_id,
-                _context(
-                    project_id=project_id,
-                    world_id=world_id,
-                    branch_id=branch_id,
-                    session_id=session_id,
-                ),
-            )
-            if item["knowledge_state"] != "canon" and item["support_count"] <= 0:
-                raise KeyError(proposition_id)
-            return item
-        except KeyError as exc:
-            raise HTTPException(404, "Discovery not found in this narrative lineage") from exc
-
-    @router.post("/discoveries/{proposition_id}/canon")
-    def canon_discovery(proposition_id: str, payload: DiscoveryDecisionPayload):
-        context = _context(
-            project_id=payload.project_id,
-            world_id=payload.world_id,
-            branch_id=payload.branch_id,
-            session_id=payload.session_id,
-            world_time=payload.world_time,
-            story_order=payload.story_order,
-        )
-        try:
-            return discovery.promote_canon(
-                proposition_id,
-                context,
-                actor="user",
-                note=payload.note or "Explicit user canon promotion",
-            )
-        except KeyError as exc:
-            raise HTTPException(404, "Discovery not found") from exc
-        except ValueError as exc:
-            raise HTTPException(400, str(exc)) from exc
-
-    @router.post("/discoveries/{proposition_id}/dismiss")
-    def dismiss_discovery(proposition_id: str, payload: DiscoveryDecisionPayload):
-        context = _context(
-            project_id=payload.project_id,
-            world_id=payload.world_id,
-            branch_id=payload.branch_id,
-            session_id=payload.session_id,
-            world_time=payload.world_time,
-            story_order=payload.story_order,
-        )
-        try:
-            return discovery.dismiss(
-                proposition_id,
-                context,
-                actor="user",
-                note=payload.note or "Explicit user dismissal",
-            )
-        except KeyError as exc:
-            raise HTTPException(404, "Discovery not found") from exc
-        except ValueError as exc:
-            raise HTTPException(400, str(exc)) from exc
-
-    @router.post("/discoveries/{proposition_id}/reset")
-    def reset_discovery(proposition_id: str, payload: DiscoveryDecisionPayload):
-        context = _context(
-            project_id=payload.project_id,
-            world_id=payload.world_id,
-            branch_id=payload.branch_id,
-            session_id=payload.session_id,
-            world_time=payload.world_time,
-            story_order=payload.story_order,
-        )
-        try:
-            return discovery.reset_detected(
-                proposition_id,
-                context,
-                actor="user",
-                note=payload.note or "Reset to detected lifecycle",
-            )
-        except KeyError as exc:
-            raise HTTPException(404, "Discovery not found") from exc
-        except ValueError as exc:
-            raise HTTPException(400, str(exc)) from exc
-
-    @router.post("/discoveries/{proposition_id}/edit")
-    def edit_discovery(proposition_id: str, payload: DiscoveryEditPayload):
-        context = _context(
-            project_id=payload.project_id,
-            world_id=payload.world_id,
-            branch_id=payload.branch_id,
-            session_id=payload.session_id,
-            world_time=payload.world_time,
-            story_order=payload.story_order,
-        )
-        try:
-            return discovery.record_explicit_edit(
-                proposition_id,
-                payload.value,
-                context,
-                mode=payload.mode,
-            )
-        except KeyError as exc:
-            raise HTTPException(404, "Discovery not found") from exc
-        except ValueError as exc:
-            raise HTTPException(400, str(exc)) from exc
-
-    @router.get("/discoveries/resource/{resource_type}/{resource_id}")
-    def discovery_resource_view(
-        resource_type: str,
-        resource_id: str,
-        project_id: str | None = Query(None),
-        world_id: str | None = Query(None),
-        branch_id: str | None = Query(None),
-        session_id: str | None = Query(None),
-    ):
-        if resource_type != "entity_family":
-            raise HTTPException(400, "Only entity_family provisional views are supported")
-        context = _context(
-            project_id=project_id,
-            world_id=world_id,
-            branch_id=branch_id,
-            session_id=session_id,
-        )
-        try:
-            return discovery.resource_view(resource_id, context)
-        except KeyError as exc:
-            raise HTTPException(404, "Library sheet not found") from exc
+            key = item["knowledge_state"]
+            counts[key] = counts.get(key, 0) + 1
+        return {"items": items, "counts": counts, "store": discovery.store.status()}
 
     @router.get("/discoveries/turn/{turn_id}/report")
     def discovery_turn_report(
@@ -413,16 +252,130 @@ def attach_discovery(
         source_kind: str = Query("user_prompt"),
     ):
         try:
-            history.get_turn(turn_id)
+            discovery.history.get_turn(turn_id)
             return persisted_turn_report(turn_id, source_kind)
         except KeyError as exc:
             raise HTTPException(404, "Turn not found") from exc
 
     @router.post("/discoveries/backfill")
-    def discovery_backfill(project_id: str | None = Query(None)):
-        result = backfill_service.run(project_id=project_id)
-        result["materialization"] = discovery.materialize_existing()
-        return result
+    def backfill_discovery_history(
+        project_id: str | None = Query(None),
+        limit_sessions: int = Query(500, ge=1, le=500),
+    ):
+        report = backfill_discoveries(
+            discovery, project_id=project_id, limit_sessions=limit_sessions
+        ).to_dict()
+        report["materialization"] = discovery.materialize_existing()
+        return report
+
+    @router.get("/discoveries/resource/{resource_type}/{resource_id}")
+    def discovery_resource_view(
+        resource_type: str,
+        resource_id: str,
+        project_id: str | None = Query(None), world_id: str | None = Query(None),
+        branch_id: str | None = Query(None), session_id: str | None = Query(None),
+        story_order: float | None = Query(None),
+    ):
+        if resource_type == "entity_variant":
+            try:
+                resource_id = discovery.workspace.get_variant(resource_id)["family_id"]
+                resource_type = "entity_family"
+            except KeyError as exc:
+                raise HTTPException(404, "Entity variant not found") from exc
+        if resource_type != "entity_family":
+            raise HTTPException(400, "Provisional Discovery resource view currently supports entity sheets")
+        try:
+            return discovery.resource_view(
+                resource_id,
+                _context(
+                    project_id=project_id, world_id=world_id, branch_id=branch_id,
+                    session_id=session_id, story_order=story_order,
+                ),
+            )
+        except KeyError as exc:
+            raise HTTPException(404, "Entity sheet not found") from exc
+
+    @router.get("/discoveries/{proposition_id}")
+    def get_discovery(
+        proposition_id: str,
+        project_id: str | None = Query(None), world_id: str | None = Query(None),
+        branch_id: str | None = Query(None), session_id: str | None = Query(None),
+    ):
+        try:
+            return discovery.get(
+                proposition_id,
+                _context(
+                    project_id=project_id, world_id=world_id,
+                    branch_id=branch_id, session_id=session_id,
+                ),
+            )
+        except KeyError as exc:
+            raise HTTPException(404, "Discovery proposition not found") from exc
+
+    @router.post("/discoveries/{proposition_id}/edit")
+    def edit_discovery(proposition_id: str, payload: DiscoveryEditPayload):
+        try:
+            return discovery.record_explicit_edit(
+                proposition_id,
+                payload.value,
+                _context(
+                    project_id=payload.project_id, world_id=payload.world_id,
+                    branch_id=payload.branch_id, session_id=payload.session_id,
+                    story_order=payload.story_order, world_time=payload.world_time,
+                ),
+                mode=payload.mode,
+            )
+        except KeyError as exc:
+            raise HTTPException(404, "Discovery proposition not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @router.post("/discoveries/{proposition_id}/canon")
+    def promote_discovery(proposition_id: str, payload: DiscoveryDecisionPayload):
+        try:
+            return discovery.promote_canon(
+                proposition_id,
+                _context(
+                    project_id=payload.project_id, world_id=payload.world_id,
+                    branch_id=payload.branch_id, session_id=payload.session_id,
+                    story_order=payload.story_order, world_time=payload.world_time,
+                ),
+                note=payload.note,
+            )
+        except KeyError as exc:
+            raise HTTPException(404, "Discovery proposition not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @router.post("/discoveries/{proposition_id}/dismiss")
+    def dismiss_discovery(proposition_id: str, payload: DiscoveryDecisionPayload):
+        try:
+            return discovery.dismiss(
+                proposition_id,
+                _context(
+                    project_id=payload.project_id, world_id=payload.world_id,
+                    branch_id=payload.branch_id, session_id=payload.session_id,
+                ), note=payload.note,
+            )
+        except KeyError as exc:
+            raise HTTPException(404, "Discovery proposition not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @router.post("/discoveries/{proposition_id}/reset")
+    def reset_discovery(proposition_id: str, payload: DiscoveryDecisionPayload):
+        try:
+            return discovery.reset_decision(
+                proposition_id,
+                _context(
+                    project_id=payload.project_id, world_id=payload.world_id,
+                    branch_id=payload.branch_id, session_id=payload.session_id,
+                ), note=payload.note,
+            )
+        except KeyError as exc:
+            raise HTTPException(404, "Discovery proposition not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @router.post("/discoveries/capture-turn/{turn_id}")
     def recapture_turn(
@@ -430,16 +383,14 @@ def attach_discovery(
         source_kind: str = Query("user_prompt"),
         force: bool = Query(False),
     ):
-        """Compatibility endpoint: report by default, recapture only on demand.
-
-        The browser historically called this after every generation even though
-        the HistoryStore hook had already captured the turn. Keeping the route
-        avoids frontend breakage while removing duplicate extraction from the hot
-        path. Diagnostics/repair callers can pass ``force=true`` explicitly.
-        """
+        """Compatibility endpoint: persisted report by default, repair on demand."""
         try:
             if force:
                 discovery.capture_turn(turn_id, source_kind=source_kind)
+            else:
+                discovery.history.get_turn(turn_id)
             return persisted_turn_report(turn_id, source_kind)
         except KeyError as exc:
             raise HTTPException(404, "Turn not found") from exc
+
+    return discovery
