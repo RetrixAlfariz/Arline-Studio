@@ -15,12 +15,18 @@ _CONTAINER_KINDS = {
     "dorm": "dormitory",
     "dormitory": "dormitory",
 }
+_CONTAINER_DISPLAY = {
+    "gedung": "Gedung", "building": "Building", "hotel": "Hotel",
+    "rumah": "Rumah", "house": "House", "asrama": "Asrama",
+    "dorm": "Dorm", "dormitory": "Dormitory",
+}
 _LEAF_KINDS = {
     "unit": "unit",
     "ruang": "room",
     "room": "room",
     "kamar": "room",
 }
+_LEAF_DISPLAY = {"unit": "Unit", "ruang": "Ruang", "room": "Room", "kamar": "Kamar"}
 
 
 def _slug(value: str) -> str:
@@ -52,9 +58,9 @@ def detect_generic_location_hierarchy(text: str) -> list[GeneralCandidate]:
     if not container_match:
         return []
 
-    type_word = container_match.group("type")
-    container_kind = _CONTAINER_KINDS[type_word.casefold()]
-    container_label = _display(f"{type_word} {container_match.group('name')}")
+    type_key = container_match.group("type").casefold()
+    container_kind = _CONTAINER_KINDS[type_key]
+    container_label = _display(f"{_CONTAINER_DISPLAY[type_key]} {container_match.group('name')}")
     container_key = f"loc:{_slug(container_label)}"
 
     floor_match = re.search(r"(?i)\b(?:lantai|floor)\s*(?P<floor>\d{1,4})\b", text)
@@ -135,9 +141,9 @@ def detect_generic_location_hierarchy(text: str) -> list[GeneralCandidate]:
     attribute_subject_key = container_key
     attribute_subject_label = container_label
     if leaf_match:
-        leaf_type_word = leaf_match.group("leaf_type")
-        leaf_kind = _LEAF_KINDS[leaf_type_word.casefold()]
-        leaf_label = _display(f"{leaf_type_word} {leaf_match.group('leaf')}")
+        leaf_type_key = leaf_match.group("leaf_type").casefold()
+        leaf_kind = _LEAF_KINDS[leaf_type_key]
+        leaf_label = _display(f"{_LEAF_DISPLAY[leaf_type_key]} {leaf_match.group('leaf')}")
         leaf_key = f"loc:{_slug(container_label)}:{leaf_kind}:{_slug(leaf_match.group('leaf'))}"
         attribute_subject_key = leaf_key
         attribute_subject_label = leaf_label
