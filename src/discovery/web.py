@@ -7,6 +7,8 @@ from pydantic import BaseModel
 
 from src.memory.models import MemoryQueryContext
 
+from .backfill import backfill_discoveries
+from .general import install_general_discovery
 from .memory import install_discovery_memory_bridge
 from .service import DiscoveryService
 from .store import DiscoveryStore
@@ -41,6 +43,10 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
     required = ("store", "workspace", "history", "query_engine")
     if not all(hasattr(memory_service, name) for name in required):
         return None
+
+    # The deterministic analytical extractor remains primary; this supplement
+    # fills its generic-NER gap for ordinary named characters/locations/items.
+    install_general_discovery()
 
     existing = getattr(memory_service, "discovery", None)
     if isinstance(existing, DiscoveryService):
@@ -77,25 +83,35 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
         def add_turn_with_discovery(*args, **kwargs):
             turn = original_add_turn(*args, **kwargs)
             try:
-                discovery.capture_turn(turn["id"], source_kind="user_prompt")
+                report = discovery.capture_turn(turn["id"], source_kind="user_prompt")
+                # The caller can now surface an immediate UI indication without
+                # running extraction a second time. This field is transient and
+                # is not persisted into HistoryStore.
+                turn["_discovery_report"] = report.to_dict()
             except Exception as exc:
+                turn["_discovery_report"] = {
+                    "turn_id": turn.get("id"), "source_kind": "user_prompt",
+                    "propositions": 0, "instances": 0, "skipped": 0,
+                    "error": str(exc),
+                }
                 report_failure(f"turn:{turn.get('id')}", exc)
             return turn
 
         def feedback_with_discovery(turn_id: str, **kwargs):
             turn = original_feedback(turn_id, **kwargs)
             try:
+                report = None
                 status = turn.get("feedback_status") or kwargs.get("status")
                 if status == "accepted":
                     discovery.store.set_source_kind_active(
                         turn_id, "user_edited_prose", active=False, reason="feedback_replaced"
                     )
-                    discovery.capture_turn(turn_id, source_kind="accepted_generation")
+                    report = discovery.capture_turn(turn_id, source_kind="accepted_generation")
                 elif status == "edited_accept":
                     discovery.store.set_source_kind_active(
                         turn_id, "accepted_generation", active=False, reason="feedback_replaced"
                     )
-                    discovery.capture_turn(turn_id, source_kind="user_edited_prose")
+                    report = discovery.capture_turn(turn_id, source_kind="user_edited_prose")
                 elif status == "rejected":
                     discovery.store.set_source_kind_active(
                         turn_id, "accepted_generation", active=False, reason="feedback_rejected"
@@ -103,6 +119,8 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
                     discovery.store.set_source_kind_active(
                         turn_id, "user_edited_prose", active=False, reason="feedback_rejected"
                     )
+                if report is not None:
+                    turn["_discovery_report"] = report.to_dict()
             except Exception as exc:
                 report_failure(f"feedback:{turn_id}", exc)
             return turn
@@ -200,6 +218,15 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
             key = item["knowledge_state"]
             counts[key] = counts.get(key, 0) + 1
         return {"items": items, "counts": counts, "store": discovery.store.status()}
+
+    @router.post("/discoveries/backfill")
+    def backfill_discovery_history(
+        project_id: str | None = Query(None),
+        limit_sessions: int = Query(500, ge=1, le=500),
+    ):
+        return backfill_discoveries(
+            discovery, project_id=project_id, limit_sessions=limit_sessions
+        ).to_dict()
 
     @router.get("/discoveries/{proposition_id}")
     def get_discovery(
