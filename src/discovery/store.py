@@ -231,7 +231,7 @@ class DiscoveryStore:
                     "INSERT INTO discovery_propositions(id,proposition_key,project_id,world_id,subject_type,subject_key,"
                     "subject_label,predicate,value_json,object_type,object_key,object_label,operation,authority_state,"
                     "temporal_state,target_resource_type,target_resource_id,created_at,updated_at) "
-                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'observed',?,?,?,?,?,?)",
+                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,'observed',?,?,?,?,?)",
                     (prop_id, key, project_id, world_id, subject_type, subject_key, subject_label,
                      predicate, dumps(value), object_type, object_key, object_label, operation,
                      temporal_state, target_resource_type, target_resource_id, now, now),
