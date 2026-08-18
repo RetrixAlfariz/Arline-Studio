@@ -42,12 +42,12 @@ class Fixture:
         app.include_router(router)
         self.client = TestClient(app)
 
-    def session(self):
+    def session(self, *, branch_id: str | None = None):
         return self.history.create_session(
             prompt="fixture",
             project_id=self.project["id"],
             world_id=self.world_id,
-            branch_id=self.branch["id"],
+            branch_id=branch_id or self.branch["id"],
         )
 
     def turn(self, session_id: str, prompt: str, suffix: str = "1"):
@@ -62,11 +62,11 @@ class Fixture:
             projection_mode="off",
         )
 
-    def context(self, session_id: str | None = None):
+    def context(self, session_id: str | None = None, *, branch_id: str | None = None):
         return MemoryQueryContext(
             project_id=self.project["id"],
             world_id=self.world_id,
-            branch_id=self.branch["id"],
+            branch_id=branch_id or self.branch["id"],
             session_id=session_id,
         )
 
@@ -119,10 +119,26 @@ class V121ProvisionalSheetSpatialTests(unittest.TestCase):
                 ["Surabaya", "Puncak Dharmahusada", "Floor 3", "Unit A0325"],
             )
             values = {item["predicate"]: item["value"] for item in view["claims"]}
+            self.assertEqual(values["floor_number"], 3)
             self.assertEqual(values["area_m2"], 56)
             self.assertEqual(values["room_count"], 2)
             relations = {(item["predicate"], item.get("object_label")) for item in view["relations"]}
             self.assertIn(("located_on", "Floor 3"), relations)
+            self.assertIn(("part_of", "Puncak Dharmahusada"), relations)
+
+            floor_edge = next(
+                item for item in view["relations"]
+                if item["predicate"] == "located_on" and item.get("object_type") == "spatial_zone"
+            )
+            blocked = f.client.post(
+                f"/api/memory/discoveries/{floor_edge['id']}/canon",
+                json={
+                    "project_id": f.project["id"], "world_id": f.world_id,
+                    "branch_id": f.branch["id"], "session_id": session["id"],
+                },
+            )
+            self.assertEqual(blocked.status_code, 400)
+            self.assertIn("spatial-zone", blocked.json()["detail"])
 
     def test_claim_values_get_change_ids_and_user_edit_is_reviewed_not_canon(self):
         with tempfile.TemporaryDirectory() as td:
@@ -176,6 +192,31 @@ class V121ProvisionalSheetSpatialTests(unittest.TestCase):
             self.assertEqual(response.json()["operation"], "transition")
             refreshed = f.memory.discovery.resource_view(alex["id"], f.context(session["id"]))
             self.assertTrue(any(item["change_kind"] == "state_transition" for item in refreshed["changes"]))
+
+    def test_branch_only_provisional_sheet_uses_branch_variant_and_sibling_has_no_claims(self):
+        with tempfile.TemporaryDirectory() as td:
+            f = Fixture(td)
+            branch_a = f.workspace.create_branch(
+                f.world_id, "Branch A", parent_branch_id=f.branch["id"], kind="alternate"
+            )
+            branch_b = f.workspace.create_branch(
+                f.world_id, "Branch B", parent_branch_id=f.branch["id"], kind="alternate"
+            )
+            session_a = f.session(branch_id=branch_a["id"])
+            f.turn(session_a["id"], "Character BranchOnly lives in Nova Annex.")
+            family = next(
+                item for item in f.workspace.list_entity_families(None, entity_type="character")
+                if item["name"] == "BranchOnly"
+            )
+            variants = f.workspace.list_variants(family_id=family["id"], world_id=f.world_id)
+            self.assertTrue(any(item.get("branch_id") == branch_a["id"] for item in variants))
+            self.assertFalse(any(item.get("branch_id") == branch_b["id"] for item in variants))
+
+            view_a = f.memory.discovery.resource_view(family["id"], f.context(session_a["id"], branch_id=branch_a["id"]))
+            self.assertTrue(view_a["claims"])
+            view_b = f.memory.discovery.resource_view(family["id"], f.context(None, branch_id=branch_b["id"]))
+            self.assertFalse(view_b["claims"])
+            self.assertFalse(view_b["relations"])
 
 
 if __name__ == "__main__":
