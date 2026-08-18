@@ -35,6 +35,7 @@ def describe_claim(proposition: dict[str, Any]) -> dict[str, Any]:
     predicate = str(proposition.get("predicate") or "")
     operation = str(proposition.get("operation") or "update")
     object_type = str(proposition.get("object_type") or "")
+    subject_type = str(proposition.get("subject_type") or "")
     value = proposition.get("value")
 
     result = {
@@ -106,10 +107,11 @@ def describe_claim(proposition: dict[str, Any]) -> dict[str, Any]:
             "projection": "variant.current_state",
             "projection_path": predicate.removeprefix("state."),
         })
-    elif predicate.startswith("garment."):
+    elif subject_type == "garment" or predicate.startswith("garment."):
+        namespaced = predicate if predicate.startswith("garment.") else f"garment.{predicate}"
         result.update({
             "group": "garment", "projection": "variant.attributes",
-            "projection_path": predicate,
+            "projection_path": namespaced,
         })
     elif predicate in SPATIAL_SCALARS or predicate.startswith("location."):
         result.update({"group": "spatial"})
