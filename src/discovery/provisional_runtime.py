@@ -35,12 +35,50 @@ def _best_active_instance(service: DiscoveryService, proposition_id: str) -> dic
     )
 
 
+def _source_branch_ids(service: DiscoveryService, *, world_id: str, subject_key: str) -> list[str]:
+    with service.store.connection() as con:
+        rows = con.execute(
+            "SELECT DISTINCT i.branch_id FROM discovery_instances i "
+            "JOIN discovery_propositions p ON p.id=i.proposition_id "
+            "WHERE i.active=1 AND i.world_id=? AND (p.subject_key=? OR p.object_key=?) "
+            "AND i.branch_id IS NOT NULL ORDER BY i.branch_id",
+            (world_id, subject_key, subject_key),
+        ).fetchall()
+    return [str(row["branch_id"]) for row in rows if row["branch_id"]]
+
+
+def _sync_family_source_branches(
+    service: DiscoveryService,
+    family: dict[str, Any] | None,
+    *,
+    world_id: str | None,
+    subject_key: str,
+) -> None:
+    if not family or not world_id:
+        return
+    current = service.workspace.get_entity_family(family["id"])
+    core = dict(current.get("shared_core") or {})
+    meta = dict(core.get("_discovery") or {})
+    if not meta.get("provisional"):
+        return
+    branch_ids = _source_branch_ids(service, world_id=world_id, subject_key=subject_key)
+    if meta.get("source_branch_ids") == branch_ids and meta.get("source_world_id") == world_id:
+        return
+    meta["source_branch_ids"] = branch_ids
+    meta["source_world_id"] = world_id
+    core["_discovery"] = meta
+    service.workspace.update_entity_family(
+        family["id"], shared_core=core, note="discovery: sync provisional branch visibility"
+    )
+
+
 def repair_proposition_branch_projection(service: DiscoveryService, proposition_id: str) -> None:
     """Project callable sheets/zones into the source instance's actual branch.
 
     Discovery propositions intentionally stay branch-neutral semantic statements;
     branch visibility lives on source instances. Provisional Library projection
-    must therefore derive branch from an active instance instead of assuming main.
+    therefore derives branch from active provenance, and the family keeps a
+    rebuildable source-branch list for writer-facing Library/@ visibility.
     """
     prop = service.store.get_proposition(proposition_id)
     instance = _best_active_instance(service, proposition_id)
@@ -50,7 +88,7 @@ def repair_proposition_branch_projection(service: DiscoveryService, proposition_
     subject_type = str(prop.get("subject_type") or "")
 
     if subject_type in SUPPORTED_SHEET_TYPES:
-        _ensure_sheet_for(
+        family, _variant, _created = _ensure_sheet_for(
             service,
             project_id=prop.get("project_id"),
             world_id=prop.get("world_id"),
@@ -58,6 +96,9 @@ def repair_proposition_branch_projection(service: DiscoveryService, proposition_
             subject_type=subject_type,
             subject_key=prop["subject_key"],
             subject_label=prop.get("subject_label") or prop["subject_key"],
+        )
+        _sync_family_source_branches(
+            service, family, world_id=prop.get("world_id"), subject_key=prop["subject_key"]
         )
     elif subject_type == "spatial_zone":
         value = prop.get("value") if isinstance(prop.get("value"), dict) else {}
@@ -76,7 +117,7 @@ def repair_proposition_branch_projection(service: DiscoveryService, proposition_
     if prop.get("operation") == "relation" and prop.get("object_key"):
         object_type = str(prop.get("object_type") or "")
         if object_type in SUPPORTED_SHEET_TYPES:
-            _ensure_sheet_for(
+            object_family, _variant, _created = _ensure_sheet_for(
                 service,
                 project_id=prop.get("project_id"),
                 world_id=prop.get("world_id"),
@@ -84,6 +125,9 @@ def repair_proposition_branch_projection(service: DiscoveryService, proposition_
                 subject_type=object_type,
                 subject_key=prop["object_key"],
                 subject_label=prop.get("object_label") or prop["object_key"],
+            )
+            _sync_family_source_branches(
+                service, object_family, world_id=prop.get("world_id"), subject_key=prop["object_key"]
             )
         elif object_type == "spatial_zone":
             with service.store.connection() as con:
