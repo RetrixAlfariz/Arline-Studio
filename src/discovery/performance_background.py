@@ -12,7 +12,7 @@ class BackgroundMaterializationState:
     completed: bool = False
     rounds: int = 0
     processed: int = 0
-    pending: int = 0
+    pending: int = -1
     last_error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -28,13 +28,14 @@ class BackgroundMaterializationState:
 
 
 def install_background_materialization(service) -> None:
-    """Drain old provisional projections incrementally after startup.
+    """Drain old provisional projections strictly outside the startup path.
 
     New turns are projected synchronously by their turn-local materializer. This
-    worker exists only for upgrade/backfill residue, so startup never blocks on
-    thousands of historical propositions. Work is rate-limited and daemonized;
-    source truth and the HTTP server remain usable while the derived sheets catch
-    up in small deterministic batches.
+    worker exists only for upgrade/backfill residue. Installing the worker must
+    therefore perform *zero* discovery scans: even a one-row dirty check can be
+    expensive on a large SQLite file because it still has to build/join the
+    candidate set. The first check is delayed until after the HTTP application is
+    already usable.
     """
 
     if getattr(service, "_background_materialization_installed", False):
@@ -45,22 +46,27 @@ def install_background_materialization(service) -> None:
     lock = Lock()
     timer: Timer | None = None
     max_rounds = 256
-    interval_seconds = 0.35
-    batch_limit = 256
+    interval_seconds = 0.55
+    initial_delay_seconds = 1.25
+    batch_limit = 192
 
     def publish() -> None:
         metrics = dict(getattr(service, "_performance_metrics", {}) or {})
         metrics["background_materialization"] = state.to_dict()
         service._performance_metrics = metrics
 
-    def schedule(delay: float = interval_seconds) -> None:
+    def schedule(delay: float = interval_seconds, *, force: bool = False) -> None:
         nonlocal timer
         with lock:
-            if state.scheduled or state.running or state.completed:
+            if state.scheduled or state.running:
                 return
+            if state.completed and not force:
+                return
+            if force and state.completed:
+                state.completed = False
             state.scheduled = True
             publish()
-            timer = Timer(delay, run_batch)
+            timer = Timer(max(0.05, float(delay)), run_batch)
             timer.daemon = True
             timer.start()
 
@@ -94,6 +100,8 @@ def install_background_materialization(service) -> None:
                 schedule()
 
     def materialize_existing_with_schedule(*, limit: int = 5000):
+        # Explicit callers (backfill/repair) asked for work now, so run one
+        # bounded pass synchronously and leave any residue to the daemon.
         report = original(limit=limit)
         pending = int(report.get("pending") or 0)
         with lock:
@@ -108,20 +116,11 @@ def install_background_materialization(service) -> None:
         return report
 
     service.materialize_existing = materialize_existing_with_schedule
-    service.schedule_materialization_drain = schedule
+    service.schedule_materialization_drain = lambda delay=interval_seconds: schedule(delay, force=True)
     service.background_materialization_status = lambda: state.to_dict()
     service._background_materialization_installed = True
 
-    # The bounded startup pass already ran before this installer. Check the
-    # remaining dirty set once without delaying application readiness.
-    try:
-        first = original(limit=1)
-        state.pending = int(first.get("pending") or 0)
-        state.processed += int(first.get("processed") or first.get("claims") or 0)
-        state.completed = state.pending <= 0
-        publish()
-        if state.pending > 0:
-            schedule(delay=0.08)
-    except Exception as exc:
-        state.last_error = str(exc)
-        publish()
+    # No DB read here. This is intentionally fire-and-forget so create_app() can
+    # finish before any historical Discovery backlog is inspected.
+    publish()
+    schedule(delay=initial_delay_seconds)
