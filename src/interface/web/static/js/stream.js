@@ -64,7 +64,7 @@
 
     if (moved.length) {
       const movedIds = new Set(moved.map((item) => item.resourceId));
-      lastUndo = { type: "restore_bulk", resources: moved };
+      lastUndo = { type:"restore_bulk", resources:moved };
       state.selectedReferences = (state.selectedReferences || []).filter((ref) => {
         if (ref.type === "entity_family" && movedIds.has(ref.id)) return false;
         if (ref.type === "entity_variant" && selectedVariantIds.has(ref.id)) return false;
@@ -149,7 +149,7 @@
     if (typeof document === "undefined" || typeof document.querySelector !== "function") return;
     if (document.querySelector('script[data-arline-provisional-sheets="1"]')) return;
     const script = document.createElement("script");
-    script.src = "/static/js/discovery-sheets.js?v=1.2.1-provisional";
+    script.src = "/static/js/discovery-sheets.js?v=1.2.1-maturity";
     script.dataset.arlineProvisionalSheets = "1";
     document.body.appendChild(script);
   }
