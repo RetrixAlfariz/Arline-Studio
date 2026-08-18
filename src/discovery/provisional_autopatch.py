@@ -3,7 +3,7 @@ from __future__ import annotations
 from . import provisional
 from . import service as service_module
 from . import spatial as spatial_module
-from .garment import install_garment_materialization
+from .garment import install_garment_materialization, install_garment_runtime
 from .identity import install_identity_resolution
 from .library_scope import install_library_scope_lineage
 from .promotion import install_promotion_hardening
@@ -25,6 +25,9 @@ if not getattr(provisional, "_RUNTIME_FIX_WRAPPED", False):
     _original_install = provisional.install_provisional_discovery
 
     def _install_with_runtime_fix(service):
+        # Normalize semantic garment predicates before any new turn capture or
+        # startup materialization reuses existing Discovery rows.
+        install_garment_runtime(service)
         # materialize_turn/materialize_existing resolve this module-global at
         # call time, so replace it before the original installer performs its
         # first existing-discovery projection.
