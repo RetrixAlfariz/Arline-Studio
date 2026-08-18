@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from src.discovery.web import attach_discovery
 from .contracts import SCHEMA_MODELS, schema_document
 from .models import MemoryQueryContext
 from .profiles import TASK_PROFILES
@@ -80,10 +81,18 @@ def create_memory_router(*, service, store, foundation=None) -> APIRouter:
         service._v121_original_add_timeline_event = original_add
 
     _bind_timeline_refresh_hook()
+    attach_discovery(router, memory_service=service, foundation=foundation)
 
     @router.get("/status")
     def status():
-        return service.status()
+        result = service.status()
+        discovery = getattr(service, "discovery", None)
+        if discovery is not None:
+            try:
+                result["discovery"] = discovery.store.status()
+            except Exception:
+                result["discovery"] = {"unavailable": True}
+        return result
 
     @router.post("/query")
     def query(payload: MemoryQueryPayload):
