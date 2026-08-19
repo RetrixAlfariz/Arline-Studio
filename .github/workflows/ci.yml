@@ -48,6 +48,10 @@ jobs:
       - name: Diff and repository hygiene
         run: |
           git diff --check
+          if git ls-files 'node_modules/**' | grep -q .; then
+            echo 'Generated node_modules is tracked in the repository.' >&2
+            exit 1
+          fi
           if git ls-files 'src/arline_studio.egg-info/**' | grep -q .; then
             echo 'Generated egg-info is tracked in the repository.' >&2
             exit 1
