@@ -189,7 +189,7 @@ class ArchitectureHardeningTests(unittest.TestCase):
     def test_package_and_source_versions_are_one_contract(self):
         project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
         self.assertEqual(project["project"]["version"], __version__)
-        self.assertEqual(__version__, "1.2.3a1")
+        self.assertEqual(__version__, "1.2.4a1")
 
     def test_frontend_has_no_runtime_compatibility_or_global_fetch_shim(self):
         compat = ROOT / "src/interface/web/static/js/compat.js"

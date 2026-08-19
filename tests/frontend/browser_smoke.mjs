@@ -44,7 +44,7 @@ try {
     };
   });
 
-  if (contract.version !== "1.2.3a1") {
+  if (contract.version !== "1.2.4a1") {
     throw new Error(`Unexpected Studio version: ${contract.version}`);
   }
   if (contract.publicHasApiKey) throw new Error("/api/config exposed api_key");
@@ -77,6 +77,16 @@ try {
 
   await page.click("#newChatBtn");
   await page.waitForFunction(() => document.getElementById("chatView")?.classList.contains("active"));
+  await page.waitForFunction(() => window.ArlineRuntime?.getState?.().commandRegistryVersion === "1.2.4a1");
+  if (!document.getElementById("deliberationOutput")) throw new Error("Intuition inspector panel is missing");
+
+  await page.fill("#promptInput", "/intu");
+  await page.waitForFunction(() => !document.getElementById("slashPopup")?.classList.contains("hidden"));
+  if (!(await page.locator("#slashPopup").innerText()).includes("/intuition")) throw new Error("/intuition is missing from slash discovery");
+  await page.fill("#promptInput", "@po");
+  await page.waitForFunction(() => !document.getElementById("mentionPopup")?.classList.contains("hidden"));
+  if (!(await page.locator("#mentionPopup").innerText()).includes("pov")) throw new Error("@pov is missing from dynamic reference discovery");
+  await page.fill("#promptInput", "");
 
   if (pageErrors.length) throw new Error(`Page errors:\n${pageErrors.join("\n")}`);
   // Browser/network extensions occasionally emit console errors unrelated to the

@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 
-CONTEXT_INTELLIGENCE_VERSION = "1.2.3a1"
+CONTEXT_INTELLIGENCE_VERSION = "1.2.4a1"
 
 
 class NarrativeIntent(StrEnum):
@@ -20,6 +20,7 @@ class NarrativeIntent(StrEnum):
     SUMMARY = "summary"
     CONTINUITY_REVIEW = "continuity_review"
     BRANCH_COMPARE = "branch_compare"
+    DELIBERATE = "deliberate"
 
 
 @dataclass(slots=True)
@@ -118,7 +119,7 @@ class NarrativeContextPlanner:
         output: list[dict[str, Any]] = []
         seen: set[tuple[str, str]] = set()
 
-        def add(typ: str, rid: Any, reason: str, label: str | None = None) -> None:
+        def add(typ: str, rid: Any, reason: str, label: str | None = None, selector: str | None = None) -> None:
             rid = str(rid or "").strip()
             if not typ or not rid or (typ, rid) in seen:
                 return
@@ -130,10 +131,14 @@ class NarrativeContextPlanner:
                 "reason": reason,
                 "method": "context_plan",
                 "confidence": 1.0,
+                **({"selector": selector} if selector else {}),
             })
 
         for ref in list(getattr(scope, "explicit_references", []) or []):
-            add(str(ref.get("type") or ""), ref.get("id"), "explicit reference", str(ref.get("label") or "") or None)
+            add(str(ref.get("type") or ""), ref.get("id"), "explicit reference", str(ref.get("label") or "") or None, str(ref.get("selector") or "") or None)
+        directive = dict(ws_scope.get("directive") or {})
+        for ref in list(directive.get("resolved_references") or []):
+            add(str(ref.get("type") or ""), ref.get("id"), "directive grounding", str(ref.get("label") or "") or None, str(ref.get("selector") or "") or None)
         if active.get("pov_variant_id"):
             add("entity_variant", active["pov_variant_id"], "active scene POV")
         if active.get("location_variant_id"):
@@ -164,12 +169,19 @@ class NarrativeContextPlanner:
             NarrativeIntent.SUMMARY: dict(continuity=.72, state=.55, relationships=.55, events=.68, spatial=.34, threads=.62, pov=.30, source=.82),
             NarrativeIntent.CONTINUITY_REVIEW: dict(continuity=1.00, state=.96, relationships=.72, events=.82, spatial=.48, threads=.30, pov=.62, source=.40),
             NarrativeIntent.BRANCH_COMPARE: dict(continuity=1.00, state=.92, relationships=.68, events=.82, spatial=.42, threads=.38, pov=.35, source=.28),
+            NarrativeIntent.DELIBERATE: dict(continuity=1.00, state=.92, relationships=.90, events=.90, spatial=.60, threads=.82, pov=.90, source=.38),
         }
         return dict(table[intent])
 
     def plan(self, prompt: str, scope: Any, *, workspace_context: Any | None = None, route: Any = "STORY_CONTINUE") -> NarrativeContextPlan:
         route_value = self._route_value(route)
-        intent = self._intent(prompt, route_value)
+        ws_scope = self._workspace_scope(workspace_context)
+        directive = dict(ws_scope.get("directive") or {})
+        directive_intent = str(directive.get("planner_intent") or "").strip()
+        try:
+            intent = NarrativeIntent(directive_intent) if directive_intent else self._intent(prompt, route_value)
+        except ValueError:
+            intent = self._intent(prompt, route_value)
         focus, anchors = self._focus_resources(scope, workspace_context)
         lens = str(getattr(getattr(scope, "context_lens", "scene"), "value", getattr(scope, "context_lens", "scene")) or "scene")
         dimensions = self._base_dimensions(intent)
@@ -181,6 +193,25 @@ class NarrativeContextPlanner:
             dimensions["spatial"] *= .72
         if not anchors.get("participants") and len([x for x in focus if x["type"] == "entity_variant"]) < 2:
             dimensions["relationships"] *= .74
+
+        selectors = {str(item.get("selector") or "").casefold() for item in focus if item.get("selector")}
+        if "voice" in selectors:
+            dimensions["pov"] = max(dimensions["pov"], .92)
+            dimensions["relationships"] = max(dimensions["relationships"], .84)
+            dimensions["state"] = max(dimensions["state"], .78)
+        if selectors & {"state", "appearance"}:
+            dimensions["state"] = max(dimensions["state"], 1.0)
+        if selectors & {"knowledge", "beliefs"}:
+            dimensions["pov"] = max(dimensions["pov"], 1.0)
+        if "relationships" in selectors:
+            dimensions["relationships"] = 1.0
+        if "timeline" in selectors:
+            dimensions["events"] = max(dimensions["events"], 1.0)
+            dimensions["continuity"] = max(dimensions["continuity"], .92)
+        if "evidence" in selectors:
+            dimensions["source"] = 1.0
+        if "conflicts" in selectors:
+            dimensions["continuity"] = 1.0
 
         lane_weights: dict[str, float] = {}
         lane_factor = {"fts_manuscript": .80, "fts_chat": .55, "dense": .70}
@@ -228,6 +259,9 @@ class NarrativeContextPlanner:
                 "pov_boundary": "enforce_scope_gate" if lens in {"scene", "pov"} else "author_lens",
                 "future_knowledge": "allowed" if bool(getattr(scope, "allow_future_author_knowledge", False)) else "blocked",
                 "fuzzy_identity_merge": False,
+                "directive_version": directive.get("version"),
+                "reference_selectors": sorted(selectors),
+                "dynamic_scopes": list(directive.get("dynamic_scopes") or []),
             },
             diagnostics=diagnostics,
         )

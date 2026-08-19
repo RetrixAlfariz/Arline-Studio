@@ -182,3 +182,16 @@ Implemented:
 The milestone deliberately avoids an LLM-based context router. Context planning
 is deterministic, cheap and rebuildable; model intelligence remains focused on
 writing rather than deciding source authority.
+
+
+## v1.2.4 — Narrative Directives & Deliberation
+
+Implemented top-down in `1.2.4a1`:
+
+- typed backend slash-command registry and parser;
+- stable selector-qualified `@` grounding plus request-time dynamic refs;
+- directive-aware v1.2.3 context planning;
+- bounded model-intuition deliberation after ScopeGate/WCF validation and before writer realization;
+- soft-non-Canon deliberation diagnostics and fail-soft fallback;
+- shared semantics across normal and streaming generation;
+- browser autocomplete/Intuition inspector integration.

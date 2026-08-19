@@ -151,3 +151,13 @@ provider = "disabled"
 model = "Qwen/Qwen3-Reranker-0.6B"
 top_k_input = 20
 top_k_output = 8
+
+
+[deliberation]
+# Soft model intuition after authoritative context assembly and before prose.
+# It never writes Canon and fails soft when the local model is unavailable.
+enabled = true
+max_tokens = 700
+temperature = 0.35
+alternatives = 3
+context_chars = 24000

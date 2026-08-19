@@ -12,6 +12,7 @@ from src.inference import LMStudioError, LMStudioModelManager
 from src.runtime.run_state import RunEvent, RunState
 from src.runtime_config import RuntimeConfig
 from src.service.arline_service import AnalysisBundle, ArlineService, GenerationBundle
+from src.deliberation import NarrativeDeliberation
 from src.writer import ArlineWriter
 from src.writer.quality import ProseQualityAnalyzer
 
@@ -24,6 +25,7 @@ class PreparedStreamingGeneration:
     effective_reasoning: str | None
     load_status: dict[str, Any]
     system_prompt: str
+    deliberation: NarrativeDeliberation
 
 
 class StreamingArlineService:
@@ -78,7 +80,7 @@ class StreamingArlineService:
         budget = ContextBudget(
             model_context_length=self.config.model_load.context_length,
             max_output_tokens=self.config.generation.api_max_output_tokens,
-            system_prompt_tokens=exact_counter.count(system_text),
+            system_prompt_tokens=exact_counter.count(system_text) + (self.config.deliberation.max_tokens if self.config.deliberation.enabled else 0),
             safety_margin=self.config.context_budget.safety_margin,
             minimum_writer_context=self.config.context_budget.minimum_writer_context_tokens,
         )
@@ -93,12 +95,14 @@ class StreamingArlineService:
                 "Writer context validation failed: "
                 + json.dumps(analysis.wcf_validation.to_dict(), ensure_ascii=False)
             )
+        deliberation = await asyncio.to_thread(self.base._build_deliberation, prompt, analysis, client)
         model_input = self.base.compose_model_input(
             prompt,
             analysis,
             mode,
             session_context=session_context,
             beat_context=beat_context,
+            deliberation=deliberation,
         )
         return PreparedStreamingGeneration(
             analysis=analysis,
@@ -107,6 +111,7 @@ class StreamingArlineService:
             effective_reasoning=effective_reasoning,
             load_status=load,
             system_prompt=system_text,
+            deliberation=deliberation,
         )
 
     def _payload(self, prepared: PreparedStreamingGeneration) -> dict[str, Any]:
@@ -283,6 +288,7 @@ class StreamingArlineService:
             post,
             prepared.model_input,
             prepared.load_status,
+            prepared.deliberation,
         )
         quality = self.quality.analyze(generation.story)
         yield {"type": "_complete", "bundle": generation, "quality": quality, "prepared": prepared}

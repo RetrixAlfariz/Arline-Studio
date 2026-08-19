@@ -102,6 +102,15 @@ class ReasoningRuntimeConfig:
 
 
 @dataclass(slots=True)
+class DeliberationConfig:
+    enabled: bool = True
+    max_tokens: int = 700
+    temperature: float = 0.35
+    alternatives: int = 3
+    context_chars: int = 24000
+
+
+@dataclass(slots=True)
 class ArtifactConfig:
     output_root: Path = Path("output")
     saved_root: Path = Path("output/saved")
@@ -150,6 +159,7 @@ class RuntimeConfig:
     history: HistoryConfig
     workspace: WorkspaceConfig
     ui: UIConfig
+    deliberation: DeliberationConfig = field(default_factory=DeliberationConfig)
 
     @staticmethod
     def normalize_server_url(value: str) -> str:
@@ -191,6 +201,7 @@ class RuntimeConfig:
         hist = raw.get("history", {})
         ws = raw.get("workspace", {})
         ui = raw.get("ui", {})
+        deli = raw.get("deliberation", {})
 
         mode = str(wr.get("input_mode", "smart_hybrid"))
         reasoning = str(gen.get("reasoning", "off")).lower()
@@ -316,6 +327,13 @@ class RuntimeConfig:
                 port=int(ui.get("port", 7860)),
                 show_reasoning=bool(ui.get("show_reasoning", True)),
             ),
+            deliberation=DeliberationConfig(
+                enabled=bool(deli.get("enabled", True)),
+                max_tokens=max(128, int(deli.get("max_tokens", 700))),
+                temperature=max(0.0, min(2.0, float(deli.get("temperature", 0.35)))),
+                alternatives=max(1, min(8, int(deli.get("alternatives", 3)))),
+                context_chars=max(4000, int(deli.get("context_chars", 24000))),
+            ),
         )
 
     @property
@@ -331,7 +349,7 @@ class RuntimeConfig:
         doc = tomlkit.parse(self.path.read_text(encoding="utf-8"))
         for section in (
             "lmstudio", "model_load", "generation", "writer",
-            "context_budget", "reasoning_budget", "projection", "reasoning_runtime", "artifacts", "history", "workspace", "ui",
+            "context_budget", "reasoning_budget", "projection", "reasoning_runtime", "artifacts", "history", "workspace", "ui", "deliberation",
         ):
             doc.setdefault(section, tomlkit.table())
 
@@ -368,6 +386,13 @@ class RuntimeConfig:
             "beat_tokens": self.generation.beat_tokens,
             "total_story_target_tokens": self.generation.total_story_target_tokens,
             "seed": -1 if self.generation.seed is None else self.generation.seed,
+        })
+        doc["deliberation"].update({
+            "enabled": self.deliberation.enabled,
+            "max_tokens": self.deliberation.max_tokens,
+            "temperature": self.deliberation.temperature,
+            "alternatives": self.deliberation.alternatives,
+            "context_chars": self.deliberation.context_chars,
         })
         doc["projection"].update({
             "mode": self.projection.mode,

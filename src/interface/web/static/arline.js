@@ -72,6 +72,9 @@ const state = {
   mentionIndex: 0,
   slashResults: [],
   slashIndex: 0,
+  commandRegistryVersion: null,
+  referenceSelectors: [],
+  dynamicReferences: [],
   commandResults: [],
   commandIndex: 0,
   formHandler: null,
@@ -85,6 +88,7 @@ const state = {
     projections: [],
     traceChoices: [],
     contextBreakdown: null,
+    deliberation: null,
   },
   draftTimer: null,
   activeGenerationController: null,
@@ -131,6 +135,23 @@ const MODE_NOTES = {
 };
 
 const COMMANDS = window.ARLINE_COMMANDS || [];
+
+async function loadCommandRegistry() {
+  try {
+    const payload = await api("/api/commands");
+    const local = new Map(COMMANDS.map((item) => [item.id, item]));
+    const remote = payload.commands || [];
+    const merged = remote.map((item) => ({ ...(local.get(item.id) || {}), ...item, help: local.get(item.id)?.help || item.help }));
+    const remoteIds = new Set(remote.map((item) => item.id));
+    for (const item of COMMANDS) if (!remoteIds.has(item.id)) merged.push(item);
+    COMMANDS.splice(0, COMMANDS.length, ...merged);
+    state.commandRegistryVersion = payload.command_registry_version || null;
+    state.referenceSelectors = payload.reference_selectors || [];
+    state.dynamicReferences = payload.dynamic_references || [];
+  } catch (_) {
+    state.commandRegistryVersion = "frontend-fallback";
+  }
+}
 
 function escapeHTML(value) {
   return String(value ?? "")
@@ -665,7 +686,12 @@ async function loadTrace() {
 }
 
 function addReference(ref) {
-  if (!state.selectedReferences.some((item) => item.type === ref.type && item.id === ref.id)) state.selectedReferences.push({ ...ref, mode: ref.mode || "context" });
+  const existing = state.selectedReferences.find((item) => item.type === ref.type && item.id === ref.id);
+  if (existing) {
+    if (ref.selector) existing.selector = ref.selector;
+    if (ref.mode) existing.mode = ref.mode;
+    if (ref.label) existing.label = ref.label;
+  } else state.selectedReferences.push({ ...ref, mode: ref.mode || "context" });
   updateContextChipUI();
   updateScopeVisualization();
   scheduleContextStackSync();
@@ -678,16 +704,41 @@ async function updateAutocomplete() {
   const mention = before.match(/@([^@\n]{0,50})$/);
   const slash = before.match(/(?:^|\n)\/([\w-]{0,40})$/);
   if (mention) {
-    const q = new URLSearchParams({ ...Object.fromEntries(scopeQuery()), q: mention[1], limit: "15" });
+    const rawMention = mention[1];
+    const dot = rawMention.lastIndexOf(".");
+    const baseQuery = dot >= 0 ? rawMention.slice(0, dot) : rawMention;
+    const selectorQuery = dot >= 0 ? rawMention.slice(dot + 1).toLowerCase() : null;
+    const q = new URLSearchParams({ ...Object.fromEntries(scopeQuery()), q: baseQuery, limit: "15" });
     try {
       const result = await api(`/api/mentions?${q}`);
-      state.mentionResults = result.results || [];
+      let rows = result.results || [];
+      if (selectorQuery !== null) {
+        const selectors = state.referenceSelectors.filter((name) => name.includes(selectorQuery));
+        rows = rows.flatMap((item) => selectors.map((selector) => ({
+          ...item, selector, baseLabel: item.label, label: `${item.label}.${selector}`,
+        })));
+      }
+      state.mentionResults = rows;
       state.mentionIndex = 0;
       renderMentionPopup();
     } catch (_) { hideAutocomplete(); }
   } else if (slash) {
     const query = slash[1].toLowerCase();
-    state.slashResults = COMMANDS.filter((item) => item.label.toLowerCase().includes(query) || item.description.toLowerCase().includes(query));
+    const score = (item) => {
+      const label = String(item.label || "").toLowerCase();
+      const id = String(item.id || "").toLowerCase();
+      const aliases = (item.aliases || []).map((x) => String(x).toLowerCase());
+      const category = String(item.category || "").toLowerCase();
+      const description = String(item.description || "").toLowerCase();
+      if (label === `/${query}` || id === query) return 100;
+      if (label.startsWith(`/${query}`) || id.startsWith(query)) return 80;
+      if (aliases.some((x) => x.startsWith(query))) return 70;
+      if (label.includes(query) || id.includes(query)) return 55;
+      if (category.includes(query)) return 25;
+      if (description.includes(query)) return 15;
+      return 0;
+    };
+    state.slashResults = COMMANDS.map((item) => ({ item, score: score(item) })).filter((x) => x.score > 0 || !query).sort((a,b) => b.score - a.score).map((x) => x.item);
     state.slashIndex = 0;
     renderSlashPopup();
   } else hideAutocomplete();
@@ -1565,7 +1616,7 @@ function collectPromptReferences() {
     const key = `${ref.type}:${ref.id}`;
     const previous = merged.get(key);
     const mode = ref.mode || previous?.mode || "context";
-    merged.set(key, { type: ref.type, id: ref.id, label: ref.label || ref.name || ref.id, mode });
+    merged.set(key, { type: ref.type, id: ref.id, label: ref.label || ref.name || ref.id, mode, selector: ref.selector || previous?.selector || null });
   }
   return [...merged.values()];
 }
@@ -1911,7 +1962,7 @@ function showReferencePeek(ref, anchor) {
 function updateContextChipUI() {
   const container = byId("contextChips");
   const modeLabel = (mode) => ({mention:"M",context:"C",deep:"D"}[mode] || "C");
-  container.innerHTML = state.selectedReferences.map((ref) => `<span class="context-chip" data-ref-key="${escapeHTML(`${ref.type}:${ref.id}`)}"><button class="context-peek" title="Peek">${escapeHTML(ENTITY_ICONS[ref.type] || "@")} <b>@${escapeHTML(ref.label)}</b></button><button class="context-mode" title="Reference depth: ${escapeHTML(ref.mode || "context")} · click to cycle">${modeLabel(ref.mode)}</button><button class="context-pin" title="Pin context">⌖</button><button class="context-remove" title="Remove context">×</button></span>`).join("");
+  container.innerHTML = state.selectedReferences.map((ref) => `<span class="context-chip" data-ref-key="${escapeHTML(`${ref.type}:${ref.id}`)}"><button class="context-peek" title="Peek">${escapeHTML(ENTITY_ICONS[ref.type] || "@")} <b>@${escapeHTML(ref.label)}${ref.selector ? `.${escapeHTML(ref.selector)}` : ""}</b></button><button class="context-mode" title="Reference depth: ${escapeHTML(ref.mode || "context")} · click to cycle">${modeLabel(ref.mode)}</button><button class="context-pin" title="Pin context">⌖</button><button class="context-remove" title="Remove context">×</button></span>`).join("");
   container.classList.toggle("hidden", state.selectedReferences.length === 0);
   $$(".context-chip", container).forEach((chip) => {
     const [type, ...idParts] = chip.dataset.refKey.split(":"); const id = idParts.join(":");
@@ -1930,7 +1981,9 @@ function chooseMention(index) {
   const item = state.mentionResults[index]; if (!item) return;
   const input = byId("promptInput"); const cursor = input.selectionStart; const before = input.value.slice(0, cursor); const match = before.match(/@([^@\n]{0,50})$/); if (!match) return;
   const start = cursor - match[0].length; input.value = `${input.value.slice(0, start)}@${item.label} ${input.value.slice(cursor)}`;
-  const next = start + item.label.length + 2; input.setSelectionRange(next, next); addReference({ type: item.type, id: item.id, label: item.label }); hideAutocomplete(); refreshPromptHighlight(); input.focus();
+  const next = start + item.label.length + 2; input.setSelectionRange(next, next);
+  if (!item.dynamic && item.type !== "dynamic_reference") addReference({ type: item.type, id: item.id, label: item.baseLabel || item.label.replace(/\.[^.]+$/, ""), selector: item.selector || null });
+  hideAutocomplete(); refreshPromptHighlight(); input.focus();
 }
 
 function renderContextWhy() {
@@ -1962,9 +2015,11 @@ function loadContextResult(result) {
   state.contextCache.projections = result.projections || [];
   state.contextCache.traceChoices = result.trace_choices || [];
   state.contextCache.contextBreakdown = result.context_breakdown || null;
+  state.contextCache.deliberation = result.deliberation || result.workspace_context?.scope?.deliberation || null;
   state.contextCache.promptText = byId("promptInput")?.value || "";
 
   if (byId("wcfOutput")) byId("wcfOutput").textContent = state.contextCache.wcf || "No WCF available.";
+  if (byId("deliberationOutput")) byId("deliberationOutput").textContent = pretty(state.contextCache.deliberation || {status:"No model intuition for this run."});
   if (byId("aifOutput")) byId("aifOutput").textContent = state.contextCache.aif || "No AIF-Core available.";
   if (byId("briefOutput")) byId("briefOutput").textContent = pretty(state.contextCache.brief);
   if (byId("workspaceContextOutput")) byId("workspaceContextOutput").textContent = state.contextCache.workspace?.text || "No workspace context.";
@@ -3811,7 +3866,7 @@ async function init() {
     const [config, contract] = await Promise.all([api("/api/config"), api("/api/contract")]);
     applyConfig(config);
     if (byId("contractEditor")) byId("contractEditor").value = contract.content || "";
-    await Promise.all([refreshModels(), loadWorkspaceBootstrap(), loadDatasetStats()]);
+    await Promise.all([refreshModels(), loadCommandRegistry(), loadWorkspaceBootstrap(), loadDatasetStats()]);
     const route = location.hash.replace(/^#\//, "");
     const routeView = route === "manuscript" ? "draft" : route === "library" ? "world" : ["home","chat"].includes(route) ? route : null;
     const prefs = localPrefs();

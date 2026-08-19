@@ -52,6 +52,7 @@ def _compose_v121(
     *,
     session_context: str | None = None,
     beat_context: str | None = None,
+    deliberation=None,
 ) -> str:
     compilation = CharacterRailParser.parse(prompt)
     clean_prompt = compilation.cleaned_prompt if compilation.active else prompt
@@ -63,6 +64,7 @@ def _compose_v121(
         mode,
         session_context=clean_session,
         beat_context=beat_context,
+        deliberation=deliberation,
     )
     if not compilation.active or not compilation.rendered_text:
         return model_input

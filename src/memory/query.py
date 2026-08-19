@@ -57,7 +57,7 @@ class QueryCompiler:
             key = (str(ref.get("type") or ""), str(ref.get("id") or ""))
             if key[0] and key[1] and key not in seen:
                 seen.add(key)
-                resolved.append({"type": key[0], "id": key[1], "label": ref.get("label") or key[1], "method": "explicit", "confidence": 1.0})
+                resolved.append({"type": key[0], "id": key[1], "label": ref.get("label") or key[1], "method": "explicit", "confidence": 1.0, **({"selector": ref.get("selector")} if ref.get("selector") else {})})
         needle = query.casefold()
         try:
             families = self.workspace.list_entity_families(None)
@@ -112,6 +112,7 @@ class QueryCompiler:
             entities.append({
                 "type": key[0], "id": key[1], "label": focus.get("label") or key[1],
                 "method": "context_plan", "confidence": float(focus.get("confidence") or 1.0),
+                **({"selector": focus.get("selector")} if focus.get("selector") else {}),
             })
         policies: dict[QueryRoute, tuple[list[RetrievalLane], list[RetrievalLane]]] = {
             QueryRoute.CURRENT_STATE: ([RetrievalLane.STRUCTURED_STATE], [RetrievalLane.RELATIONSHIPS, RetrievalLane.EVENTS]),
@@ -226,15 +227,47 @@ class MemoryQueryEngine:
                 continue
         return variants
 
+    @staticmethod
+    def _selector_for_variant(plan: QueryPlan, variant: dict[str, Any]) -> str | None:
+        for item in plan.resolved_entities:
+            selector = str(item.get("selector") or "").strip().casefold()
+            if not selector:
+                continue
+            if item.get("type") == "entity_variant" and item.get("id") == variant.get("id"):
+                return selector
+            if item.get("type") == "entity_family" and item.get("id") == variant.get("family_id"):
+                return selector
+        return None
+
     def _structured_state(self, plan: QueryPlan, lane: RetrievalLane) -> list[MemoryCandidate]:
         if not plan.scope.world_id:
             return []
         output: list[MemoryCandidate] = []
         for variant in self._variant_targets(plan):
+            selector = self._selector_for_variant(plan, variant)
             rows = self.store.query_current_state(plan.scope.world_id, plan.scope.branch_id, "entity_variant", variant["id"])
-            if not rows:
-                current = variant.get("current_state") or {}
-                attributes = variant.get("attributes") or {}
+            current = variant.get("current_state") or {}
+            attributes = variant.get("attributes") or {}
+            selected_section: dict[str, Any] | None = None
+            if selector == "voice":
+                selected_section = variant.get("voice") or {}
+            elif selector == "knowledge":
+                selected_section = variant.get("knowledge") or {}
+            elif selector == "beliefs":
+                selected_section = variant.get("beliefs") or {}
+            elif selector == "state":
+                selected_section = current
+            elif selector == "appearance":
+                merged = {**attributes, **current}
+                appearance_words = ("appearance", "hair", "face", "skin", "eye", "height", "body", "chest", "clothing", "outfit", "physical", "form", "voice")
+                filtered = {k: v for k, v in merged.items() if any(word in str(k).casefold() for word in appearance_words)}
+                selected_section = filtered or merged
+            if selected_section is not None:
+                rows = [
+                    {"state_key": f"{selector}.{key}", "value": value, "source_type": "entity_variant", "source_id": variant["id"], "authority": Authority.USER_ACCEPTED_WORLD_CANON.value}
+                    for key, value in selected_section.items()
+                ]
+            elif not rows:
                 rows = [
                     {"state_key": key, "value": value, "source_type": "entity_variant", "source_id": variant["id"], "authority": Authority.USER_ACCEPTED_WORLD_CANON.value}
                     for key, value in {**attributes, **current}.items()

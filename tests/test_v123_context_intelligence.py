@@ -198,14 +198,14 @@ class V123ContextIntelligenceTests(unittest.TestCase):
             ws = fx.ws(participants=[variant["id"]])
             result = fx.memory.retrieve("Continue.", fx.context(), workspace_context=ws)
             augmented = fx.memory.augment_workspace_context(ws, result)
-            self.assertEqual(augmented.scope["context_intelligence"]["version"], "1.2.3a1")
-            self.assertEqual(augmented.scope["memory"]["context_intelligence_version"], "1.2.3a1")
+            self.assertEqual(augmented.scope["context_intelligence"]["version"], "1.2.4a1")
+            self.assertEqual(augmented.scope["memory"]["context_intelligence_version"], "1.2.4a1")
             self.assertIn("@ARLINE-NARRATIVE-CONTEXT 1.2.3", augmented.text)
 
     def test_memory_status_reports_context_intelligence_version(self):
         with tempfile.TemporaryDirectory() as td:
             fx = Fixture(td)
-            self.assertEqual(fx.memory.status()["context_intelligence_version"], "1.2.3a1")
+            self.assertEqual(fx.memory.status()["context_intelligence_version"], "1.2.4a1")
 
 
 def fx_engine_fit(candidates, budget, plan):

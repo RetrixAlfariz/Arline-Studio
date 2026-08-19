@@ -42,15 +42,15 @@ window.ARLINE_COMMANDS = [
     category: "Character Rails",
     description: "Character-aware interaction rail; adaptive beats instead of fixed alternating turns",
     action: "insert",
-    text: "/dia @characterA@characterB \"topic or interaction goal\" ",
+    text: "/dia @characterA @characterB \"topic or interaction goal\" ",
     help: {
       title: "Dialogue / Interaction Rail",
       about: "Generate a character-aware interaction around a semantic topic or goal. Speaker order is adaptive: one character may speak repeatedly, remain silent, interrupt, act, or internally react when POV allows it.",
-      syntax: "/dia @characterA@characterB [pacing] [curve=...] [length=...] [until=\"...\"] \"topic\"",
+      syntax: "/dia @characterA @characterB [pacing] [curve=...] [length=...] [until=\"...\"] \"topic\"",
       examples: [
-        { label: "Casual topic", text: "/dia @characterA@characterB \"play a game together\"" },
-        { label: "Slow awkward exchange", text: "/dia @characterA@characterB slow \"an awkward apology\"" },
-        { label: "Changing intensity", text: "/dia @characterA@characterB slow curve=wave \"discuss moving away\"" },
+        { label: "Casual topic", text: "/dia @characterA @characterB \"play a game together\"" },
+        { label: "Slow awkward exchange", text: "/dia @characterA @characterB slow \"an awkward apology\"" },
+        { label: "Changing intensity", text: "/dia @characterA @characterB slow curve=wave \"discuss moving away\"" },
       ],
       parameters: [
         ["@characterA@characterB", "Participants. More than two characters may be supplied when needed."],
@@ -108,7 +108,7 @@ window.ARLINE_COMMANDS = [
       about: "Steer an intimate scene through the same character-aware Scene Dynamics system as dialogue: pacing, reactions, silence, internal thought, ambience, and aftermath remain constrained by character and scene state.",
       syntax: "/intimacy @characterA[@characterB] [solo] [pacing] [curve=...] \"scene intent\"",
       examples: [
-        { label: "Two-character scene", text: "/intimacy @characterA@characterB slow \"reconciliation and emotional vulnerability\"" },
+        { label: "Two-character scene", text: "/intimacy @characterA @characterB slow \"reconciliation and emotional vulnerability\"" },
         { label: "Solo scene", text: "/intimacy @characterA solo lingering \"vulnerability and quiet aftermath\"" },
       ],
       parameters: [
@@ -125,6 +125,11 @@ window.ARLINE_COMMANDS = [
       memory: ["Generation only", "Command does not prove an intimate event occurred", "Persistent consequences require accepted prose and review"],
     },
   },
+  { id: "intuition", label: "/intuition", category: "Deliberation", description: "Ask what most naturally follows without making it Canon", action: "insert", text: "/intuition @scene \"what should naturally happen next?\" " },
+  { id: "alternatives", label: "/alternatives", category: "Deliberation", description: "Generate several non-canonical next-beat alternatives", action: "insert", text: "/alternatives @scene count=4 \"next beat\" " },
+  { id: "describe", label: "/describe", category: "Writing", description: "Describe a subject using selector-aware grounding", action: "insert", text: "/describe @characterA.appearance detail=high " },
+  { id: "pov", label: "/pov", category: "Writing", description: "Temporarily emphasize a POV for this generation", action: "insert", text: "/pov @characterA \"scene intent\" " },
+  { id: "pace", label: "/pace", category: "Writing", description: "Temporarily steer narrative pacing", action: "insert", text: "/pace slow \"scene goal\" " },
   { id: "analyze", label: "/analyze", description: "Analyze the current prompt without generation", action: "analyze" },
   { id: "new-scene", label: "Create scene", description: "Create a new scene document", action: "new-document" },
   { id: "new-character", label: "Create character", description: "Create a character family and current-world variant", action: "new-character" },

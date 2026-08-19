@@ -23,6 +23,8 @@ from src.inference import LMStudioClient, LMStudioError, LMStudioModelManager
 from src.narrative import NarrativeBriefBuilder, NarrativeRuntimeBuilder
 from src.pipeline import ArlineAnalyticalPipeline
 from src.runtime_config import RuntimeConfig
+from src.directives import DirectiveEngine, DirectiveIntent
+from src.deliberation import NarrativeDeliberation, NarrativeDeliberator
 from src.writer import ArlineWriter, PostWriteValidator
 from src.workspace import WorkspaceContext
 
@@ -39,6 +41,7 @@ class AnalysisBundle:
     aif_core: str
     narrative_brief: Any
     workspace_context: WorkspaceContext | None = None
+    directive: DirectiveIntent | None = None
 
 
 @dataclass(slots=True)
@@ -51,6 +54,7 @@ class GenerationBundle:
     post_validation: Any
     model_input: str
     load_status: dict[str, Any]
+    deliberation: NarrativeDeliberation | None = None
 
 
 class ArlineService:
@@ -68,6 +72,8 @@ class ArlineService:
         self.budgeter = ContextBudgeter(TokenCounter())
         self.aif = AIFCompiler()
         self.post_validator = PostWriteValidator()
+        self.directive_engine = DirectiveEngine()
+        self.deliberator = NarrativeDeliberator(config)
         self.projection_engine = ProjectionEngine(
             mode=config.projection.mode,
             min_confidence=config.projection.min_confidence,
@@ -105,6 +111,34 @@ class ArlineService:
             self.config.lmstudio.model, requested
         )
 
+    def _directive_for(self, prompt: str, workspace_context: WorkspaceContext | None) -> DirectiveIntent:
+        scope = dict(getattr(workspace_context, "scope", {}) or {}) if workspace_context else {}
+        cached = scope.get("directive")
+        if isinstance(cached, dict) and cached.get("version") == "1.2.4a1" and cached.get("raw_prompt") == prompt:
+            return DirectiveIntent(**{key: value for key, value in cached.items() if key in DirectiveIntent.__dataclass_fields__})
+        refs = list(getattr(workspace_context, "explicit_references", []) or []) if workspace_context else []
+        active = dict(scope.get("active_scene") or {})
+        directive = self.directive_engine.parse(
+            prompt, explicit_references=refs, active_scene=active,
+            project_id=scope.get("project_id"), world_id=scope.get("world_id"), branch_id=scope.get("branch_id"),
+        )
+        if workspace_context is not None:
+            workspace_context.scope["directive"] = directive.to_dict()
+        return directive
+
+    def _build_deliberation(self, prompt: str, bundle: AnalysisBundle, client) -> NarrativeDeliberation:
+        directive = bundle.directive or self._directive_for(prompt, bundle.workspace_context)
+        context_plan = dict(getattr(bundle.workspace_context, "scope", {}).get("context_intelligence") or {}) if bundle.workspace_context else {}
+        result = self.deliberator.deliberate(
+            client=client, model=self.config.lmstudio.model, directive=directive.to_dict(), context_plan=context_plan,
+            workspace_text=bundle.workspace_context.text if bundle.workspace_context else "",
+            wcf_text=bundle.rendered_context.text,
+            narrative_brief=bundle.narrative_brief.text if bundle.narrative_brief else "",
+        )
+        if bundle.workspace_context is not None:
+            bundle.workspace_context.scope["deliberation"] = result.to_dict()
+        return result
+
     def analyze(
         self,
         prompt: str,
@@ -112,10 +146,12 @@ class ArlineService:
         surface_history=None,
         workspace_context: WorkspaceContext | None = None,
     ) -> AnalysisBundle:
-        result = self.pipeline.run(prompt, surface_history=surface_history)
+        directive = self._directive_for(prompt, workspace_context)
+        analysis_prompt = directive.semantic_prompt if directive.command else prompt
+        result = self.pipeline.run(analysis_prompt, surface_history=surface_history)
         core = self.core_builder.build(result)
         narrative = self.narrative_builder.build(
-            prompt, result, surface_history=surface_history
+            analysis_prompt, result, surface_history=surface_history
         )
         if workspace_context and workspace_context.scope:
             project_settings = workspace_context.scope.get("project_settings") or {}
@@ -143,12 +179,12 @@ class ArlineService:
                         setattr(narrative.description_lens, key, round(value / total, 3))
         projections = self.projection_engine.project(core, result, narrative)
         ctx = self.context_builder.build(
-            prompt, core, result, narrative, projections=projections
+            analysis_prompt, core, result, narrative, projections=projections
         )
         budget = ContextBudget(
             model_context_length=self.config.model_load.context_length,
             max_output_tokens=self.config.generation.api_max_output_tokens,
-            system_prompt_tokens=self.config.context_budget.system_prompt_token_estimate,
+            system_prompt_tokens=self.config.context_budget.system_prompt_token_estimate + (self.config.deliberation.max_tokens if self.config.deliberation.enabled else 0),
             safety_margin=self.config.context_budget.safety_margin,
             minimum_writer_context=self.config.context_budget.minimum_writer_context_tokens,
         )
@@ -163,7 +199,7 @@ class ArlineService:
         world_runtime = result.world_runtime or {}
         return AnalysisBundle(
             result, core, world_runtime, narrative, ctx, rendered, validation,
-            aif, brief, workspace_context
+            aif, brief, workspace_context, directive
         )
 
     def compose_model_input(
@@ -174,6 +210,7 @@ class ArlineService:
         *,
         session_context: str | None = None,
         beat_context: str | None = None,
+        deliberation: NarrativeDeliberation | None = None,
     ) -> str:
         mode = mode or self.config.writer.input_mode
         request = self._compact_request(prompt, bundle)
@@ -209,6 +246,12 @@ class ArlineService:
             bundle.rendered_context.text.rstrip(),
             "</ARLINE_CONTEXT>",
             "",
+        ]
+        if bundle.directive and bundle.directive.active:
+            parts += ["<DIRECTIVE>", bundle.directive.render().rstrip(), "</DIRECTIVE>", ""]
+        if deliberation is not None:
+            parts += ["<NARRATIVE_DELIBERATION>", deliberation.render().rstrip(), "</NARRATIVE_DELIBERATION>", ""]
+        parts += [
             "<REQUEST>",
             request,
             "</REQUEST>",
@@ -256,10 +299,16 @@ class ArlineService:
                 beat_context.strip(),
                 "</BEAT_CONTEXT>",
             ]
+        output_mode = deliberation.output_mode if deliberation is not None else (bundle.directive.output_mode if bundle.directive else "fiction")
+        write_instruction = "Write the requested fiction using the structured context."
+        if output_mode == "author_intuition":
+            write_instruction = "Respond to the author with concise narrative intuition, likely beats, and explicit uncertainty. Do not write story prose unless specifically requested."
+        elif output_mode == "author_alternatives":
+            write_instruction = "Respond to the author with distinct plausible next-beat alternatives and tradeoffs. Keep them non-canonical and do not silently choose one."
         parts += [
             "",
             "<WRITE>",
-            "Write the requested fiction using the structured context.",
+            write_instruction,
             "</WRITE>",
         ]
         return "\n".join(parts)
@@ -300,7 +349,7 @@ class ArlineService:
         budget = ContextBudget(
             model_context_length=self.config.model_load.context_length,
             max_output_tokens=self.config.generation.api_max_output_tokens,
-            system_prompt_tokens=exact_counter.count(system_text),
+            system_prompt_tokens=exact_counter.count(system_text) + (self.config.deliberation.max_tokens if self.config.deliberation.enabled else 0),
             safety_margin=self.config.context_budget.safety_margin,
             minimum_writer_context=self.config.context_budget.minimum_writer_context_tokens,
         )
@@ -316,12 +365,14 @@ class ArlineService:
                 + json.dumps(bundle.wcf_validation.to_dict(), ensure_ascii=False)
             )
 
+        deliberation = self._build_deliberation(prompt, bundle, client)
         model_input = self.compose_model_input(
             prompt,
             bundle,
             mode,
             session_context=session_context,
             beat_context=beat_context,
+            deliberation=deliberation,
         )
         writer = ArlineWriter(self.config, client=client)
         result = writer.generate(
@@ -329,6 +380,9 @@ class ArlineService:
             input_mode=mode,
             reasoning_for_api=effective_reasoning,
         )
+        result.stats["deliberation_version"] = deliberation.version
+        result.stats["deliberation_status"] = deliberation.status
+        result.stats["deliberation_model"] = deliberation.model
         post = (
             self.post_validator.validate(result.story, bundle.writer_context)
             if self.config.writer.post_validate
@@ -343,6 +397,7 @@ class ArlineService:
             post,
             model_input,
             load,
+            deliberation,
         )
 
     def generate_beats(
@@ -375,6 +430,7 @@ class ArlineService:
         manager = LMStudioModelManager(self.config, rest_client=client)
         load = manager.ensure_loaded()
         effective_reasoning = self.resolve_reasoning_mode()
+        deliberation = self._build_deliberation(prompt, bundle, client)
         writer = ArlineWriter(self.config, client=client)
 
         old_visible = self.config.generation.visible_output_tokens
@@ -404,6 +460,7 @@ class ArlineService:
                     mode,
                     session_context=session_context,
                     beat_context=beat_instruction,
+                    deliberation=deliberation,
                 )
                 result = writer.generate(
                     model_input=model_input,
@@ -460,9 +517,10 @@ class ArlineService:
             {"beats": raw_responses},
             post,
             self.compose_model_input(
-                prompt, bundle, mode, session_context=session_context
+                prompt, bundle, mode, session_context=session_context, deliberation=deliberation
             ),
             load,
+            deliberation,
         )
 
     def reload_model(self):
@@ -494,6 +552,7 @@ class ArlineService:
             ("narrative_runtime.json", bundle.analysis.narrative_runtime.to_dict()),
             ("narrative_brief.json", bundle.analysis.narrative_brief.to_dict()),
             ("workspace_context.json", bundle.analysis.workspace_context.to_dict() if bundle.analysis.workspace_context else {}),
+            ("deliberation.json", bundle.deliberation.to_dict() if bundle.deliberation else {}),
             ("writer_context.json", bundle.analysis.writer_context.to_dict()),
             ("projections.json", [x.to_dict() for x in bundle.analysis.writer_context.projections]),
             ("wcf_validation.json", bundle.analysis.wcf_validation.to_dict()),

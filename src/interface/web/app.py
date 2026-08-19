@@ -36,6 +36,7 @@ from src.storage_backup import backup_sqlite_before_migrations
 from src.memory import MemoryConfig, MemoryQueryContext, MemoryService, MemoryStore
 from src.discovery.store import DiscoveryStore
 from src.version import __version__
+from src.directives import COMMAND_REGISTRY_VERSION, DYNAMIC_REFERENCES, REFERENCE_SELECTORS, DirectiveEngine
 from src.memory.web import create_memory_router
 from src.workspace.store import WORKSPACE_SCHEMA_VERSION
 from src.workspace import (
@@ -103,6 +104,7 @@ class ReferencePayload(BaseModel):
     id: str
     label: str = ""
     mode: str = "context"
+    selector: str | None = None
 
 
 class PromptPayload(RuntimePayload):
@@ -961,6 +963,13 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         if ws_context is None or not memory_config.enabled or not memory_config.automatic_context:
             return ws_context
         active_scene = (ws_context.scope.get("active_scene") or {}) if ws_context else {}
+        directive = DirectiveEngine.parse(
+            prompt, explicit_references=refs, active_scene=active_scene,
+            project_id=project_id, world_id=world_id, branch_id=branch_id,
+        )
+        ws_context.scope["directive"] = directive.to_dict()
+        memory_refs = directive.resolved_references or refs
+        memory_query = directive.semantic_prompt or prompt
         lens = str(payload.context_lens or memory_config.default_lens or "scene").lower()
         if lens not in {"author", "scene", "pov"}:
             lens = memory_config.default_lens if memory_config.default_lens in {"author", "scene", "pov"} else "scene"
@@ -983,13 +992,13 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             pov_variant_id=payload.pov_variant_id or active_scene.get("pov_variant_id"),
             context_lens=lens,
             retrieval_mode="generation",
-            explicit_references=refs,
+            explicit_references=memory_refs,
             allow_scratch=bool(payload.scratch_mode),
             allow_future_author_knowledge=(lens == "author"),
             token_budget=memory_budget,
         )
         try:
-            result = memory_service.retrieve(prompt, memory_scope, workspace_context=ws_context)
+            result = memory_service.retrieve(memory_query, memory_scope, workspace_context=ws_context)
             return memory_service.augment_workspace_context(ws_context, result)
         except Exception as exc:
             ws_context.scope["memory"] = {
@@ -1014,6 +1023,15 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     @app.get("/api/config")
     def get_config():
         return _public_config(RuntimeConfig.load(config_path))
+
+    @app.post("/api/directives/parse")
+    def parse_directive(payload: PromptPayload):
+        refs = [item.model_dump() for item in payload.references]
+        active_scene = workspace.get_active_scene(payload.project_id) if payload.project_id else {}
+        return DirectiveEngine.parse(
+            payload.prompt, explicit_references=refs, active_scene=active_scene or {},
+            project_id=payload.project_id, world_id=payload.world_id, branch_id=payload.branch_id,
+        ).to_dict()
 
     @app.get("/api/backups")
     def list_backups():
@@ -2582,11 +2600,15 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     ):
         project_folder_ids = visible_folder_ids(project_id)
         bible_folder_ids = visible_folder_ids(WORLD_BIBLE_PROJECT_ID)
+        active_scene = workspace.get_active_scene(project_id) if project_id else {}
+        dynamic_results = DirectiveEngine.dynamic_reference_suggestions(
+            q, active_scene=active_scene or {}, world_id=world_id, branch_id=branch_id,
+        )
         raw_results = workspace.search_mentions(
-            q, project_id=project_id, world_id=world_id,
+            q.split(".", 1)[0], project_id=project_id, world_id=world_id,
             branch_id=branch_id, limit=limit,
         )
-        results = []
+        results = list(dynamic_results)
         for item in raw_results:
             lifecycle_type = {"entity": "entity_family"}.get(item.get("type"), item.get("type"))
             if item.get("id") and foundation.is_hidden(lifecycle_type, item["id"]):
@@ -2621,7 +2643,13 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
 
     @app.get("/api/commands")
     def commands(q: str = Query(""), project_id: str | None = Query(None)):
-        return {"results": workspace.command_search(q, project_id=project_id)}
+        return {
+            "results": workspace.command_search(q, project_id=project_id),
+            "command_registry_version": COMMAND_REGISTRY_VERSION,
+            "commands": DirectiveEngine.catalog(),
+            "reference_selectors": list(REFERENCE_SELECTORS),
+            "dynamic_references": list(DYNAMIC_REFERENCES),
+        }
 
     @app.get("/api/sessions")
     def list_sessions(

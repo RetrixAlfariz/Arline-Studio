@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#202220" />
   <title>Arline Studio</title>
-  <link rel="stylesheet" href="/static/arline.css?v=1.2.3-context" />
+  <link rel="stylesheet" href="/static/arline.css?v=1.2.4-directives" />
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -312,8 +312,8 @@
       <div class="inspector-panel" data-inspector-panel="context">
         <label>Projection mode<select id="projectionMode"><option value="off">Off</option><option value="conservative">Conservative</option><option value="balanced" selected>Balanced</option><option value="vivid">Vivid</option></select></label>
         <div id="scopeVisualization" class="scope-visualization">No active context.</div><div id="contextWhy" class="context-why"><div class="empty-note">Analyze to see why each context item was included.</div></div>
-        <div class="subtabs"><button class="active" data-subtab="wcf">WCF</button><button data-subtab="brief">Brief</button><button data-subtab="workspace">Workspace</button><button data-subtab="projection">Projection</button><button data-subtab="aif">AIF</button></div>
-        <pre id="wcfOutput" class="code-output active" data-subpanel="wcf">Analyze first.</pre><pre id="briefOutput" class="code-output" data-subpanel="brief">No brief.</pre><pre id="workspaceContextOutput" class="code-output" data-subpanel="workspace">No workspace context.</pre><pre id="projectionOutput" class="code-output" data-subpanel="projection">No projections.</pre><pre id="aifOutput" class="code-output" data-subpanel="aif">No AIF-Core.</pre>
+        <div class="subtabs"><button class="active" data-subtab="wcf">WCF</button><button data-subtab="brief">Brief</button><button data-subtab="workspace">Workspace</button><button data-subtab="intuition">Intuition</button><button data-subtab="projection">Projection</button><button data-subtab="aif">AIF</button></div>
+        <pre id="wcfOutput" class="code-output active" data-subpanel="wcf">Analyze first.</pre><pre id="briefOutput" class="code-output" data-subpanel="brief">No brief.</pre><pre id="workspaceContextOutput" class="code-output" data-subpanel="workspace">No workspace context.</pre><pre id="deliberationOutput" class="code-output" data-subpanel="intuition">Generate to inspect model intuition.</pre><pre id="projectionOutput" class="code-output" data-subpanel="projection">No projections.</pre><pre id="aifOutput" class="code-output" data-subpanel="aif">No AIF-Core.</pre>
       </div>
       <div class="inspector-panel" data-inspector-panel="storage">
         <span class="eyebrow">Local-first data</span><h3>Data & Storage</h3>
@@ -418,11 +418,11 @@
     <div id="toast" class="toast hidden"></div>
     <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><b id="loadingTitle">Arline is working…</b><span id="loadingDetail">Preparing context</span></div>
   </div>
-  <script src="/static/js/stream.js?v=1.2.3-context" defer></script>
-  <script src="/static/js/commands.js?v=1.2.3-context" defer></script>
-  <script src="/static/arline.js?v=1.2.3-context" defer></script>
-  <script src="/static/js/quick-create.js?v=1.2.3-context" defer></script>
-  <script src="/static/js/discovery-sheets.js?v=1.2.3-context" defer></script>
-  <script src="/static/js/memory.js?v=1.2.3-context" defer></script>
+  <script src="/static/js/stream.js?v=1.2.4-directives" defer></script>
+  <script src="/static/js/commands.js?v=1.2.4-directives" defer></script>
+  <script src="/static/arline.js?v=1.2.4-directives" defer></script>
+  <script src="/static/js/quick-create.js?v=1.2.4-directives" defer></script>
+  <script src="/static/js/discovery-sheets.js?v=1.2.4-directives" defer></script>
+  <script src="/static/js/memory.js?v=1.2.4-directives" defer></script>
 </body>
 </html>
