@@ -101,7 +101,7 @@ class ArchitectureHardeningTests(unittest.TestCase):
         self.assertNotIn("def _ensure_schema", resolver)
         self.assertNotIn("CREATE TABLE IF NOT EXISTS continuity_", resolver)
 
-    def test_derived_systems_do_not_replace_authoritative_store_methods(self):
+    def test_derived_systems_use_source_specific_event_buses_not_method_replacement(self):
         memory_web = (ROOT / "src/memory/web.py").read_text(encoding="utf-8")
         discovery_web = (ROOT / "src/discovery/web.py").read_text(encoding="utf-8")
 
@@ -115,8 +115,10 @@ class ArchitectureHardeningTests(unittest.TestCase):
             "foundation_store.restore =",
         ):
             self.assertNotIn(assignment, discovery_web)
-        self.assertIn("get_domain_event_bus", memory_web)
-        self.assertIn("get_domain_event_bus", discovery_web)
+
+        self.assertIn("workspace_path = getattr(workspace,", memory_web)
+        self.assertIn("history_bus = get_domain_event_bus(memory_service.history.path)", discovery_web)
+        self.assertIn("workspace_bus = get_domain_event_bus(discovery.store.path)", discovery_web)
 
     def test_model_discovery_never_accepts_api_key_in_get_query(self):
         app = (ROOT / "src/interface/web/app.py").read_text(encoding="utf-8")
@@ -127,13 +129,19 @@ class ArchitectureHardeningTests(unittest.TestCase):
         self.assertIn("ModelsPayload", app)
         self.assertIn('api_key: str | None = None', app)
 
-    def test_combined_migration_backup_covers_derived_stores(self):
+    def test_combined_migration_backup_covers_derived_stores_once(self):
         app = (ROOT / "src/interface/web/app.py").read_text(encoding="utf-8")
+        discovery_web = (ROOT / "src/discovery/web.py").read_text(encoding="utf-8")
         self.assertIn('["memory_meta"] = MemoryStore.SCHEMA_VERSION', app)
         self.assertIn('["discovery_meta"] = DiscoveryStore.SCHEMA_VERSION', app)
         self.assertIn(
             "MemoryStore(initial_cfg.workspace.database_path, backup_before_migration=False)",
             app,
+        )
+        self.assertIn("memory_service._combined_migration_backup_complete = True", app)
+        self.assertIn(
+            'getattr(memory_service, "_combined_migration_backup_complete", False)',
+            discovery_web,
         )
 
     def test_remote_ui_bind_requires_explicit_override(self):
@@ -145,6 +153,14 @@ class ArchitectureHardeningTests(unittest.TestCase):
         project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
         self.assertEqual(project["project"]["version"], __version__)
         self.assertEqual(__version__, "1.2.2a1")
+
+    def test_frontend_has_no_runtime_compatibility_shim(self):
+        compat = ROOT / "src/interface/web/static/js/compat.js"
+        html = (ROOT / "src/interface/web/static/index.html").read_text(encoding="utf-8")
+        self.assertFalse(compat.exists())
+        self.assertNotIn("compat.js", html)
+        self.assertIn("quick-create.js", html)
+        self.assertIn("discovery-sheets.js", html)
 
 
 if __name__ == "__main__":
