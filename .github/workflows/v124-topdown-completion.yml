@@ -5,11 +5,13 @@ on:
     branches: [develop/v1.2]
     paths:
       - '.github/v124_topdown_apply.py'
+      - '.github/v124_bootstrap_fix.py'
       - '.github/workflows/v124-topdown-completion.yml'
   pull_request:
     branches: [main]
     paths:
       - '.github/v124_topdown_apply.py'
+      - '.github/v124_bootstrap_fix.py'
       - '.github/workflows/v124-topdown-completion.yml'
 
 permissions:
@@ -30,7 +32,9 @@ jobs:
         with:
           node-version: '22'
       - name: Apply v1.2.4 vertical slice
-        run: python .github/v124_topdown_apply.py
+        run: |
+          python .github/v124_bootstrap_fix.py
+          python .github/v124_topdown_apply.py
       - uses: astral-sh/setup-uv@v6
       - name: Validate Python and source contracts
         shell: bash
@@ -103,7 +107,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf node_modules
-          rm -f .github/v124_topdown_apply.py .github/workflows/v124-topdown-completion.yml
+          rm -f .github/v124_topdown_apply.py .github/v124_bootstrap_fix.py .github/workflows/v124-topdown-completion.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
