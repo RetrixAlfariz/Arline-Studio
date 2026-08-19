@@ -103,6 +103,7 @@ class NarrativeEntityResolver:
             confidence=result.confidence,
             ambiguous_candidates=list(result.ambiguous_candidates),
             span_start=span_start, span_end=span_end,
+            resolved_label=result.subject_label,
         )
         return result
 

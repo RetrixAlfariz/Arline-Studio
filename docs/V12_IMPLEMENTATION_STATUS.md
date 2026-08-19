@@ -118,6 +118,30 @@ Still external or deferred before calling the v1.2.1 milestone fully closed:
 - larger-corpus retrieval quality benchmarking beyond deterministic synthetic regression fixtures;
 - future Timeline update/delete APIs must bind the same derived-refresh rule when those mutation surfaces are introduced (the current Workspace API exposes Timeline add only);
 
+## v1.2.2 — Narrative State & Continuity
+
+The v1.2.2 continuity milestone is implemented on `develop/v1.2` using a
+top-down narrative-state pipeline rather than extractor-local identity patches.
+
+Implemented:
+
+- one conservative `NarrativeEntityResolver` sits before proposition persistence;
+- exact Library identity, aliases and unique variants reuse stable entity anchors;
+- same-turn and bounded cross-turn coreference resolve only when the candidate is unique;
+- unresolved, plural or ambiguous references abstain and remain auditable as `MENTION-*` diagnostics;
+- mention diagnostics retain both the literal surface form and the resolved identity label;
+- Discovery schema v4 owns mention, event, event-effect, causal-link and conflict-resolution derived tables;
+- state transitions create or reuse `EVENT-*` records and connect visible before/after propositions through causal links;
+- `SUPER-*`, `CONFLICT-*` and `FORM-*` reconstruction remains derived and cannot grant Canon;
+- conflict resolution is an explicit user action choosing correction, story change direction or leave-unresolved;
+- Library resources expose one continuity payload for Current State, Forms, Change History, Events & Causes, Conflicts and mention provenance;
+- the Library UI renders those continuity views without creating a second interpretation of narrative truth;
+- the v1.2.2 regression layer covers stable aliases, narrator/self resolution, ambiguous abstention, unique pronoun resolution, event causality, resource projection, conflict resolution and schema ownership.
+
+The milestone deliberately keeps fuzzy auto-merge, autonomous Canon promotion,
+semantic branch merge and model-generated retcons out of scope. Those remain
+later v1.2.x/v1.3 work.
+
 ## Explicit v1.2.0 boundary
 
 Dense retrieval remains optional and reranking is not required. Full mature POV

@@ -84,6 +84,7 @@ class V122TopDownCompletionTests(unittest.TestCase):
                 raw_subject_key="self:2", label="aku",
             )
             self.assertEqual(later.subject_key, first.subject_key)
+            self.assertEqual(later.subject_label, "Vian")
             self.assertEqual(later.resolution_kind, "self_recent")
 
     def test_third_person_abstains_when_recent_candidates_are_ambiguous(self):
@@ -118,7 +119,13 @@ class V122TopDownCompletionTests(unittest.TestCase):
                 source_text="Dia tersenyum.", entity_type="character", raw_subject_key="mention:dia", label="dia",
             )
             self.assertEqual(pronoun.subject_key, alex.subject_key)
+            self.assertEqual(pronoun.subject_label, "Alex")
             self.assertEqual(pronoun.resolution_kind, "coreference_recent")
+            mentions = fx.discovery.store.recent_mentions(
+                session_id=fx.session["id"], branch_id=fx.branch["id"], entity_type="character"
+            )
+            resolved = next(item for item in mentions if item["surface"].casefold() == "dia")
+            self.assertEqual(resolved["resolved_label"], "Alex")
 
     def test_transition_builds_event_and_causal_link(self):
         with tempfile.TemporaryDirectory() as td:
