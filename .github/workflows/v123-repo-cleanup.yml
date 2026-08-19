@@ -40,6 +40,22 @@ jobs:
           html = index.read_text(encoding='utf-8')
           html = html.replace('?v=1.2.2-hardening', '?v=1.2.3-context')
           index.write_text(html, encoding='utf-8')
+
+          for test in Path('tests').rglob('test_*.py'):
+              body = test.read_text(encoding='utf-8')
+              updated = body.replace('?v=1.2.2-hardening', '?v=1.2.3-context')
+              if updated != body:
+                  test.write_text(updated, encoding='utf-8')
+
+          ci = Path('.github/workflows/ci.yml')
+          body = ci.read_text(encoding='utf-8')
+          anchor = "          if git ls-files 'src/arline_studio.egg-info/**' | grep -q .; then\n"
+          guard = "          if git ls-files 'node_modules/**' | grep -q .; then\n            echo 'Generated node_modules is tracked in the repository.' >&2\n            exit 1\n          fi\n"
+          if guard not in body:
+              if anchor not in body:
+                  raise SystemExit('CI hygiene anchor missing')
+              body = body.replace(anchor, guard + anchor, 1)
+              ci.write_text(body, encoding='utf-8')
           PY
           test ! -d node_modules
       - uses: astral-sh/setup-uv@v6
