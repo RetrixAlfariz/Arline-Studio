@@ -5,6 +5,7 @@ on:
     branches: [develop/v1.2]
     paths:
       - '.github/v122_topdown_apply.py'
+      - '.github/v122_topdown_hotfix.py'
       - '.github/workflows/v122-topdown-completion.yml'
 
 permissions:
@@ -27,9 +28,14 @@ jobs:
           set +e
           LOG=/tmp/v122-topdown.log
           : > "$LOG"
-          echo '=== APPLY ===' | tee -a "$LOG"
-          python .github/v122_topdown_apply.py >>"$LOG" 2>&1
+          echo '=== HOTFIX ===' | tee -a "$LOG"
+          python .github/v122_topdown_hotfix.py >>"$LOG" 2>&1
           rc=$?
+          if [ "$rc" -eq 0 ]; then
+            echo '=== APPLY ===' | tee -a "$LOG"
+            python .github/v122_topdown_apply.py >>"$LOG" 2>&1
+            rc=$?
+          fi
           if [ "$rc" -eq 0 ]; then
             echo '=== UV ===' | tee -a "$LOG"
             python -m pip install --disable-pip-version-check uv >>"$LOG" 2>&1 && \
@@ -57,7 +63,7 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           if [ "$rc" -eq 0 ]; then
-            rm -f .github/v122_topdown_apply.py .github/workflows/v122-topdown-completion.yml .github/v122-topdown-status.txt
+            rm -f .github/v122_topdown_apply.py .github/v122_topdown_hotfix.py .github/workflows/v122-topdown-completion.yml .github/v122-topdown-status.txt
             git add -A
             git commit -m 'feat: complete v1.2.2 narrative continuity top-down'
             git push origin HEAD:develop/v1.2
@@ -68,7 +74,7 @@ jobs:
             echo "exit_code=$rc"
             echo "commit=$GITHUB_SHA"
             echo
-            tail -n 220 "$LOG"
+            tail -n 260 "$LOG"
           } > .github/v122-topdown-status.txt
           git reset
           git add .github/v122-topdown-status.txt
