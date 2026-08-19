@@ -2161,6 +2161,7 @@ class WorkspaceStore:
         return result
 
     def update_entity_family(self, family_id: str, *, note: str = "updated", **changes: Any) -> dict[str, Any]:
+        before = self.get_entity_family(family_id)
         fields: list[str] = []
         params: list[Any] = []
         for key in ("name", "description", "folder_id"):
@@ -2188,7 +2189,18 @@ class WorkspaceStore:
             except Exception:
                 con.execute("ROLLBACK")
                 raise
-        return self.get_entity_family(family_id)
+        result = self.get_entity_family(family_id)
+        emit_domain_event(
+            self.path,
+            "workspace.entity_family_updated",
+            {
+                "before": before,
+                "after": result,
+                "changes": dict(changes),
+                "note": note,
+            },
+        )
+        return result
 
     def preview_entity_family_merge(self, source_family_id: str, target_family_id: str) -> dict[str, Any]:
         if source_family_id == target_family_id:
@@ -2443,6 +2455,7 @@ class WorkspaceStore:
         return result
 
     def update_variant(self, variant_id: str, *, note: str = "updated", **changes: Any) -> dict[str, Any]:
+        before = self.get_variant(variant_id)
         fields: list[str] = []
         params: list[Any] = []
         for key in ("display_name", "summary", "canon_status"):
@@ -2478,7 +2491,18 @@ class WorkspaceStore:
             except Exception:
                 con.execute("ROLLBACK")
                 raise
-        return self.get_variant(variant_id)
+        result = self.get_variant(variant_id)
+        emit_domain_event(
+            self.path,
+            "workspace.variant_updated",
+            {
+                "before": before,
+                "after": result,
+                "changes": dict(changes),
+                "note": note,
+            },
+        )
+        return result
 
     def delete_variant(self, variant_id: str) -> None:
         with self._lock, self._connection() as con:
