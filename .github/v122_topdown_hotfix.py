@@ -12,10 +12,5 @@ new_tail = "      });\\n\\n      const claimMap = new Map((data.claims || []).ma
 if old_tail not in text:
     raise SystemExit('UI replacement tail not found in applicator')
 text = text.replace(old_tail, new_tail, 1)
-old_record = "            ambiguous_candidates=list(result.ambiguous_candidates),\\n            span_start=span_start, span_end=span_end,"
-new_record = "            ambiguous_candidates=list(result.ambiguous_candidates),\\n            span_start=span_start, span_end=span_end, resolved_label=result.subject_label,"
-if old_record not in text:
-    raise SystemExit('mention resolved_label anchor not found')
-text = text.replace(old_record, new_record, 1)
 path.write_text(text, encoding='utf-8')
-print('v1.2.2 applicator hotfix applied')
+print('v1.2.2 applicator UI hotfix applied')
