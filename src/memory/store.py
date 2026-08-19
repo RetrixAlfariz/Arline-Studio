@@ -55,10 +55,25 @@ class MemoryStore:
 
     SCHEMA_VERSION = MEMORY_SCHEMA_VERSION
 
-    def __init__(self, database_path: Path | str, *, backup_before_migration: bool = True):
-        self.path=Path(database_path);self.path.parent.mkdir(parents=True,exist_ok=True);self._lock=RLock()
-        self.last_migration_backup=backup_sqlite_before_migrations(self.path,{"memory_meta":self.SCHEMA_VERSION}) if backup_before_migration else None
-        self.fts_available=True;self._init_db()
+    def __init__(
+        self,
+        database_path: Path | str,
+        *,
+        backup_before_migration: bool = True,
+    ):
+        self.path = Path(database_path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = RLock()
+        self.last_migration_backup = (
+            backup_sqlite_before_migrations(
+                self.path,
+                {"memory_meta": self.SCHEMA_VERSION},
+            )
+            if backup_before_migration
+            else None
+        )
+        self.fts_available = True
+        self._init_db()
 
     def _connect(self) -> sqlite3.Connection:
         con = sqlite3.connect(self.path, timeout=30, isolation_level=None)

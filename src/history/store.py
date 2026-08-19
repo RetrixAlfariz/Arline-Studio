@@ -574,21 +574,52 @@ class HistoryStore:
             cur = con.execute("DELETE FROM sessions WHERE id=?", (session_id,))
             if cur.rowcount == 0:
                 raise KeyError(session_id)
-        emit_domain_event(self.path,"history.session_deleted",{"session_id":session_id})
+        emit_domain_event(
+            self.path,
+            "history.session_deleted",
+            {"session_id": session_id},
+        )
 
     def delete_sessions_by_scope(
         self, *, project_id: str | None = None, world_id: str | None = None,
         branch_id: str | None = None
     ) -> int:
-        filters=[];params=[]
-        for column,value in (("project_id",project_id),("world_id",world_id),("branch_id",branch_id)):
-            if value is not None:filters.append(f"{column}=?");params.append(value)
-        if not filters:raise ValueError("At least one scope id is required")
-        with self._lock,self._connection() as con:
-            rows=con.execute(f"SELECT id FROM sessions WHERE {' AND '.join(filters)}",params).fetchall()
-            session_ids=[str(x["id"]) for x in rows]
-            cur=con.execute(f"DELETE FROM sessions WHERE {' AND '.join(filters)}",params);deleted=max(0,cur.rowcount)
-        emit_domain_event(self.path,"history.scope_deleted",{"project_id":project_id,"world_id":world_id,"branch_id":branch_id,"session_ids":session_ids,"deleted_count":deleted})
+        filters: list[str] = []
+        params: list[Any] = []
+        for column, value in (
+            ("project_id", project_id),
+            ("world_id", world_id),
+            ("branch_id", branch_id),
+        ):
+            if value is not None:
+                filters.append(f"{column}=?")
+                params.append(value)
+        if not filters:
+            raise ValueError("At least one scope id is required")
+
+        with self._lock, self._connection() as con:
+            rows = con.execute(
+                f"SELECT id FROM sessions WHERE {' AND '.join(filters)}",
+                params,
+            ).fetchall()
+            session_ids = [str(row["id"]) for row in rows]
+            cur = con.execute(
+                f"DELETE FROM sessions WHERE {' AND '.join(filters)}",
+                params,
+            )
+            deleted = max(0, cur.rowcount)
+
+        emit_domain_event(
+            self.path,
+            "history.scope_deleted",
+            {
+                "project_id": project_id,
+                "world_id": world_id,
+                "branch_id": branch_id,
+                "session_ids": session_ids,
+                "deleted_count": deleted,
+            },
+        )
         return deleted
 
     def clear_folder_reference(self, folder_id: str) -> int:
@@ -678,8 +709,8 @@ class HistoryStore:
             except Exception:
                 con.execute("ROLLBACK")
                 raise
-        result=self.get_turn(turn_id)
-        emit_domain_event(self.path,"history.turn_created",{"turn":result})
+        result = self.get_turn(turn_id)
+        emit_domain_event(self.path, "history.turn_created", {"turn": result})
         return result
 
     def set_feedback(
@@ -724,8 +755,8 @@ class HistoryStore:
             except Exception:
                 con.execute("ROLLBACK")
                 raise
-        result=self.get_turn(turn_id)
-        emit_domain_event(self.path,"history.feedback_changed",{"turn":result})
+        result = self.get_turn(turn_id)
+        emit_domain_event(self.path, "history.feedback_changed", {"turn": result})
         return result
 
     def build_continuity_context(

@@ -110,43 +110,118 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
         if callable(reporter):
             reporter(f"discovery:{key}", exc)
 
-    event_bus=get_domain_event_bus(discovery.store.path)
     def turn_created(event):
-        turn=event.payload.get("turn") or {};tid=turn.get("id")
-        if not tid:return
-        try:discovery.capture_turn(tid,source_kind="user_prompt");turn["_discovery_report"]=persisted_turn_report(tid,"user_prompt")
-        except Exception as exc:turn["_discovery_report"]={"turn_id":tid,"source_kind":"user_prompt","propositions":0,"instances":0,"error":str(exc)};report_failure(f"turn:{tid}",exc)
+        turn = event.payload.get("turn") or {}
+        turn_id = turn.get("id")
+        if not turn_id:
+            return
+        try:
+            discovery.capture_turn(turn_id, source_kind="user_prompt")
+            turn["_discovery_report"] = persisted_turn_report(turn_id, "user_prompt")
+        except Exception as exc:
+            turn["_discovery_report"] = {
+                "turn_id": turn_id,
+                "source_kind": "user_prompt",
+                "propositions": 0,
+                "instances": 0,
+                "error": str(exc),
+            }
+            report_failure(f"turn:{turn_id}", exc)
+
     def feedback_changed(event):
-        turn=event.payload.get("turn") or {};tid=turn.get("id");status=turn.get("feedback_status");kind=None
-        if not tid:return
+        turn = event.payload.get("turn") or {}
+        turn_id = turn.get("id")
+        status = turn.get("feedback_status")
+        source_kind = None
+        if not turn_id:
+            return
         try:
-            if status=="accepted":discovery.store.set_source_kind_active(tid,"user_edited_prose",active=False,reason="feedback_replaced");kind="accepted_generation"
-            elif status=="edited_accept":discovery.store.set_source_kind_active(tid,"accepted_generation",active=False,reason="feedback_replaced");kind="user_edited_prose"
-            elif status=="rejected":discovery.store.set_source_kind_active(tid,"accepted_generation",active=False,reason="feedback_rejected");discovery.store.set_source_kind_active(tid,"user_edited_prose",active=False,reason="feedback_rejected")
-            if kind:discovery.capture_turn(tid,source_kind=kind);turn["_discovery_report"]=persisted_turn_report(tid,kind)
-        except Exception as exc:report_failure(f"feedback:{tid}",exc)
+            if status == "accepted":
+                discovery.store.set_source_kind_active(
+                    turn_id, "user_edited_prose", active=False, reason="feedback_replaced"
+                )
+                source_kind = "accepted_generation"
+            elif status == "edited_accept":
+                discovery.store.set_source_kind_active(
+                    turn_id, "accepted_generation", active=False, reason="feedback_replaced"
+                )
+                source_kind = "user_edited_prose"
+            elif status == "rejected":
+                discovery.store.set_source_kind_active(
+                    turn_id, "accepted_generation", active=False, reason="feedback_rejected"
+                )
+                discovery.store.set_source_kind_active(
+                    turn_id, "user_edited_prose", active=False, reason="feedback_rejected"
+                )
+            if source_kind:
+                discovery.capture_turn(turn_id, source_kind=source_kind)
+                turn["_discovery_report"] = persisted_turn_report(turn_id, source_kind)
+        except Exception as exc:
+            report_failure(f"feedback:{turn_id}", exc)
+
     def session_deleted(event):
-        sid=event.payload.get("session_id")
-        if sid:
-            try:discovery.set_session_active(sid,active=False,reason="source_deleted")
-            except Exception as exc:report_failure(f"session:{sid}",exc)
-    def scope_deleted(event):
-        for sid in event.payload.get("session_ids") or []:
-            try:discovery.set_session_active(sid,active=False,reason="scope_deleted")
-            except Exception as exc:report_failure(f"scope:{sid}",exc)
-    def trashed(event):
-        p=event.payload;sid=p.get("resource_id")
-        if p.get("resource_type")=="session" and sid:
-            try:discovery.set_session_active(sid,active=False,reason="source_trashed")
-            except Exception as exc:report_failure(f"trash:{sid}",exc)
-    def restored(event):
-        p=event.payload;sid=p.get("resource_id")
-        if p.get("resource_type")!="session" or not sid:return
+        session_id = event.payload.get("session_id")
+        if not session_id:
+            return
         try:
-            with discovery.store._lock,discovery.store.connection() as con:con.execute("UPDATE discovery_instances SET active=1,invalidation_reason=NULL,updated_at=datetime('now') WHERE source_session_id=? AND invalidation_reason='source_trashed'",(sid,))
-        except Exception as exc:report_failure(f"restore:{sid}",exc)
-    for name,handler,key in (("history.turn_created",turn_created,"discovery.turn"),("history.feedback_changed",feedback_changed,"discovery.feedback"),("history.session_deleted",session_deleted,"discovery.delete"),("history.scope_deleted",scope_deleted,"discovery.scope"),("foundation.resource_trashed",trashed,"discovery.trash"),("foundation.resource_restored",restored,"discovery.restore")):event_bus.subscribe(name,handler,key=key)
-    memory_service._v121_discovery_events_bound=True;memory_service._v121_discovery_hooks_bound=True
+            discovery.set_session_active(session_id, active=False, reason="source_deleted")
+        except Exception as exc:
+            report_failure(f"session:{session_id}", exc)
+
+    def scope_deleted(event):
+        for session_id in event.payload.get("session_ids") or []:
+            try:
+                discovery.set_session_active(session_id, active=False, reason="scope_deleted")
+            except Exception as exc:
+                report_failure(f"scope:{session_id}", exc)
+
+    def resource_trashed(event):
+        payload = event.payload
+        session_id = payload.get("resource_id")
+        if payload.get("resource_type") != "session" or not session_id:
+            return
+        try:
+            discovery.set_session_active(session_id, active=False, reason="source_trashed")
+        except Exception as exc:
+            report_failure(f"trash:{session_id}", exc)
+
+    def resource_restored(event):
+        payload = event.payload
+        session_id = payload.get("resource_id")
+        if payload.get("resource_type") != "session" or not session_id:
+            return
+        try:
+            with discovery.store._lock, discovery.store.connection() as con:
+                con.execute(
+                    "UPDATE discovery_instances SET active=1,invalidation_reason=NULL,"
+                    "updated_at=datetime('now') WHERE source_session_id=? "
+                    "AND invalidation_reason='source_trashed'",
+                    (session_id,),
+                )
+        except Exception as exc:
+            report_failure(f"restore:{session_id}", exc)
+
+    # History and Workspace may intentionally live in different SQLite files.
+    # Subscribe to the bus that owns each authoritative source instead of
+    # assuming the default single-database layout.
+    history_bus = get_domain_event_bus(memory_service.history.path)
+    workspace_bus = get_domain_event_bus(discovery.store.path)
+    for name, handler, key in (
+        ("history.turn_created", turn_created, "discovery.turn"),
+        ("history.feedback_changed", feedback_changed, "discovery.feedback"),
+        ("history.session_deleted", session_deleted, "discovery.delete"),
+        ("history.scope_deleted", scope_deleted, "discovery.scope"),
+    ):
+        history_bus.subscribe(name, handler, key=key)
+    for name, handler, key in (
+        ("foundation.resource_trashed", resource_trashed, "discovery.trash"),
+        ("foundation.resource_restored", resource_restored, "discovery.restore"),
+    ):
+        workspace_bus.subscribe(name, handler, key=key)
+
+    # Compatibility/status markers only. No authoritative method is replaced.
+    memory_service._v121_discovery_events_bound = True
+    memory_service._v121_discovery_hooks_bound = True
 
     @router.get("/discoveries")
     def list_discoveries(
