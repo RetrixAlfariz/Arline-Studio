@@ -36,7 +36,7 @@ Current post-commit events include:
 - `foundation.resource_restored`
 - `workspace.timeline_event_created`
 
-Subscriptions use stable keys so repeated application/router construction replaces the same subscription instead of multiplying side effects.
+Subscriptions use stable keys so repeated application/router construction replaces the same subscription instead of multiplying side effects. History and Workspace may use different database files, so consumers subscribe to the bus that owns each authoritative source rather than assuming the default single-database layout.
 
 ## 3. Persistence ownership
 
@@ -48,13 +48,13 @@ Schema creation belongs to stores, not reasoners or resolvers.
 - `DiscoveryStore` owns Discovery and derived Continuity tables.
 - `ContinuityResolver` reads/writes continuity state but does not create tables.
 
-Application startup computes one pre-migration SQLite backup boundary for every schema family sharing the configured database. Individual stores then initialize with duplicate backup work disabled where appropriate.
+Application startup computes one pre-migration SQLite backup boundary for every schema family sharing the configured database. Stores that initialize through that application boundary skip duplicate backups; the same stores retain their standalone backup hooks when used independently.
 
 ## 4. Frontend module boundary
 
-`stream.js` is transport-only. It parses the streaming response and exports `ArlineStream.consume`; it must not repair UI state, fabricate DOM nodes, load feature scripts, or provide missing lexical variables.
+`stream.js` is transport-only. It parses the streaming response and exports `ArlineStream.consume`; it does not repair UI state, fabricate DOM nodes, load feature scripts, or provide missing lexical variables.
 
-Temporary v1.1 compatibility behavior lives in `compat.js`. It may bridge behavior that has not yet been moved into its owning feature module, but it must not recreate the removed project/world/branch selector contract or synthesize `sentDraftKey`.
+There is no runtime compatibility prelude. Bulk Library Trash/Undo belongs to the main Library UI owner, while Quick Create and Discovery sheets are explicit deferred scripts in `index.html`.
 
 Feature modules obtain the active workspace scope through the read-only `window.ArlineRuntime` bridge rather than reaching into the main script's lexical `state` object or depending on hidden compatibility controls.
 
@@ -81,7 +81,7 @@ Permanent CI validates two environments:
 1. Python 3.11 with floating compatible dependencies, to detect upstream compatibility regressions.
 2. Python 3.13 with the frozen `uv.lock`, to prove the declared local environment is reproducible.
 
-Both run the full regression suite, Python compilation, JavaScript syntax checks, the Memory runtime smoke test, and diff hygiene. Temporary applicators/workflows and stale v1.1 hardening workflows are rejected by repository hygiene.
+Both run the full regression suite, Python compilation, JavaScript syntax checks, the Memory runtime smoke test, and diff hygiene. Temporary applicators/workflows, frontend compatibility shims, and stale v1.1 hardening workflows are rejected by repository hygiene.
 
 ## 8. What this does not change
 
