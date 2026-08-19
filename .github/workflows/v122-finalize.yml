@@ -1,0 +1,49 @@
+name: v1.2.2 Finalize
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/v122_finalize.py'
+      - '.github/workflows/v122-finalize.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop/v1.2
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Apply final polish
+        run: python .github/v122_finalize.py
+      - name: Install and validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check uv
+          uv lock --check
+          uv sync --frozen
+          uv run python -m unittest tests.test_v122_continuity_foundation tests.test_v122_topdown_completion -v
+          uv run python -m unittest discover -s tests -p 'test_*.py'
+          uv run python -m compileall -q src tests
+          node --check src/interface/web/static/js/discovery-sheets.js
+      - name: Publish clean final tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/v122_finalize.py .github/workflows/v122-finalize.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: finalize v1.2.2 coreference diagnostics'
+          git fetch origin develop/v1.2
+          git rebase origin/develop/v1.2
+          git push origin HEAD:develop/v1.2
+          git push origin --delete work/v122-topdown-completion || true
