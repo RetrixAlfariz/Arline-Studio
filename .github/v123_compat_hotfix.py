@@ -19,4 +19,15 @@ if old not in text:
     raise SystemExit('Discovery RRF compatibility anchor not found')
 text = text.replace(old, new, 1)
 path.write_text(text, encoding='utf-8')
-print('v1.2.3 query/discovery compatibility patches applied')
+
+# A valid context plan is itself useful runtime metadata. Render its header and
+# policy even when no scoped evidence candidates were selected, so zero-result
+# retrieval remains distinguishable from "context intelligence did not run".
+path = Path('src/memory/query.py')
+text = path.read_text(encoding='utf-8')
+old = '''    def _pack(plan: QueryPlan, selected: list[MemoryCandidate], excluded: list[dict[str, Any]]) -> str:\n        if not selected:\n            return ""\n'''
+new = '''    def _pack(plan: QueryPlan, selected: list[MemoryCandidate], excluded: list[dict[str, Any]]) -> str:\n        if not selected and not plan.context_plan:\n            return ""\n'''
+if old not in text:
+    raise SystemExit('v1.2.3 empty-plan pack anchor not found')
+path.write_text(text.replace(old, new, 1), encoding='utf-8')
+print('v1.2.3 compatibility/observability patches applied')
