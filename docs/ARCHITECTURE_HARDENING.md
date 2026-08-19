@@ -35,18 +35,23 @@ Current post-commit events include:
 - `foundation.resource_trashed`
 - `foundation.resource_restored`
 - `workspace.timeline_event_created`
+- `workspace.variant_updated`
+- `workspace.entity_family_updated`
 
 Subscriptions use stable keys so repeated application/router construction replaces the same subscription instead of multiplying side effects. History and Workspace may use different database files, so consumers subscribe to the bus that owns each authoritative source rather than assuming the default single-database layout.
 
+Discovery's detector pipeline may still compose behavior internally inside the Discovery subsystem. That internal composition must not replace authoritative History, Workspace, or Foundation methods.
+
 ## 3. Persistence ownership
 
-Schema creation belongs to stores, not reasoners or resolvers.
+Schema creation belongs to stores, not reasoners or feature services.
 
 - `WorkspaceStore` owns Workspace schema.
 - `HistoryStore` owns History schema.
 - `MemoryStore` owns Memory schema.
-- `DiscoveryStore` owns Discovery and derived Continuity tables.
+- `DiscoveryStore` owns Discovery propositions, Provisional change/spatial tables, and derived Continuity tables.
 - `ContinuityResolver` reads/writes continuity state but does not create tables.
+- Provisional Discovery uses store-owned tables and does not run its own backup/migration DDL.
 
 Application startup computes one pre-migration SQLite backup boundary for every schema family sharing the configured database. Stores that initialize through that application boundary skip duplicate backups; the same stores retain their standalone backup hooks when used independently.
 
@@ -56,7 +61,7 @@ Application startup computes one pre-migration SQLite backup boundary for every 
 
 There is no runtime compatibility prelude. Bulk Library Trash/Undo belongs to the main Library UI owner, while Quick Create and Discovery sheets are explicit deferred scripts in `index.html`.
 
-Feature modules obtain the active workspace scope through the read-only `window.ArlineRuntime` bridge rather than reaching into the main script's lexical `state` object or depending on hidden compatibility controls.
+Feature modules obtain the active workspace scope through the read-only `window.ArlineRuntime` bridge rather than reaching into the main script's lexical `state` object or depending on hidden compatibility controls. Quick Create exposes an explicit `preparePayload` / `previewOverride` contract and does not replace global `window.fetch`.
 
 ## 5. Credential transport and remote bind safety
 
@@ -94,4 +99,4 @@ The following architectural principles remain intact:
 - explicit user promotion is required for Canon;
 - derived indexes may be rebuilt from authoritative source state.
 
-Future v1.2.2 entity resolution, cross-turn coreference, event causality, and Continuity UI work should build through these boundaries rather than reintroducing lifecycle monkey patches.
+Future v1.2.2 entity resolution, cross-turn coreference, event causality, and Continuity UI work should build through these boundaries rather than reintroducing cross-domain method replacement.
