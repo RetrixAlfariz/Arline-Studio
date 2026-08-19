@@ -240,16 +240,21 @@ class V122TopDownCompletionTests(unittest.TestCase):
 
             fx.discovery.pipeline = Pipeline()
             turn = fx.turn("Alex is 20 years old.", "amb-attr")
-            report = fx.discovery.capture_turn(turn["id"], source_kind="user_prompt")
-            self.assertEqual(report.propositions, 0)
+            fx.discovery.capture_turn(turn["id"], source_kind="user_prompt")
             with fx.discovery.store.connection() as con:
                 mention = con.execute(
                     "SELECT resolution_state FROM discovery_mentions "
                     "WHERE source_turn_id=? AND raw_entity_key=? AND active=1",
                     (turn["id"], "char:extractor-local"),
                 ).fetchone()
+                leaked = con.execute(
+                    "SELECT COUNT(*) AS n FROM discovery_propositions "
+                    "WHERE subject_key=? AND predicate='age'",
+                    ("char:extractor-local",),
+                ).fetchone()["n"]
             self.assertIsNotNone(mention)
             self.assertEqual(mention["resolution_state"], "ambiguous")
+            self.assertEqual(leaked, 0)
 
     def test_form_parent_selection_uses_scoped_read_model(self):
         source = inspect.getsource(LineageScopedContinuityResolver._build_form)
