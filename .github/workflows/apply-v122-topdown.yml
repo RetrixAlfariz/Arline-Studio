@@ -33,6 +33,24 @@ jobs:
           source = zlib.decompress(base64.b85decode(payload)).decode('utf-8')
           compile(source, '<v122-topdown-apply>', 'exec')
           exec(compile(source, '<v122-topdown-apply>', 'exec'), {'__name__': '__main__'})
+
+          # The Phase-A tests intentionally pinned the alpha schema/runtime contract.
+          # Completing B-E advances those exact contracts rather than preserving stale literals.
+          fixes = {
+              'tests/test_architecture_hardening.py': (
+                  'self.assertEqual(store.SCHEMA_VERSION, 3)',
+                  'self.assertEqual(store.SCHEMA_VERSION, 4)',
+              ),
+              'tests/test_v122_continuity_foundation.py': (
+                  'self.assertEqual(fx.discovery.continuity.status()["version"], "1.2.2a1")',
+                  'self.assertEqual(fx.discovery.continuity.status()["version"], "1.2.2b1")',
+              ),
+          }
+          for rel, (old, new) in fixes.items():
+              p = Path(rel)
+              text = p.read_text(encoding='utf-8')
+              assert text.count(old) == 1, f'{rel}: stale contract target missing or duplicated'
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
           PY
       - name: Refresh lockfile and install frozen environment
         run: |
