@@ -14,30 +14,18 @@ if old_tail not in text:
     raise SystemExit('UI replacement tail not found in applicator')
 text = text.replace(old_tail, new_tail, 1)
 
-# Identity anchor and displayed mention are different concerns. Reuse the
-# canonical anchor but preserve the exact alias/name seen in the source.
+# Stable identity unifies aliases, but proposition labels preserve the exact
+# source surface so provenance/UI still show what the story actually called it.
 old_label = 'subject_key=canonical_key, subject_label=family.get("name") or label,'
 new_label = 'subject_key=canonical_key, subject_label=label,'
 if old_label not in text:
     raise SystemExit('alias surface-label anchor not found')
 text = text.replace(old_label, new_label, 1)
 
-# Schema v4 is the intentional owner of mention/event/causality derived state.
 marker = 'print("v1.2.2 top-down source pass applied")'
 if marker not in text:
     raise SystemExit('applicator completion marker not found')
-extra = r'''replace_once(
-    "tests/test_architecture_hardening.py",
-    "            self.assertEqual(store.SCHEMA_VERSION, 3)\n",
-    "            self.assertEqual(store.SCHEMA_VERSION, 4)\n",
-)
-replace_once(
-    "tests/test_architecture_hardening.py",
-    '''                    "continuity_forms",\n                    "discovery_changes",''',
-    '''                    "continuity_forms",\n                    "discovery_mentions",\n                    "continuity_events",\n                    "continuity_event_effects",\n                    "continuity_causal_links",\n                    "continuity_conflict_resolutions",\n                    "discovery_changes",''',
-)
-
-'''
+extra = '''replace_once(\n    "tests/test_architecture_hardening.py",\n    "            self.assertEqual(store.SCHEMA_VERSION, 3)\\n",\n    "            self.assertEqual(store.SCHEMA_VERSION, 4)\\n",\n)\n\n'''
 text = text.replace(marker, extra + marker, 1)
 path.write_text(text, encoding='utf-8')
 print('v1.2.2 applicator compatibility hotfix applied')
