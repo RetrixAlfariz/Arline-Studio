@@ -5,7 +5,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-STREAM_JS = ROOT / "src/interface/web/static/js/stream.js"
+INDEX_HTML = ROOT / "src/interface/web/static/index.html"
 SHEETS_JS = ROOT / "src/interface/web/static/js/discovery-sheets.js"
 DISCOVERY_WEB = ROOT / "src/discovery/web.py"
 PROVISIONAL = ROOT / "src/discovery/provisional.py"
@@ -20,10 +20,10 @@ PHYSICAL_ITEMS = ROOT / "src/discovery/physical_items.py"
 
 class V121ProvisionalSheetUITests(unittest.TestCase):
     def test_runtime_loads_provisional_sheet_enhancement(self):
-        stream = STREAM_JS.read_text(encoding="utf-8")
+        html = INDEX_HTML.read_text(encoding="utf-8")
         sheet = SHEETS_JS.read_text(encoding="utf-8")
-        self.assertIn("/static/js/discovery-sheets.js?v=1.2.1-physical-items", stream)
-        self.assertIn("data-arline-provisional-sheets", stream)
+        self.assertIn("/static/js/discovery-sheets.js?v=1.2.2-hardening", html)
+        self.assertNotIn("data-arline-provisional-sheets", html)
         self.assertIn('document.readyState === "loading"', sheet)
         self.assertIn("ArlineProvisionalSheets", sheet)
 
