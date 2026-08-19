@@ -29,7 +29,9 @@ jobs:
         with:
           node-version: "22"
       - name: Apply deterministic hardening
-        run: python tools/apply_architecture_hardening.py
+        run: |
+          python tools/apply_architecture_hardening.py
+          sed -i '4s/[[:space:]]*$//' docs/V12_IMPLEMENTATION_STATUS.md
       - name: Refresh lock and install
         run: |
           uv lock
