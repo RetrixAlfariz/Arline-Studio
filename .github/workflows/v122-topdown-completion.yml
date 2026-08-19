@@ -7,6 +7,12 @@ on:
       - '.github/v122_topdown_apply.py'
       - '.github/v122_topdown_hotfix.py'
       - '.github/workflows/v122-topdown-completion.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/v122_topdown_apply.py'
+      - '.github/v122_topdown_hotfix.py'
+      - '.github/workflows/v122-topdown-completion.yml'
 
 permissions:
   contents: write
@@ -68,6 +74,12 @@ jobs:
             git commit -m 'feat: complete v1.2.2 narrative continuity top-down'
             git push origin HEAD:develop/v1.2
             exit 0
+          fi
+
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            echo 'v1.2.2 top-down validation failed; inspect this job log.'
+            tail -n 260 "$LOG"
+            exit "$rc"
           fi
 
           {
