@@ -325,7 +325,9 @@ function applyConfig(config) {
   state.config = config;
   byId("serverUrl").value = config.server_url || "http://127.0.0.1:1234";
   byId("apiKey").value = "";
-  byId("apiKey").placeholder = config.api_key_configured ? "Configured — leave blank to keep" : "Optional API key";
+  byId("apiKey").placeholder = config.api_key_configured
+    ? "Configured securely · optional session override"
+    : "Session-only key · persist with ARLINE_LMSTUDIO_API_KEY";
   byId("gpuRatio").value = config.gpu_ratio ?? 1;
   byId("contextLength").value = config.context_length ?? 32768;
   byId("modeSelect").value = config.input_mode || "smart_hybrid";
@@ -393,7 +395,7 @@ function updateReasoningWarning() {
 async function saveSettings() {
   try {
     await api("/api/settings", { method: "POST", body: runtimePayload() });
-    toast("Settings saved");
+    toast("Settings saved · API keys stay out of arline.toml");
   } catch (error) { toast(`Save failed: ${error.message}`); }
 }
 
@@ -2011,7 +2013,11 @@ async function previewQuickCreate() {
   const text = byId("quickCreateInput").value.trim(); const forced = byId("quickCreateKind").value || null;
   if (!text) { byId("quickCreatePreview").innerHTML = `<span class="preview-icon">◇</span><div><b>Start typing…</b><small>Arline will infer the schema underneath.</small></div>`; return; }
   try {
-    const preview = await api("/api/quick-create/preview", { method: "POST", body: { text, forced_kind: forced, project_id: state.activeProject?.id || null, world_id: state.activeWorld?.id || null, branch_id: state.activeBranch?.id || null, folder_id: state.activeWorldFolderId || null } }); state.quickCreatePreview = preview;
+    const rawBody = { text, forced_kind: forced, project_id: state.activeProject?.id || null, world_id: state.activeWorld?.id || null, branch_id: state.activeBranch?.id || null, folder_id: state.activeWorldFolderId || null };
+    const body = window.ArlineQuickCreate?.preparePayload?.(rawBody) || rawBody;
+    const preview = window.ArlineQuickCreate?.previewOverride?.(body)
+      || await api("/api/quick-create/preview", { method: "POST", body });
+    state.quickCreatePreview = preview;
     const detail = preview.kind === "entity" ? `${preview.entity_type || "entity"}${preview.attributes && Object.keys(preview.attributes).length ? ` · ${Object.entries(preview.attributes).filter(([k])=>k!=="hierarchy").map(([k,v]) => `${k}: ${Array.isArray(v)?v.join(" › "):v}`).join(" · ")}` : ""}` : (preview.document_type || preview.description || preview.kind);
     const matches = (preview.possible_matches || []).map((item)=>`<button type="button" class="qc-existing-match" data-id="${escapeHTML(item.id)}"><span>↪</span><div><b>Use existing ${escapeHTML(item.label)}</b><small>${escapeHTML(item.entity_type || "sheet")}${item.alias?` · alias: ${escapeHTML(item.alias)}`:""} · ${Math.round((item.score||0)*100)}% match</small></div></button>`).join("");
     byId("quickCreatePreview").innerHTML = `<span class="preview-icon">${escapeHTML(ENTITY_ICONS[preview.entity_type || preview.kind] || "◇")}</span><div><b>${escapeHTML(preview.name || text)}</b><small>Detected ${escapeHTML(preview.kind)} · ${escapeHTML(detail || "ready")}</small>${preview.attributes?.hierarchy ? `<code>${escapeHTML(preview.attributes.hierarchy.join(" › "))}</code>` : ""}${matches ? `<div class="quick-create-matches"><em>Possible existing sheets</em>${matches}</div>` : ""}</div>`;
@@ -2332,6 +2338,7 @@ async function generateStory() {
     return;
   }
   const payload = promptPayload();
+  const sentDraftKey = composerDraftKey();
   if (!payload.prompt.trim()) return toast("Write a prompt first");
   if (!payload.model) return toast("Select a model first");
   const live = createLiveTurn(payload);
@@ -2989,6 +2996,24 @@ async function trashResource(resourceType, resourceId, label = "resource") {
 async function undoLastAction() {
   if (!lastUndo) return;
   const action = lastUndo; lastUndo = null;
+  if (action.type === "restore_bulk") {
+    const failed = [];
+    for (const resource of action.resources || []) {
+      try {
+        await api("/api/lifecycle/restore", {
+          method: "POST",
+          body: { resource_type: resource.resourceType, resource_id: resource.resourceId },
+        });
+      } catch (error) {
+        failed.push({ ...resource, error });
+      }
+    }
+    lastUndo = failed.length ? { type: "restore_bulk", resources: failed } : null;
+    await loadProjectData();
+    if (failed.length) toast(`Restore incomplete · ${failed.length} item(s) can be retried with Ctrl+Z`, 6000);
+    else toast(`Restored ${(action.resources || []).length} Library sheets`);
+    return;
+  }
   if (action.type === "restore") {
     await api("/api/lifecycle/restore", { method:"POST", body:{resource_type:action.resourceType,resource_id:action.resourceId} });
     if (action.resourceType === "project" || action.resourceType === "world" || action.resourceType === "branch") await loadWorkspaceBootstrap();
@@ -3236,7 +3261,9 @@ async function submitQuickCreate(event) {
     if(duplicate && confirm(`“${duplicate.name}” already exists. Open and reference the existing sheet instead of duplicating it?`)){byId("quickCreateDialog").close();await openEntitySheet(duplicate.id);return;}
   }
   try{
-    const result=await api("/api/quick-create",{method:"POST",body:{text,forced_kind:byId("quickCreateKind").value||null,project_id:state.activeProject?.id||null,world_id:state.activeWorld?.id||null,branch_id:state.activeBranch?.id||null,folder_id:preview.kind==="entity"?state.activeWorldFolderId:null}});
+    const rawBody={text,forced_kind:byId("quickCreateKind").value||null,project_id:state.activeProject?.id||null,world_id:state.activeWorld?.id||null,branch_id:state.activeBranch?.id||null,folder_id:preview.kind==="entity"?state.activeWorldFolderId:null};
+    const body=window.ArlineQuickCreate?.preparePayload?.(rawBody)||rawBody;
+    const result=await api("/api/quick-create",{method:"POST",body});
     byId("quickCreateDialog").close();
     if(result.kind==="project")await loadWorkspaceBootstrap();else if(result.kind==="world"){await loadWorkspaceBootstrap();if(state.activeProject)await selectScope(state.activeProject.id,result.resource.id);}else{await loadProjectData();if(result.kind==="entity"&&result.resource?.id)await openEntitySheet(result.resource.id,result.variant?.id);}
     toast(`Created ${result.kind}: ${result.resource?.name||result.resource?.title||preview.name||"resource"}`);
@@ -3409,6 +3436,54 @@ async function bulkArchiveSelected() {
   const ids=[...state.worldSelection]; if(!ids.length||!confirm(`Archive ${ids.length} selected Library sheets?`))return;
   for(const id of ids)await api("/api/lifecycle/archive?archived=true",{method:"POST",body:{resource_type:"entity_family",resource_id:id}});
   clearWorldSelection();await loadProjectData();toast(`Archived ${ids.length} sheets`);
+}
+async function bulkTrashSelected() {
+  const ids = [...state.worldSelection];
+  if (!ids.length || !confirm(`Move ${ids.length} selected Library sheets to Trash?\n\nThey remain recoverable from Activity Center, or immediately with Ctrl+Z.`)) return;
+
+  const selectedIds = new Set(ids);
+  const selectedVariantIds = new Set(
+    (state.variants || [])
+      .filter((variant) => selectedIds.has(variant.family_id))
+      .map((variant) => variant.id),
+  );
+  const resources = ids.map((id) => ({
+    resourceType: "entity_family",
+    resourceId: id,
+    label: (state.families || []).find((item) => item.id === id)?.name || id,
+  }));
+  const moved = [];
+  const failed = [];
+
+  for (const resource of resources) {
+    try {
+      await api("/api/lifecycle/trash", {
+        method: "POST",
+        body: { resource_type: resource.resourceType, resource_id: resource.resourceId },
+      });
+      moved.push(resource);
+    } catch (error) {
+      failed.push({ ...resource, error });
+    }
+  }
+
+  if (moved.length) {
+    const movedIds = new Set(moved.map((item) => item.resourceId));
+    lastUndo = { type: "restore_bulk", resources: moved };
+    state.selectedReferences = (state.selectedReferences || []).filter((ref) => {
+      if (ref.type === "entity_family" && movedIds.has(ref.id)) return false;
+      if (ref.type === "entity_variant" && selectedVariantIds.has(ref.id)) return false;
+      return true;
+    });
+    updateContextChipUI();
+    scheduleContextStackSync();
+  }
+
+  state.worldSelection = new Set(failed.map((item) => item.resourceId));
+  await loadProjectData();
+  updateWorldBulkBar();
+  if (failed.length) toast(`Moved ${moved.length}/${resources.length} sheets to Trash · ${failed.length} failed`, 6000);
+  else toast(`Moved ${moved.length} Library sheets to Trash · Ctrl+Z to undo`, 5000);
 }
 
 function openEntityMergeForm(family) {
@@ -3666,7 +3741,7 @@ function attachEvents() {
     event.preventDefault(); event.stopImmediatePropagation(); const card=toggle.closest(".world-card"); const id=card?.dataset.familyId; if(!id)return;
     if(state.worldSelection.has(id))state.worldSelection.delete(id);else state.worldSelection.add(id);updateWorldBulkBar();toggle.textContent=state.worldSelection.has(id)?"✓":"";
   }, true);
-  on("bulkMoveBtn", "click", bulkMoveSelected); on("bulkCollectionBtn", "click", bulkAddCollection); on("bulkArchiveBtn", "click", bulkArchiveSelected); on("bulkClearBtn", "click", clearWorldSelection);
+  on("bulkMoveBtn", "click", bulkMoveSelected); on("bulkCollectionBtn", "click", bulkAddCollection); on("bulkArchiveBtn", "click", bulkArchiveSelected); on("bulkTrashBtn", "click", bulkTrashSelected); on("bulkClearBtn", "click", clearWorldSelection);
   on("newEntityBtn", "click", openWorldActionsForTab);
   on("compareWorldBtn", "click", openWorldCompare);
   on("compareBranchBtn", "click", openBranchCompare);

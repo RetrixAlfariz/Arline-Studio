@@ -13,7 +13,9 @@ from uuid import uuid4
 from src.storage_backup import backup_sqlite_before_migrations
 
 
-DISCOVERY_SCHEMA_VERSION = 1
+DISCOVERY_SCHEMA_VERSION = 3
+CONTINUITY_SCHEMA_VERSION = "1.2.2a1"
+PROVISIONAL_SCHEMA_VERSION = 1
 
 
 def utc_now() -> str:
@@ -178,12 +180,68 @@ class DiscoveryStore:
                     updated_at TEXT NOT NULL,
                     PRIMARY KEY(project_id,world_id,subject_key)
                 );
+                CREATE TABLE IF NOT EXISTS continuity_edges(id TEXT PRIMARY KEY,project_id TEXT,world_id TEXT,branch_id TEXT,session_id TEXT,subject_key TEXT NOT NULL,predicate TEXT NOT NULL,from_proposition_id TEXT NOT NULL,to_proposition_id TEXT NOT NULL,kind TEXT NOT NULL,source_turn_id TEXT,source_kind TEXT,story_order REAL,world_time_json TEXT,created_at TEXT NOT NULL,UNIQUE(from_proposition_id,to_proposition_id,kind,source_turn_id),CHECK(kind IN ('story_change','correction','refinement')));
+                CREATE INDEX IF NOT EXISTS idx_continuity_edge_subject ON continuity_edges(project_id,world_id,subject_key,predicate,created_at);
+                CREATE TABLE IF NOT EXISTS continuity_conflicts(id TEXT PRIMARY KEY,project_id TEXT,world_id TEXT,branch_id TEXT,session_id TEXT,subject_key TEXT NOT NULL,predicate TEXT NOT NULL,left_proposition_id TEXT NOT NULL,right_proposition_id TEXT NOT NULL,source_turn_id TEXT,reason TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open',created_at TEXT NOT NULL,resolved_at TEXT,UNIQUE(left_proposition_id,right_proposition_id,source_turn_id),CHECK(status IN ('open','resolved','dismissed')));
+                CREATE INDEX IF NOT EXISTS idx_continuity_conflict_subject ON continuity_conflicts(project_id,world_id,subject_key,predicate,status);
+                CREATE TABLE IF NOT EXISTS continuity_forms(id TEXT PRIMARY KEY,project_id TEXT,world_id TEXT,branch_id TEXT,session_id TEXT,subject_key TEXT NOT NULL,subject_label TEXT NOT NULL,source_turn_id TEXT NOT NULL,source_kind TEXT NOT NULL,anchor_proposition_id TEXT,parent_form_id TEXT,reason TEXT NOT NULL,story_order REAL,world_time_json TEXT,state_json TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(subject_key,source_turn_id,source_kind));
+                CREATE INDEX IF NOT EXISTS idx_continuity_form_subject ON continuity_forms(project_id,world_id,subject_key,story_order,created_at);
+
+                CREATE TABLE IF NOT EXISTS discovery_provisional_meta(
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS discovery_changes(
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT,
+                    world_id TEXT,
+                    branch_id TEXT,
+                    subject_key TEXT NOT NULL,
+                    predicate TEXT NOT NULL,
+                    from_proposition_id TEXT NOT NULL,
+                    to_proposition_id TEXT NOT NULL,
+                    change_kind TEXT NOT NULL,
+                    source_type TEXT NOT NULL DEFAULT 'discovery',
+                    source_id TEXT,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(from_proposition_id,to_proposition_id,change_kind),
+                    FOREIGN KEY(from_proposition_id) REFERENCES discovery_propositions(id) ON DELETE CASCADE,
+                    FOREIGN KEY(to_proposition_id) REFERENCES discovery_propositions(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_discovery_changes_subject
+                    ON discovery_changes(world_id,branch_id,subject_key,predicate,created_at);
+                CREATE TABLE IF NOT EXISTS discovery_spatial_zones(
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT,
+                    world_id TEXT NOT NULL,
+                    branch_id TEXT,
+                    subject_key TEXT NOT NULL,
+                    label TEXT NOT NULL,
+                    zone_kind TEXT NOT NULL,
+                    parent_subject_key TEXT,
+                    attributes_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(world_id,branch_id,subject_key)
+                );
+                CREATE INDEX IF NOT EXISTS idx_discovery_zone_scope
+                    ON discovery_spatial_zones(world_id,branch_id,subject_key);
                 """
             )
             con.execute(
                 "INSERT INTO discovery_meta(key,value) VALUES('schema_version',?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 (str(self.SCHEMA_VERSION),),
+            )
+            con.execute(
+                "INSERT INTO discovery_meta(key,value) VALUES('continuity_version',?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (CONTINUITY_SCHEMA_VERSION,),
+            )
+            con.execute(
+                "INSERT INTO discovery_provisional_meta(key,value) VALUES('schema_version',?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (str(PROVISIONAL_SCHEMA_VERSION),),
             )
 
     @staticmethod

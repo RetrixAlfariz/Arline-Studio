@@ -5,16 +5,20 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-STREAM = ROOT / "src/interface/web/static/js/stream.js"
-MEMORY = ROOT / "src/interface/web/static/js/memory.js"
+STATIC = ROOT / "src/interface/web/static"
+STREAM = STATIC / "js/stream.js"
+MEMORY = STATIC / "js/memory.js"
+INDEX = STATIC / "index.html"
 
 
 class V121PerformanceFrontendTests(unittest.TestCase):
-    def test_stream_prelude_does_not_patch_global_fetch_on_startup(self):
+    def test_stream_transport_does_not_patch_or_boot_feature_modules(self):
         source = STREAM.read_text(encoding="utf-8")
         self.assertNotIn("globalThis.fetch =", source)
         self.assertNotIn("discoveryLoadPolicy", source)
         self.assertNotIn("deferredDiscoveryResponse", source)
+        self.assertNotIn("loadQuickCreateEnhancements", source)
+        self.assertNotIn("discovery-sheets.js", source)
 
     def test_existing_discovery_navigation_remains_explicit(self):
         memory = MEMORY.read_text(encoding="utf-8")
@@ -22,12 +26,14 @@ class V121PerformanceFrontendTests(unittest.TestCase):
         self.assertIn("loadDiscoveries()", memory)
         self.assertIn("openDiscoveryView", memory)
 
-    def test_existing_streaming_and_dynamic_sheet_contracts_remain_loaded(self):
+    def test_stream_and_feature_modules_are_loaded_explicitly(self):
         source = STREAM.read_text(encoding="utf-8")
+        html = INDEX.read_text(encoding="utf-8")
         self.assertIn("async function consume", source)
         self.assertIn("window.ArlineStream = { consume }", source)
-        self.assertIn("/static/js/discovery-sheets.js?v=1.2.1-physical-items", source)
-        self.assertIn("loadQuickCreateEnhancements", source)
+        self.assertIn("/static/js/quick-create.js?v=1.2.2-hardening", html)
+        self.assertIn("/static/js/discovery-sheets.js?v=1.2.2-hardening", html)
+        self.assertNotIn("/static/js/compat.js", html)
 
 
 if __name__ == "__main__":

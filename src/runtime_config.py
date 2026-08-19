@@ -335,10 +335,13 @@ class RuntimeConfig:
         ):
             doc.setdefault(section, tomlkit.table())
 
+        # API keys are runtime secrets. They may come from the environment
+        # or a transient UI request, but saving ordinary settings must never
+        # copy them into the portable TOML file.
         doc["lmstudio"].update({
             "base_url": self.lmstudio.base_url,
             "model": self.lmstudio.model,
-            "api_key": self.lmstudio.api_key,
+            "api_key": "",
             "timeout_seconds": self.lmstudio.timeout_seconds,
             "auto_load": self.lmstudio.auto_load,
         })

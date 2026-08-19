@@ -6,6 +6,7 @@ from fastapi import HTTPException, Query
 from pydantic import BaseModel
 
 from src.memory.models import MemoryQueryContext
+from src.domain_events import get_domain_event_bus
 
 from .backfill import backfill_discoveries
 from .general import install_general_discovery
@@ -61,7 +62,12 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
     if isinstance(existing, DiscoveryService):
         discovery = existing
     else:
-        discovery_store = DiscoveryStore(memory_service.store.path)
+        discovery_store = DiscoveryStore(
+            memory_service.store.path,
+            backup_before_migration=not bool(
+                getattr(memory_service, "_combined_migration_backup_complete", False)
+            ),
+        )
         discovery = DiscoveryService(
             store=discovery_store,
             workspace=memory_service.workspace,
@@ -109,118 +115,118 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
         if callable(reporter):
             reporter(f"discovery:{key}", exc)
 
-    if not getattr(memory_service, "_v121_discovery_hooks_bound", False):
-        history = memory_service.history
-        foundation_store = foundation or getattr(memory_service, "foundation", None)
+    def turn_created(event):
+        turn = event.payload.get("turn") or {}
+        turn_id = turn.get("id")
+        if not turn_id:
+            return
+        try:
+            discovery.capture_turn(turn_id, source_kind="user_prompt")
+            turn["_discovery_report"] = persisted_turn_report(turn_id, "user_prompt")
+        except Exception as exc:
+            turn["_discovery_report"] = {
+                "turn_id": turn_id,
+                "source_kind": "user_prompt",
+                "propositions": 0,
+                "instances": 0,
+                "error": str(exc),
+            }
+            report_failure(f"turn:{turn_id}", exc)
 
-        original_add_turn = history.add_turn
-        original_feedback = history.set_feedback
-        original_delete_session = history.delete_session
-        original_delete_scope = history.delete_sessions_by_scope
-        original_trash = getattr(foundation_store, "trash", None) if foundation_store is not None else None
-        original_restore = getattr(foundation_store, "restore", None) if foundation_store is not None else None
-
-        def add_turn_with_discovery(*args, **kwargs):
-            turn = original_add_turn(*args, **kwargs)
-            try:
-                # capture_turn already performs the turn-local incremental
-                # projection exactly once. Reporting below is read-only.
-                discovery.capture_turn(turn["id"], source_kind="user_prompt")
-                turn["_discovery_report"] = persisted_turn_report(turn["id"], "user_prompt")
-            except Exception as exc:
-                turn["_discovery_report"] = {
-                    "turn_id": turn.get("id"), "source_kind": "user_prompt",
-                    "propositions": 0, "instances": 0, "error": str(exc),
-                }
-                report_failure(f"turn:{turn.get('id')}", exc)
-            return turn
-
-        def feedback_with_discovery(turn_id: str, **kwargs):
-            turn = original_feedback(turn_id, **kwargs)
-            try:
-                source_kind = None
-                status = turn.get("feedback_status") or kwargs.get("status")
-                if status == "accepted":
-                    discovery.store.set_source_kind_active(
-                        turn_id, "user_edited_prose", active=False, reason="feedback_replaced"
-                    )
-                    source_kind = "accepted_generation"
-                    discovery.capture_turn(turn_id, source_kind=source_kind)
-                elif status == "edited_accept":
-                    discovery.store.set_source_kind_active(
-                        turn_id, "accepted_generation", active=False, reason="feedback_replaced"
-                    )
-                    source_kind = "user_edited_prose"
-                    discovery.capture_turn(turn_id, source_kind=source_kind)
-                elif status == "rejected":
-                    discovery.store.set_source_kind_active(
-                        turn_id, "accepted_generation", active=False, reason="feedback_rejected"
-                    )
-                    discovery.store.set_source_kind_active(
-                        turn_id, "user_edited_prose", active=False, reason="feedback_rejected"
-                    )
-                if source_kind:
-                    turn["_discovery_report"] = persisted_turn_report(turn_id, source_kind)
-            except Exception as exc:
-                report_failure(f"feedback:{turn_id}", exc)
-            return turn
-
-        def delete_session_with_discovery(session_id: str):
-            try:
-                discovery.set_session_active(session_id, active=False, reason="source_deleted")
-            except Exception as exc:
-                report_failure(f"session:{session_id}", exc)
-            return original_delete_session(session_id)
-
-        def delete_scope_with_discovery(*, project_id=None, world_id=None, branch_id=None):
-            try:
-                sessions = history.list_sessions(
-                    limit=500, include_archived=True,
-                    project_id=project_id, world_id=world_id, branch_id=branch_id,
+    def feedback_changed(event):
+        turn = event.payload.get("turn") or {}
+        turn_id = turn.get("id")
+        status = turn.get("feedback_status")
+        source_kind = None
+        if not turn_id:
+            return
+        try:
+            if status == "accepted":
+                discovery.store.set_source_kind_active(
+                    turn_id, "user_edited_prose", active=False, reason="feedback_replaced"
                 )
-                for session in sessions:
-                    discovery.set_session_active(session["id"], active=False, reason="scope_deleted")
+                source_kind = "accepted_generation"
+            elif status == "edited_accept":
+                discovery.store.set_source_kind_active(
+                    turn_id, "accepted_generation", active=False, reason="feedback_replaced"
+                )
+                source_kind = "user_edited_prose"
+            elif status == "rejected":
+                discovery.store.set_source_kind_active(
+                    turn_id, "accepted_generation", active=False, reason="feedback_rejected"
+                )
+                discovery.store.set_source_kind_active(
+                    turn_id, "user_edited_prose", active=False, reason="feedback_rejected"
+                )
+            if source_kind:
+                discovery.capture_turn(turn_id, source_kind=source_kind)
+                turn["_discovery_report"] = persisted_turn_report(turn_id, source_kind)
+        except Exception as exc:
+            report_failure(f"feedback:{turn_id}", exc)
+
+    def session_deleted(event):
+        session_id = event.payload.get("session_id")
+        if not session_id:
+            return
+        try:
+            discovery.set_session_active(session_id, active=False, reason="source_deleted")
+        except Exception as exc:
+            report_failure(f"session:{session_id}", exc)
+
+    def scope_deleted(event):
+        for session_id in event.payload.get("session_ids") or []:
+            try:
+                discovery.set_session_active(session_id, active=False, reason="scope_deleted")
             except Exception as exc:
-                report_failure("scope", exc)
-            return original_delete_scope(
-                project_id=project_id, world_id=world_id, branch_id=branch_id
-            )
+                report_failure(f"scope:{session_id}", exc)
 
-        history.add_turn = add_turn_with_discovery
-        history.set_feedback = feedback_with_discovery
-        history.delete_session = delete_session_with_discovery
-        history.delete_sessions_by_scope = delete_scope_with_discovery
+    def resource_trashed(event):
+        payload = event.payload
+        session_id = payload.get("resource_id")
+        if payload.get("resource_type") != "session" or not session_id:
+            return
+        try:
+            discovery.set_session_active(session_id, active=False, reason="source_trashed")
+        except Exception as exc:
+            report_failure(f"trash:{session_id}", exc)
 
-        if callable(original_trash):
-            def trash_with_discovery(resource_type: str, resource_id: str, **kwargs):
-                result = original_trash(resource_type, resource_id, **kwargs)
-                if resource_type == "session":
-                    try:
-                        discovery.set_session_active(resource_id, active=False, reason="source_trashed")
-                    except Exception as exc:
-                        report_failure(f"trash:{resource_id}", exc)
-                return result
-            foundation_store.trash = trash_with_discovery
+    def resource_restored(event):
+        payload = event.payload
+        session_id = payload.get("resource_id")
+        if payload.get("resource_type") != "session" or not session_id:
+            return
+        try:
+            with discovery.store._lock, discovery.store.connection() as con:
+                con.execute(
+                    "UPDATE discovery_instances SET active=1,invalidation_reason=NULL,"
+                    "updated_at=datetime('now') WHERE source_session_id=? "
+                    "AND invalidation_reason='source_trashed'",
+                    (session_id,),
+                )
+        except Exception as exc:
+            report_failure(f"restore:{session_id}", exc)
 
-        if callable(original_restore):
-            def restore_with_discovery(resource_type: str, resource_id: str, **kwargs):
-                result = original_restore(resource_type, resource_id, **kwargs)
-                if resource_type == "session":
-                    try:
-                        with discovery.store._lock, discovery.store.connection() as con:
-                            con.execute(
-                                "UPDATE discovery_instances SET active=1,invalidation_reason=NULL,updated_at=datetime('now') "
-                                "WHERE source_session_id=? AND invalidation_reason='source_trashed'",
-                                (resource_id,),
-                            )
-                    except Exception as exc:
-                        report_failure(f"restore:{resource_id}", exc)
-                return result
-            foundation_store.restore = restore_with_discovery
+    # History and Workspace may intentionally live in different SQLite files.
+    # Subscribe to the bus that owns each authoritative source instead of
+    # assuming the default single-database layout.
+    history_bus = get_domain_event_bus(memory_service.history.path)
+    workspace_bus = get_domain_event_bus(discovery.store.path)
+    for name, handler, key in (
+        ("history.turn_created", turn_created, "discovery.turn"),
+        ("history.feedback_changed", feedback_changed, "discovery.feedback"),
+        ("history.session_deleted", session_deleted, "discovery.delete"),
+        ("history.scope_deleted", scope_deleted, "discovery.scope"),
+    ):
+        history_bus.subscribe(name, handler, key=key)
+    for name, handler, key in (
+        ("foundation.resource_trashed", resource_trashed, "discovery.trash"),
+        ("foundation.resource_restored", resource_restored, "discovery.restore"),
+    ):
+        workspace_bus.subscribe(name, handler, key=key)
 
-        memory_service._v121_discovery_hooks_bound = True
-        memory_service._v121_original_add_turn = original_add_turn
-        memory_service._v121_original_feedback = original_feedback
+    # Compatibility/status markers only. No authoritative method is replaced.
+    memory_service._v121_discovery_events_bound = True
+    memory_service._v121_discovery_hooks_bound = True
 
     @router.get("/discoveries")
     def list_discoveries(

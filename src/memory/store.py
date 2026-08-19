@@ -11,6 +11,7 @@ import sqlite3
 from threading import RLock
 from typing import Any, Iterable
 from uuid import uuid4
+from src.storage_backup import backup_sqlite_before_migrations
 
 from .models import Authority, SemanticClass, SemanticStatus, TrustLevel
 
@@ -54,10 +55,23 @@ class MemoryStore:
 
     SCHEMA_VERSION = MEMORY_SCHEMA_VERSION
 
-    def __init__(self, database_path: Path | str):
+    def __init__(
+        self,
+        database_path: Path | str,
+        *,
+        backup_before_migration: bool = True,
+    ):
         self.path = Path(database_path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = RLock()
+        self.last_migration_backup = (
+            backup_sqlite_before_migrations(
+                self.path,
+                {"memory_meta": self.SCHEMA_VERSION},
+            )
+            if backup_before_migration
+            else None
+        )
         self.fts_available = True
         self._init_db()
 

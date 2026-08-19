@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#202220" />
   <title>Arline Studio</title>
-  <link rel="stylesheet" href="/static/arline.css?v=1.2.1-rails" />
+  <link rel="stylesheet" href="/static/arline.css?v=1.2.2-hardening" />
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -252,7 +252,7 @@
                 <div class="world-filter-row">
                   <label class="search-field"><span>⌕</span><input id="worldSearch" placeholder="Search the Library…" /></label><div id="libraryViewControls" class="library-view-controls" aria-label="Library view"><button data-library-view="list" title="List view">☷</button><button class="active" data-library-view="grid" title="Grid view">▦</button><button data-library-view="gallery" title="Gallery view">▧</button></div>
                   <div id="worldTagFilters" class="inline-tags"></div>
-                  <div id="worldBulkBar" class="world-bulk-bar hidden"><b id="worldBulkCount">0 selected</b><button id="bulkMoveBtn" class="tiny-btn">Move</button><button id="bulkCollectionBtn" class="tiny-btn">Collection</button><button id="bulkArchiveBtn" class="tiny-btn">Archive</button><button id="bulkClearBtn" class="tiny-btn">Clear</button></div>
+                  <div id="worldBulkBar" class="world-bulk-bar hidden"><b id="worldBulkCount">0 selected</b><button id="bulkMoveBtn" class="tiny-btn">Move</button><button id="bulkCollectionBtn" class="tiny-btn">Collection</button><button id="bulkArchiveBtn" class="tiny-btn">Archive</button><button id="bulkTrashBtn" class="tiny-danger-btn">Trash</button><button id="bulkClearBtn" class="tiny-btn">Clear</button></div>
                 </div>
                 <div id="worldGrid" class="world-grid"></div>
                 <div id="worldEmpty" class="empty-state"><b>Nothing here yet.</b><span>Describe a character, location, item, or idea normally and Arline will structure it underneath.</span><button id="worldEmptyCreateBtn" class="tiny-btn">＋ Quick create</button></div>
@@ -418,9 +418,11 @@
     <div id="toast" class="toast hidden"></div>
     <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><b id="loadingTitle">Arline is working…</b><span id="loadingDetail">Preparing context</span></div>
   </div>
-  <script src="/static/js/stream.js?v=1.2.1-rails" defer></script>
-  <script src="/static/js/commands.js?v=1.2.1-rails" defer></script>
-  <script src="/static/arline.js?v=1.2.1-rails" defer></script>
-  <script src="/static/js/memory.js?v=1.2.1-rails" defer></script>
+  <script src="/static/js/stream.js?v=1.2.2-hardening" defer></script>
+  <script src="/static/js/commands.js?v=1.2.2-hardening" defer></script>
+  <script src="/static/arline.js?v=1.2.2-hardening" defer></script>
+  <script src="/static/js/quick-create.js?v=1.2.2-hardening" defer></script>
+  <script src="/static/js/discovery-sheets.js?v=1.2.2-hardening" defer></script>
+  <script src="/static/js/memory.js?v=1.2.2-hardening" defer></script>
 </body>
 </html>

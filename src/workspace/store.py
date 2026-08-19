@@ -10,6 +10,7 @@ import sqlite3
 from threading import RLock
 from typing import Any, Iterable
 from uuid import uuid4
+from src.domain_events import emit_domain_event
 
 
 WORKSPACE_SCHEMA_VERSION = 7
@@ -2160,6 +2161,7 @@ class WorkspaceStore:
         return result
 
     def update_entity_family(self, family_id: str, *, note: str = "updated", **changes: Any) -> dict[str, Any]:
+        before = self.get_entity_family(family_id)
         fields: list[str] = []
         params: list[Any] = []
         for key in ("name", "description", "folder_id"):
@@ -2187,7 +2189,18 @@ class WorkspaceStore:
             except Exception:
                 con.execute("ROLLBACK")
                 raise
-        return self.get_entity_family(family_id)
+        result = self.get_entity_family(family_id)
+        emit_domain_event(
+            self.path,
+            "workspace.entity_family_updated",
+            {
+                "before": before,
+                "after": result,
+                "changes": dict(changes),
+                "note": note,
+            },
+        )
+        return result
 
     def preview_entity_family_merge(self, source_family_id: str, target_family_id: str) -> dict[str, Any]:
         if source_family_id == target_family_id:
@@ -2442,6 +2455,7 @@ class WorkspaceStore:
         return result
 
     def update_variant(self, variant_id: str, *, note: str = "updated", **changes: Any) -> dict[str, Any]:
+        before = self.get_variant(variant_id)
         fields: list[str] = []
         params: list[Any] = []
         for key in ("display_name", "summary", "canon_status"):
@@ -2477,7 +2491,18 @@ class WorkspaceStore:
             except Exception:
                 con.execute("ROLLBACK")
                 raise
-        return self.get_variant(variant_id)
+        result = self.get_variant(variant_id)
+        emit_domain_event(
+            self.path,
+            "workspace.variant_updated",
+            {
+                "before": before,
+                "after": result,
+                "changes": dict(changes),
+                "note": note,
+            },
+        )
+        return result
 
     def delete_variant(self, variant_id: str) -> None:
         with self._lock, self._connection() as con:
@@ -3651,7 +3676,9 @@ class WorkspaceStore:
                 "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (event_id, world_id, branch_id, owner_type, owner_id, time_label.strip(), float(order_key), event_type.strip() or "event", summary.strip(), _dumps(state_patch or {}), source_type, source_id, status, now, now),
             )
-        return self.get_timeline_event(event_id)
+        result=self.get_timeline_event(event_id)
+        emit_domain_event(self.path,"workspace.timeline_event_created",{"event":result})
+        return result
 
     def get_timeline_event(self, event_id: str) -> dict[str, Any]:
         with self._connection() as con:

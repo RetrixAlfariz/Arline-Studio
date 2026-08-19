@@ -6,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from src.discovery.web import attach_discovery
+from src.domain_events import get_domain_event_bus
 from .contracts import SCHEMA_MODELS, schema_document
 from .models import MemoryQueryContext
 from .profiles import TASK_PROFILES
@@ -51,36 +52,28 @@ def create_memory_router(*, service, store, foundation=None) -> APIRouter:
 
     router = APIRouter(prefix="/api/memory", tags=["memory"])
 
-    def _bind_timeline_refresh_hook() -> None:
-        """Refresh derived temporal state after the current Timeline mutation API.
-
-        WorkspaceStore remains authoritative and unaware of Memory. The binding is
-        per application instance and occurs only when MemoryService is present.
-        Source creation succeeds even if projection refresh later fails.
-        """
-        workspace = getattr(service, "workspace", None)
-        refresh_timeline = getattr(service, "refresh_timeline_state", None)
-        original_add = getattr(workspace, "add_timeline_event", None) if workspace is not None else None
-        if not callable(refresh_timeline) or not callable(original_add):
+    def _timeline_changed(domain_event):
+        event = domain_event.payload.get("event") or {}
+        world_id = event.get("world_id")
+        refresh = getattr(service, "refresh_timeline_state", None)
+        if not world_id or not callable(refresh):
             return
-        if getattr(service, "_v121_timeline_refresh_hook_bound", False):
-            return
+        try:
+            refresh(world_id, event.get("branch_id"))
+        except Exception as exc:
+            reporter = getattr(service, "_report_refresh_failure", None)
+            if callable(reporter):
+                reporter(f"timeline:{world_id}", exc)
 
-        def add_timeline_event_with_refresh(*args, **kwargs):
-            event = original_add(*args, **kwargs)
-            try:
-                refresh_timeline(event["world_id"], event.get("branch_id"))
-            except Exception as exc:
-                reporter = getattr(service, "_report_refresh_failure", None)
-                if callable(reporter):
-                    reporter(f"timeline:{event.get('world_id') or 'unknown'}", exc)
-            return event
-
-        workspace.add_timeline_event = add_timeline_event_with_refresh
-        service._v121_timeline_refresh_hook_bound = True
-        service._v121_original_add_timeline_event = original_add
-
-    _bind_timeline_refresh_hook()
+    workspace = getattr(service, "workspace", None)
+    workspace_path = getattr(workspace, "path", getattr(store, "path", "arline-memory.db"))
+    get_domain_event_bus(workspace_path).subscribe(
+        "workspace.timeline_event_created",
+        _timeline_changed,
+        key="memory.timeline_refresh",
+    )
+    # Compatibility/status marker only. WorkspaceStore is not monkey-patched.
+    service._v121_timeline_refresh_hook_bound = True
     attach_discovery(router, memory_service=service, foundation=foundation)
 
     @router.get("/status")
