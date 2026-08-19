@@ -247,6 +247,11 @@ class NarrativeEntityResolver:
             clone["resolution_state"] = resolution.state
             clone["resolution_reason"] = resolution.reason
             clone["resolution_candidates"] = resolution.candidates or []
+            # An unresolved/ambiguous mention is provenance, not a safe subject
+            # anchor. Keep the mention for review, but do not let its extracted
+            # attributes escape under an extractor-local pseudo identity.
+            if resolution.state != "resolved":
+                clone["attributes"] = {}
             resolved_entities[raw_key] = clone
             key_map[raw_key] = resolution.subject_key
             self._record_mention(resolution, entity, source)
