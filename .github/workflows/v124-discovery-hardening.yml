@@ -1,0 +1,59 @@
+name: v1.2.4 Discovery Composition Hardening
+
+on:
+  push:
+    branches: [develop/v1.2]
+    paths:
+      - '.github/v124_discovery_hotfix.py'
+      - '.github/workflows/v124-discovery-hardening.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/v124_discovery_hotfix.py'
+      - '.github/workflows/v124-discovery-hardening.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  harden-validate-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop/v1.2
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply composition hardening
+        run: python .github/v124_discovery_hotfix.py
+      - name: Validate failing path and full suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv lock --check
+          uv sync --frozen
+          for i in 1 2 3; do
+            uv run python -m unittest tests.test_v121_discovery_maturity.V121DiscoveryMaturityTests.test_generic_building_floor_room_uses_same_containment_grammar -v
+          done
+          uv run python -m unittest tests.test_v124_directives_deliberation -v
+          uv run python -m unittest discover -s tests -p 'test_*.py'
+          uv run python -m compileall -q src tests
+          node --check src/interface/web/static/arline.js
+          node --check src/interface/web/static/js/commands.js
+          node tests/frontend/memory_runtime_smoke.js
+          git diff --check
+      - name: Publish clean hardening
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/v124_discovery_hotfix.py .github/workflows/v124-discovery-hardening.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix: make discovery capture composition self-healing'
+          git fetch origin develop/v1.2
+          git rebase origin/develop/v1.2
+          git push origin HEAD:develop/v1.2
