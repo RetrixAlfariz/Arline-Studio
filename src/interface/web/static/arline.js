@@ -2011,7 +2011,11 @@ async function previewQuickCreate() {
   const text = byId("quickCreateInput").value.trim(); const forced = byId("quickCreateKind").value || null;
   if (!text) { byId("quickCreatePreview").innerHTML = `<span class="preview-icon">◇</span><div><b>Start typing…</b><small>Arline will infer the schema underneath.</small></div>`; return; }
   try {
-    const preview = await api("/api/quick-create/preview", { method: "POST", body: { text, forced_kind: forced, project_id: state.activeProject?.id || null, world_id: state.activeWorld?.id || null, branch_id: state.activeBranch?.id || null, folder_id: state.activeWorldFolderId || null } }); state.quickCreatePreview = preview;
+    const rawBody = { text, forced_kind: forced, project_id: state.activeProject?.id || null, world_id: state.activeWorld?.id || null, branch_id: state.activeBranch?.id || null, folder_id: state.activeWorldFolderId || null };
+    const body = window.ArlineQuickCreate?.preparePayload?.(rawBody) || rawBody;
+    const preview = window.ArlineQuickCreate?.previewOverride?.(body)
+      || await api("/api/quick-create/preview", { method: "POST", body });
+    state.quickCreatePreview = preview;
     const detail = preview.kind === "entity" ? `${preview.entity_type || "entity"}${preview.attributes && Object.keys(preview.attributes).length ? ` · ${Object.entries(preview.attributes).filter(([k])=>k!=="hierarchy").map(([k,v]) => `${k}: ${Array.isArray(v)?v.join(" › "):v}`).join(" · ")}` : ""}` : (preview.document_type || preview.description || preview.kind);
     const matches = (preview.possible_matches || []).map((item)=>`<button type="button" class="qc-existing-match" data-id="${escapeHTML(item.id)}"><span>↪</span><div><b>Use existing ${escapeHTML(item.label)}</b><small>${escapeHTML(item.entity_type || "sheet")}${item.alias?` · alias: ${escapeHTML(item.alias)}`:""} · ${Math.round((item.score||0)*100)}% match</small></div></button>`).join("");
     byId("quickCreatePreview").innerHTML = `<span class="preview-icon">${escapeHTML(ENTITY_ICONS[preview.entity_type || preview.kind] || "◇")}</span><div><b>${escapeHTML(preview.name || text)}</b><small>Detected ${escapeHTML(preview.kind)} · ${escapeHTML(detail || "ready")}</small>${preview.attributes?.hierarchy ? `<code>${escapeHTML(preview.attributes.hierarchy.join(" › "))}</code>` : ""}${matches ? `<div class="quick-create-matches"><em>Possible existing sheets</em>${matches}</div>` : ""}</div>`;
@@ -3255,7 +3259,9 @@ async function submitQuickCreate(event) {
     if(duplicate && confirm(`“${duplicate.name}” already exists. Open and reference the existing sheet instead of duplicating it?`)){byId("quickCreateDialog").close();await openEntitySheet(duplicate.id);return;}
   }
   try{
-    const result=await api("/api/quick-create",{method:"POST",body:{text,forced_kind:byId("quickCreateKind").value||null,project_id:state.activeProject?.id||null,world_id:state.activeWorld?.id||null,branch_id:state.activeBranch?.id||null,folder_id:preview.kind==="entity"?state.activeWorldFolderId:null}});
+    const rawBody={text,forced_kind:byId("quickCreateKind").value||null,project_id:state.activeProject?.id||null,world_id:state.activeWorld?.id||null,branch_id:state.activeBranch?.id||null,folder_id:preview.kind==="entity"?state.activeWorldFolderId:null};
+    const body=window.ArlineQuickCreate?.preparePayload?.(rawBody)||rawBody;
+    const result=await api("/api/quick-create",{method:"POST",body});
     byId("quickCreateDialog").close();
     if(result.kind==="project")await loadWorkspaceBootstrap();else if(result.kind==="world"){await loadWorkspaceBootstrap();if(state.activeProject)await selectScope(state.activeProject.id,result.resource.id);}else{await loadProjectData();if(result.kind==="entity"&&result.resource?.id)await openEntitySheet(result.resource.id,result.variant?.id);}
     toast(`Created ${result.kind}: ${result.resource?.name||result.resource?.title||preview.name||"resource"}`);

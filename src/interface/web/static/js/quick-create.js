@@ -67,7 +67,7 @@
     };
   }
 
-  window.ArlineQuickCreate = { decodeCreateAs, inferRelationship };
+  window.ArlineQuickCreate = { decodeCreateAs, inferRelationship, preparePayload, previewOverride };
   if (typeof document === "undefined") return;
 
   const originalFetch = window.fetch.bind(window);
@@ -358,45 +358,36 @@
     await refreshFolderOptions();
   }
 
-  function relationshipPreviewResponse(body) {
+  function preparePayload(body = {}) {
+    const next = { ...body };
+    const mode = decodeCreateAs(byId("quickCreateKind")?.value || next.forced_kind || "");
+    if (mode.kind) next.forced_kind = mode.kind;
+    if (mode.entity_type) next.entity_type = mode.entity_type;
+    if (mode.document_type) next.document_type = mode.document_type;
+    Object.assign(next, scopePayload(mode));
+    return next;
+  }
+
+  function previewOverride(body = {}) {
+    const mode = decodeCreateAs(byId("quickCreateKind")?.value || body.forced_kind || "");
+    if (mode.kind !== "relationship") return null;
     const variants = scopedVariants(libraryCache || {});
     const inferred = inferRelationship(body.text || "", variants);
     const subject = variants.find((v) => v.id === inferred.subject_id);
     const object = variants.find((v) => v.id === inferred.object_id);
-    const data = {
+    return {
       kind: "relationship",
       entity_type: null,
       name: subject && object ? `${subject.display_name} ↔ ${object.display_name}` : (String(body.text || "").trim() || "Relationship"),
       description: inferred.relation_type || "Choose subject, relation, and object below",
       confidence: inferred.resolved ? 0.95 : 0.55,
-      attributes: {}, shared_core: {}, document_type: null,
+      attributes: {},
+      shared_core: {},
+      document_type: null,
       warnings: inferred.resolved ? [] : ["Resolve two existing entities and a relationship type before creating."],
       detected: inferred.relation_type ? [inferred.relation_type] : [],
     };
-    return new Response(JSON.stringify(data), { status: 200, headers: { "Content-Type": "application/json" } });
   }
-
-  window.fetch = async function (input, init = {}) {
-    const url = typeof input === "string" ? input : input?.url || "";
-    const isQuick = url.includes("/api/quick-create");
-    if (!isQuick || !init?.body || typeof init.body !== "string") return originalFetch(input, init);
-    let body;
-    try { body = JSON.parse(init.body); } catch (_) { return originalFetch(input, init); }
-    const mode = decodeCreateAs(byId("quickCreateKind")?.value || body.forced_kind || "");
-    if (url.includes("/api/quick-create/preview") && mode.kind === "relationship") return relationshipPreviewResponse(body);
-    if (mode.kind) body.forced_kind = mode.kind;
-    if (mode.entity_type) body.entity_type = mode.entity_type;
-    if (mode.document_type) body.document_type = mode.document_type;
-    Object.assign(body, scopePayload(mode));
-    const response = await originalFetch(input, { ...init, body: JSON.stringify(body) });
-    if (url.includes("/api/quick-create/preview") && response.ok && (mode.entity_type || mode.document_type)) {
-      const data = await response.clone().json();
-      if (mode.entity_type) data.entity_type = mode.entity_type;
-      if (mode.document_type) data.document_type = mode.document_type;
-      return new Response(JSON.stringify(data), { status: response.status, statusText: response.statusText, headers: { "Content-Type": "application/json" } });
-    }
-    return response;
-  };
 
   async function submitRelationship(event) {
     if (selectedMode().kind !== "relationship") return;
