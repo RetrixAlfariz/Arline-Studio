@@ -6,6 +6,11 @@ on:
     paths:
       - '.github/v124_topdown_apply.py'
       - '.github/workflows/v124-topdown-completion.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/v124_topdown_apply.py'
+      - '.github/workflows/v124-topdown-completion.yml'
 
 permissions:
   contents: write
