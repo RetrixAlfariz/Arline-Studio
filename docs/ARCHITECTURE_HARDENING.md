@@ -67,6 +67,14 @@ Feature modules obtain the active workspace scope through the read-only `window.
 
 Transient LM Studio credentials are accepted through `POST /api/models/query`, not URL query parameters. The legacy `GET /api/models` route may use server location information but does not accept an API key.
 
+Saving normal runtime settings always writes an empty `lmstudio.api_key` to portable `arline.toml`; a key typed in the UI is session-only. Persist a key through the process environment instead:
+
+```text
+ARLINE_LMSTUDIO_API_KEY=...
+```
+
+This prevents ordinary config copies, backups, or commits from silently carrying credentials.
+
 Arline remains local-first. `launch_ui()` accepts loopback hosts by default. Binding the unauthenticated UI to a non-loopback address requires the explicit environment override:
 
 ```text
@@ -81,12 +89,13 @@ This override is intentionally noisy: it acknowledges that the current FastAPI s
 
 ## 7. CI contract
 
-Permanent CI validates two environments:
+Permanent CI validates three complementary gates:
 
 1. Python 3.11 with floating compatible dependencies, to detect upstream compatibility regressions.
 2. Python 3.13 with the frozen `uv.lock`, to prove the declared local environment is reproducible.
+3. A real headless Chromium smoke on pull requests/main/releases, launching an isolated Arline database and checking HTTP bootstrap, frontend module initialization, runtime scope, Quick Create, navigation handlers, credential exposure, and removal of legacy scope/fetch shims.
 
-Both run the full regression suite, Python compilation, JavaScript syntax checks, the Memory runtime smoke test, and diff hygiene. Temporary applicators/workflows, frontend compatibility shims, and stale v1.1 hardening workflows are rejected by repository hygiene.
+The Python lanes run the full regression suite, Python compilation, JavaScript syntax checks, the Memory runtime smoke test, and diff hygiene. Temporary applicators/workflows, frontend compatibility shims, and stale v1.1 hardening workflows are rejected by repository hygiene.
 
 ## 8. What this does not change
 
