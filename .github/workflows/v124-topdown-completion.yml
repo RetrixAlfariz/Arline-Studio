@@ -1,0 +1,112 @@
+name: v1.2.4 Top-down Completion
+
+on:
+  push:
+    branches: [develop/v1.2]
+    paths:
+      - '.github/v124_topdown_apply.py'
+      - '.github/workflows/v124-topdown-completion.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-validate-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop/v1.2
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Apply v1.2.4 vertical slice
+        run: python .github/v124_topdown_apply.py
+      - uses: astral-sh/setup-uv@v6
+      - name: Validate Python and source contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv lock --check
+          uv sync --frozen
+          uv run python -m unittest tests.test_v122_continuity_foundation tests.test_v122_topdown_completion tests.test_v123_context_intelligence tests.test_v124_directives_deliberation -v
+          uv run python -m unittest discover -s tests -p 'test_*.py'
+          uv run python -m compileall -q src tests
+          node --check src/interface/web/static/js/commands.js
+          node --check src/interface/web/static/js/stream.js
+          node --check src/interface/web/static/js/quick-create.js
+          node --check src/interface/web/static/js/memory.js
+          node --check src/interface/web/static/js/discovery-sheets.js
+          node --check src/interface/web/static/arline.js
+          node --check tests/frontend/browser_smoke.mjs
+          node tests/frontend/memory_runtime_smoke.js
+          git diff --check
+      - name: Install Chromium harness
+        run: |
+          npm install --no-save playwright@1.55.0
+          npx playwright install --with-deps chromium
+      - name: Prepare isolated Studio config
+        run: |
+          uv run python - <<'PY'
+          from pathlib import Path
+          import tomlkit
+          root = Path.cwd()
+          runtime = Path('/tmp/arline-v124-browser')
+          runtime.mkdir(parents=True, exist_ok=True)
+          doc = tomlkit.parse((root / 'config/arline.toml').read_text(encoding='utf-8'))
+          doc['lmstudio']['auto_load'] = False
+          doc['lmstudio']['api_key'] = ''
+          doc['writer']['system_prompt_file'] = (root / 'config/writer_system.txt').as_posix()
+          doc['reasoning_runtime']['guard_prompt_file'] = (root / 'config/reasoning_guard.txt').as_posix()
+          doc['history']['database_path'] = (runtime / 'arline.db').as_posix()
+          doc['history']['dataset_root'] = (runtime / 'datasets').as_posix()
+          doc['workspace']['database_path'] = (runtime / 'arline.db').as_posix()
+          doc['artifacts']['output_root'] = (runtime / 'output').as_posix()
+          doc['artifacts']['saved_root'] = (runtime / 'saved').as_posix()
+          doc['ui']['host'] = '127.0.0.1'
+          doc['ui']['port'] = 7860
+          Path('/tmp/arline-v124-browser.toml').write_text(tomlkit.dumps(doc), encoding='utf-8')
+          PY
+      - name: Start Studio
+        run: |
+          uv run python app.py --config /tmp/arline-v124-browser.toml >/tmp/arline-v124-browser.log 2>&1 &
+          echo $! >/tmp/arline-v124-browser.pid
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:7860/api/config >/dev/null; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+          cat /tmp/arline-v124-browser.log
+          exit 1
+      - name: Exercise slash and reference UI
+        env:
+          ARLINE_BROWSER_URL: http://127.0.0.1:7860
+        run: node tests/frontend/browser_smoke.mjs
+      - name: Browser diagnostics
+        if: always()
+        run: |
+          cat /tmp/arline-v124-browser.log || true
+          if [ -f /tmp/arline-v124-browser.pid ]; then kill "$(cat /tmp/arline-v124-browser.pid)" 2>/dev/null || true; fi
+      - name: Publish clean v1.2.4 tree
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf node_modules
+          rm -f .github/v124_topdown_apply.py .github/workflows/v124-topdown-completion.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git ls-files --cached 'node_modules/**' | grep -q .; then
+            echo 'Refusing to publish tracked node_modules' >&2
+            exit 1
+          fi
+          git commit -m 'feat: complete v1.2.4 directives references and deliberation'
+          git fetch origin develop/v1.2
+          git rebase origin/develop/v1.2
+          git push origin HEAD:develop/v1.2
