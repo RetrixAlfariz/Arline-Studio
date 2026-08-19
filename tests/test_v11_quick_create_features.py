@@ -14,7 +14,7 @@ class V11QuickCreateFeatureTests(unittest.TestCase):
         main_js = (ROOT / "src/interface/web/static/arline.js").read_text(encoding="utf-8")
         app = (ROOT / "src/interface/web/app.py").read_text(encoding="utf-8")
 
-        self.assertIn("/static/js/quick-create.js?v=1.2.2-hardening", html)
+        self.assertIn("/static/js/quick-create.js?v=1.2.3-context", html)
         self.assertNotIn("window.fetch =", quick)
         self.assertIn("preparePayload", quick)
         self.assertIn("previewOverride", quick)

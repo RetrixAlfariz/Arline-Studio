@@ -22,7 +22,7 @@ class V121ProvisionalSheetUITests(unittest.TestCase):
     def test_runtime_loads_provisional_sheet_enhancement(self):
         html = INDEX_HTML.read_text(encoding="utf-8")
         sheet = SHEETS_JS.read_text(encoding="utf-8")
-        self.assertIn("/static/js/discovery-sheets.js?v=1.2.2-hardening", html)
+        self.assertIn("/static/js/discovery-sheets.js?v=1.2.3-context", html)
         self.assertNotIn("data-arline-provisional-sheets", html)
         self.assertIn('document.readyState === "loading"', sheet)
         self.assertIn("ArlineProvisionalSheets", sheet)
