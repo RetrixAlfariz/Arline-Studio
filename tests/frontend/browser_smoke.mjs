@@ -38,6 +38,7 @@ try {
         .filter((id) => document.getElementById(id)),
       hasDestination: Boolean(document.getElementById("quickCreateDestination")),
       hasBulkTrash: Boolean(document.getElementById("bulkTrashBtn")),
+      welcomeOpen: Boolean(document.getElementById("welcomeDialog")?.open),
       fetchLooksPatched: String(window.fetch).includes("isQuick")
         || String(window.fetch).includes("quick-create"),
     };
@@ -55,6 +56,13 @@ try {
   if (contract.fetchLooksPatched) throw new Error("Quick Create patched global window.fetch");
   if (contract.prepared.forced_kind !== "entity" || contract.prepared.entity_type !== "character") {
     throw new Error(`Quick Create payload contract failed: ${JSON.stringify(contract.prepared)}`);
+  }
+
+  // First-run onboarding is intentionally modal. Exercise the real dismiss
+  // control before checking navigation so the smoke follows a user's path.
+  if (contract.welcomeOpen) {
+    await page.click("#welcomeSkipX");
+    await page.waitForFunction(() => !document.getElementById("welcomeDialog")?.open);
   }
 
   // Exercise actual bound UI handlers, not just DOM presence.
