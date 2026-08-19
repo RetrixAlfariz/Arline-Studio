@@ -1,0 +1,47 @@
+name: v1.2.2 Top-Down Completion
+
+on:
+  push:
+    branches: [develop/v1.2]
+    paths:
+      - '.github/v122_topdown_apply.py'
+      - '.github/workflows/v122-topdown-completion.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-validate-clean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop/v1.2
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Apply top-down implementation
+        run: python .github/v122_topdown_apply.py
+      - name: Install uv
+        run: python -m pip install --disable-pip-version-check uv
+      - name: Verify lock and sync
+        run: |
+          uv lock --check
+          uv sync --frozen
+      - name: Targeted v1.2.2 tests
+        run: uv run python -m unittest tests.test_v122_continuity_foundation tests.test_v122_topdown_completion -v
+      - name: Full regression suite
+        run: uv run python -m unittest discover -s tests -p 'test_*.py'
+      - name: Compile and JavaScript syntax
+        run: |
+          uv run python -m compileall -q src tests
+          node --check src/interface/web/static/js/discovery-sheets.js
+      - name: Commit implementation and remove applicator
+        run: |
+          rm -f .github/v122_topdown_apply.py .github/workflows/v122-topdown-completion.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: complete v1.2.2 narrative continuity top-down'
+          git push origin HEAD:develop/v1.2
