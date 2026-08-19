@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   apply:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,7 +23,8 @@ jobs:
           node-version: "22"
       - name: Reconstruct and apply semantic migration
         run: |
-          python - <<'PY'
+          set -o pipefail
+          python - <<'PY' 2>&1 | tee -a /tmp/v122.log
           from pathlib import Path
           import base64, zlib
           chunks = sorted(Path('.github/tools').glob('v122_payload_*.txt'))
@@ -34,27 +36,35 @@ jobs:
           PY
       - name: Refresh lockfile and install frozen environment
         run: |
-          uv lock
-          uv sync --frozen
+          set -o pipefail
+          { uv lock && uv sync --frozen; } 2>&1 | tee -a /tmp/v122.log
       - name: Full Python regression suite
-        run: uv run python -m unittest discover -s tests -v
+        run: |
+          set -o pipefail
+          uv run python -m unittest discover -s tests -v 2>&1 | tee -a /tmp/v122.log
       - name: Compile Python
-        run: uv run python -m compileall -q src tests
+        run: |
+          set -o pipefail
+          uv run python -m compileall -q src tests 2>&1 | tee -a /tmp/v122.log
       - name: JavaScript and runtime checks
         run: |
-          node --check src/interface/web/static/js/commands.js
-          node --check src/interface/web/static/js/stream.js
-          node --check src/interface/web/static/js/quick-create.js
-          node --check src/interface/web/static/js/memory.js
-          node --check src/interface/web/static/js/discovery-sheets.js
-          node --check src/interface/web/static/arline.js
-          node --check tests/frontend/browser_smoke.mjs
-          node tests/frontend/memory_runtime_smoke.js
-          git diff --check
+          set -o pipefail
+          {
+            node --check src/interface/web/static/js/commands.js
+            node --check src/interface/web/static/js/stream.js
+            node --check src/interface/web/static/js/quick-create.js
+            node --check src/interface/web/static/js/memory.js
+            node --check src/interface/web/static/js/discovery-sheets.js
+            node --check src/interface/web/static/arline.js
+            node --check tests/frontend/browser_smoke.mjs
+            node tests/frontend/memory_runtime_smoke.js
+            git diff --check
+          } 2>&1 | tee -a /tmp/v122.log
       - name: Remove temporary applicator payload
         run: |
           rm -f .github/tools/v122_payload_*.txt
           rm -f .github/workflows/apply-v122-topdown.yml
+          rm -f .github/v122_failure.log
           rmdir .github/tools 2>/dev/null || true
           git diff --check
       - name: Commit validated v1.2.2 completion
@@ -64,3 +74,12 @@ jobs:
           git add -A
           git commit -m "feat: complete v1.2.2 narrative continuity top-down"
           git push origin HEAD:work/v122-topdown-completion
+      - name: Persist failure diagnostics
+        if: failure()
+        run: |
+          cp /tmp/v122.log .github/v122_failure.log 2>/dev/null || echo 'validation failed before log capture' > .github/v122_failure.log
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/v122_failure.log
+          git commit -m "ci: record v1.2.2 applicator failure" || true
+          git push origin HEAD:work/v122-topdown-completion || true
