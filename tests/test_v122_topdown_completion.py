@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+import inspect
 import tempfile
+from types import SimpleNamespace
 import unittest
 
 from src.discovery.coreference import CrossTurnCoreferenceResolver
 from src.discovery.entity_resolver import NarrativeEntityResolver
+from src.discovery.scoped_continuity import LineageScopedContinuityResolver
 from src.history.store import HistoryStore
 from src.memory import MemoryConfig, MemoryQueryContext, MemoryService, MemoryStore
 from src.memory.web import create_memory_router
@@ -200,7 +203,58 @@ class V122TopDownCompletionTests(unittest.TestCase):
             self.assertIs(fx.discovery.continuity, fx.discovery.narrative.continuity)
             self.assertIs(fx.discovery.entity_resolver, fx.discovery.narrative.entity_resolver)
             self.assertIs(fx.discovery.events, fx.discovery.narrative.events)
+            self.assertIsInstance(fx.discovery.continuity, LineageScopedContinuityResolver)
             self.assertFalse(hasattr(type(fx.discovery), "_identity_resolution_v2"))
+
+    def test_ambiguous_named_identity_does_not_emit_unanchored_attributes(self):
+        with tempfile.TemporaryDirectory() as td:
+            fx = TopDownFixture(td)
+            for key in ("char:alex-a", "char:alex-b"):
+                fx.discovery.store.upsert_proposition(
+                    project_id=fx.project["id"], world_id=fx.world_id,
+                    subject_type="character", subject_key=key, subject_label="Alex",
+                    predicate="appearance.eye_color", value="blue", operation="update",
+                )
+
+            result = SimpleNamespace(
+                extracted_state={
+                    "entities": [{
+                        "id": "char:extractor-local", "type": "character", "label": "Alex",
+                        "introduced_by": "seg-1",
+                        "attributes": {"age": {
+                            "value": 20, "source_segment": "seg-1", "confidence": 1.0,
+                            "epistemic": "explicit", "inferred": False,
+                        }},
+                    }],
+                    "relations": [],
+                },
+                events={"events": [], "state_patches": []},
+                debug={"normalized_segments": {"segments": [{
+                    "id": "seg-1", "raw_text": "Alex is 20 years old."
+                }]}},
+            )
+
+            class Pipeline:
+                def run(self, _text):
+                    return result
+
+            fx.discovery.pipeline = Pipeline()
+            turn = fx.turn("Alex is 20 years old.", "amb-attr")
+            report = fx.discovery.capture_turn(turn["id"], source_kind="user_prompt")
+            self.assertEqual(report.propositions, 0)
+            with fx.discovery.store.connection() as con:
+                mention = con.execute(
+                    "SELECT resolution_state FROM discovery_mentions "
+                    "WHERE source_turn_id=? AND raw_entity_key=? AND active=1",
+                    (turn["id"], "char:extractor-local"),
+                ).fetchone()
+            self.assertIsNotNone(mention)
+            self.assertEqual(mention["resolution_state"], "ambiguous")
+
+    def test_form_parent_selection_uses_scoped_read_model(self):
+        source = inspect.getsource(LineageScopedContinuityResolver._build_form)
+        self.assertIn("visible_parents = self.list_forms(context, subject_key=subject_key)", source)
+        self.assertNotIn("ORDER BY COALESCE(story_order,-1e308) DESC", source)
 
 
 if __name__ == "__main__":
