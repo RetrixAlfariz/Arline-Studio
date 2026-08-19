@@ -20,14 +20,34 @@ if old not in text:
 text = text.replace(old, new, 1)
 path.write_text(text, encoding='utf-8')
 
-# A valid context plan is itself useful runtime metadata. Render its header and
-# policy even when no scoped evidence candidates were selected, so zero-result
-# retrieval remains distinguishable from "context intelligence did not run".
 path = Path('src/memory/query.py')
 text = path.read_text(encoding='utf-8')
+
+# A valid context plan is itself useful runtime metadata. Render its header and
+# policy even when no scoped evidence candidates were selected.
 old = '''    def _pack(plan: QueryPlan, selected: list[MemoryCandidate], excluded: list[dict[str, Any]]) -> str:\n        if not selected:\n            return ""\n'''
 new = '''    def _pack(plan: QueryPlan, selected: list[MemoryCandidate], excluded: list[dict[str, Any]]) -> str:\n        if not selected and not plan.context_plan:\n            return ""\n'''
 if old not in text:
     raise SystemExit('v1.2.3 empty-plan pack anchor not found')
+text = text.replace(old, new, 1)
+
+# Candidate budgets happen *before* ScopeGate. Text lanes keep a small audit
+# overfetch floor so context planning cannot make cross-scope evidence disappear
+# before ScopeGate has a chance to reject and trace it.
+old = '''        candidate_budgets = {\n            lane.value: max(2, int(round(self.config.max_candidates * weights.get(lane.value, 1.0) / total_weight)))\n            for lane in lanes\n        }\n        return QueryPlan(\n'''
+new = '''        candidate_budgets = {\n            lane.value: max(2, int(round(self.config.max_candidates * weights.get(lane.value, 1.0) / total_weight)))\n            for lane in lanes\n        }\n        for lane in lanes:\n            if lane in fts_lanes:\n                candidate_budgets[lane.value] = max(16, candidate_budgets[lane.value])\n        return QueryPlan(\n'''
+if old not in text:
+    raise SystemExit('v1.2.3 candidate budget anchor not found')
+text = text.replace(old, new, 1)
+path.write_text(text, encoding='utf-8')
+
+# Architecture regression intentionally tracks the active development version.
+path = Path('tests/test_architecture_hardening.py')
+text = path.read_text(encoding='utf-8')
+old = '        self.assertEqual(__version__, "1.2.2a1")\n'
+new = '        self.assertEqual(__version__, "1.2.3a1")\n'
+if old not in text:
+    raise SystemExit('version contract test anchor not found')
 path.write_text(text.replace(old, new, 1), encoding='utf-8')
-print('v1.2.3 compatibility/observability patches applied')
+
+print('v1.2.3 compatibility, audit-overfetch, and version patches applied')
