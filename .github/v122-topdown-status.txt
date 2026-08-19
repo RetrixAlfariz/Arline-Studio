@@ -1,0 +1,19 @@
+exit_code=1
+commit=bd051cf844fdbb25043e5b099bdd577c1f6f8ef7
+
+=== APPLY ===
+Traceback (most recent call last):
+  File "/home/runner/work/Arline-Studio/Arline-Studio/.github/v122_topdown_apply.py", line 874, in <module>
+    replace_once(
+    ~~~~~~~~~~~~^
+        "src/interface/web/static/js/discovery-sheets.js",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        '''      section.querySelectorAll("[data-prov-claim]").forEach((row) => {\n''',
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        '''      section.querySelectorAll("[data-cont-conflict]").forEach((row) => {\n        const conflict = conflicts.find((item) => item.id === row.dataset.contConflict);\n        if (!conflict) return;\n        row.querySelectorAll("[data-cont-action]").forEach((button) => button.addEventListener("click", () => {\n          const action = button.dataset.contAction;\n          if (action === "dismiss") return resolveContinuityConflict(conflict, familyId, "dismiss");\n          if (action === "left-correct") return resolveContinuityConflict(conflict, familyId, "correction", conflict.right_proposition_id, conflict.left_proposition_id);\n          if (action === "right-correct") return resolveContinuityConflict(conflict, familyId, "correction", conflict.left_proposition_id, conflict.right_proposition_id);\n          if (action === "left-to-right") return resolveContinuityConflict(conflict, familyId, "story_change", conflict.left_proposition_id, conflict.right_proposition_id);\n          if (action === "right-to-left") return resolveContinuityConflict(conflict, familyId, "story_change", conflict.right_proposition_id, conflict.left_proposition_id);\n        }));\n      });\n\n      section.querySelectorAll("[data-prov-claim]").forEach((row) => {\n''',
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/runner/work/Arline-Studio/Arline-Studio/.github/v122_topdown_apply.py", line 21, in replace_once
+    raise RuntimeError(f"patch anchor not found in {path}: {old[:120]!r}")
+RuntimeError: patch anchor not found in src/interface/web/static/js/discovery-sheets.js: '      section.querySelectorAll("[data-prov-claim]").forEach((row) => {\n'
