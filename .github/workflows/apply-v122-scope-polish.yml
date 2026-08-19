@@ -22,87 +22,14 @@ jobs:
         with:
           node-version: "22"
       - name: Apply scoped continuity polish
+        env:
+          PATCH_B64: "ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpkZWYgcmVwbGFjZV9vbmNlKHJlbCwgb2xkLCBuZXcpOgogICAgcCA9IFBhdGgocmVsKQogICAgdGV4dCA9IHAucmVhZF90ZXh0KGVuY29kaW5nPSd1dGYtOCcpCiAgICBjb3VudCA9IHRleHQuY291bnQob2xkKQogICAgaWYgY291bnQgIT0gMToKICAgICAgICByYWlzZSBSdW50aW1lRXJyb3IoZid7cmVsfTogZXhwZWN0ZWQgb25lIHRhcmdldCwgZ290IHtjb3VudH0nKQogICAgcC53cml0ZV90ZXh0KHRleHQucmVwbGFjZShvbGQsIG5ldywgMSksIGVuY29kaW5nPSd1dGYtOCcpCgpyZXBsYWNlX29uY2UoCiAgICAnc3JjL2Rpc2NvdmVyeS9zZXJ2aWNlLnB5JywKICAgICcnJyAgICAgICAgICAgIGZvciBwYXRoLCB2YWx1ZSwgc2VnbWVudF9pZCwgY29uZmlkZW5jZSwgZXBpc3RlbWljLCBpbmZlcnJlZCBpbiBzZWxmLl9mbGF0dGVuX2F0dHJpYnV0ZXMoZW50aXR5LmdldCgiYXR0cmlidXRlcyIpIG9yIHt9KTpcbiAgICAgICAgICAgICAgICBpZiBub3QgbGFiZWwgb3IgbGFiZWwuY2FzZWZvbGQoKSBpbiBHRU5FUklDX0VOVElUWV9MQUJFTFM6XG4gICAgICAgICAgICAgICAgICAgIHNraXBwZWQgKz0gMVxuICAgICAgICAgICAgICAgICAgICBjb250aW51ZVxuJycnLAogICAgJycnICAgICAgICAgICAgZm9yIHBhdGgsIHZhbHVlLCBzZWdtZW50X2lkLCBjb25maWRlbmNlLCBlcGlzdGVtaWMsIGluZmVycmVkIGluIHNlbGYuX2ZsYXR0ZW5fYXR0cmlidXRlcyhlbnRpdHkuZ2V0KCJhdHRyaWJ1dGVzIikgb3Ige30pOlxuICAgICAgICAgICAgICAgIGlmIChcbiAgICAgICAgICAgICAgICAgICAgbm90IGxhYmVsIG9yIGxhYmVsLmNhc2Vmb2xkKCkgaW4gR0VORVJJQ19FTlRJVFlfTEFCRUxTXG4gICAgICAgICAgICAgICAgICAgIG9yIGVudGl0eS5nZXQoInJlc29sdXRpb25fc3RhdGUiKSAhPSAicmVzb2x2ZWQiXG4gICAgICAgICAgICAgICAgKTpcbiAgICAgICAgICAgICAgICAgICAgc2tpcHBlZCArPSAxXG4gICAgICAgICAgICAgICAgICAgIGNvbnRpbnVlXG4nJycsCikKCnJlcGxhY2Vfb25jZSgKICAgICdzcmMvZGlzY292ZXJ5L2NvbnRpbnVpdHkucHknLAogICAgJycnICAgICAgICBmb3JtX2lkID0gc2VsZi5fZm9ybV9pZChzdWJqZWN0X2tleSwgdHVybl9pZCwgc291cmNlX2tpbmQpXG4gICAgICAgIHdpdGggc2VsZi5zdG9yZS5jb25uZWN0aW9uKCkgYXMgY29uOlxuICAgICAgICAgICAgZXhpc3RpbmcgPSBjb24uZXhlY3V0ZSgiU0VMRUNUIGlkIEZST00gY29udGludWl0eV9mb3JtcyBXSEVSRSBpZD0/IiwgKGZvcm1faWQsKSkuZmV0Y2hvbmUoKVxuICAgICAgICAgICAgcGFyZW50ID0gY29uLmV4ZWN1dGUoXG4gICAgICAgICAgICAgICAgIlNFTEVDVCAqIEZST00gY29udGludWl0eV9mb3JtcyBXSEVSRSBwcm9qZWN0X2lkIElTID8gQU5EIHdvcmxkX2lkIElTID8gQU5EIHN1YmplY3Rfa2V5PT8gQU5EIGlkIT0/ICJcbiAgICAgICAgICAgICAgICAiT1JERVIgQlkgQ09BTEVTQ0Uoc3Rvcnlfb3JkZXIsLTFlMzA4KSBERVNDLGNyZWF0ZWRfYXQgREVTQyBMSU1JVCAxIixcbiAgICAgICAgICAgICAgICAoc2Vzc2lvbi5nZXQoInByb2plY3RfaWQiKSwgc2Vzc2lvbi5nZXQoIndvcmxkX2lkIiksIHN1YmplY3Rfa2V5LCBmb3JtX2lkKSxcbiAgICAgICAgICAgICkuZmV0Y2hvbmUoKVxuICAgICAgICBpZiBleGlzdGluZzpcbiAgICAgICAgICAgIHJldHVybiBGYWxzZVxuICAgICAgICBiZWZvcmVfc3RhdGUgPSBsb2FkcyhwYXJlbnRbImFmdGVyX3N0YXRlX2pzb24iXSBvciBwYXJlbnRbInN0YXRlX2pzb24iXSwge30pIGlmIHBhcmVudCBlbHNlIGRpY3QoYWZ0ZXJfc3RhdGUpXG4nJycsCiAgICAnJycgICAgICAgIGZvcm1faWQgPSBzZWxmLl9mb3JtX2lkKHN1YmplY3Rfa2V5LCB0dXJuX2lkLCBzb3VyY2Vfa2luZClcbiAgICAgICAgd2l0aCBzZWxmLnN0b3JlLmNvbm5lY3Rpb24oKSBhcyBjb246XG4gICAgICAgICAgICBleGlzdGluZyA9IGNvbi5leGVjdXRlKCJTRUxFQ1QgaWQgRlJPTSBjb250aW51aXR5X2Zvcm1zIFdIRVJFIGlkPT8iLCAoZm9ybV9pZCwpKS5mZXRjaG9uZSgpXG4gICAgICAgIGlmIGV4aXN0aW5nOlxuICAgICAgICAgICAgcmV0dXJuIEZhbHNlXG4gICAgICAgICMgUGFyZW50IHNlbGVjdGlvbiBtdXN0IHVzZSB0aGUgc2FtZSBzY29wZWQgdmlzaWJpbGl0eSBydWxlIGFzIHRoZSByZWFkXG4gICAgICAgICMgbW9kZWwuIEEgcmF3IHByb2plY3Qvd29ybGQgcXVlcnkgY2FuIGFjY2lkZW50YWxseSBwYXJlbnQgYSBmb3JtIHRvIGFcbiAgICAgICAgIyBzaWJsaW5nLWJyYW5jaCBzdGF0ZSB0aGF0IGlzIGludmlzaWJsZSBpbiB0aGlzIGxpbmVhZ2UuXG4gICAgICAgIHZpc2libGVfcGFyZW50cyA9IHNlbGYubGlzdF9mb3Jtcyhjb250ZXh0LCBzdWJqZWN0X2tleT1zdWJqZWN0X2tleSlcbiAgICAgICAgcGFyZW50ID0gdmlzaWJsZV9wYXJlbnRzWy0xXSBpZiB2aXNpYmxlX3BhcmVudHMgZWxzZSBOb25lXG4gICAgICAgIGJlZm9yZV9zdGF0ZSA9IChcbiAgICAgICAgICAgIGRpY3QocGFyZW50LmdldCgiYWZ0ZXJfc3RhdGUiKSBvciBwYXJlbnQuZ2V0KCJzdGF0ZSIpIG9yIGFmdGVyX3N0YXRlKVxuICAgICAgICAgICAgaWYgcGFyZW50IGVsc2UgZGljdChhZnRlcl9zdGF0ZSlcbiAgICAgICAgKVxuJycnLAopCgp0ZXN0ID0gUGF0aCgndGVzdHMvdGVzdF92MTIyX3RvcGRvd25fY29tcGxldGlvbi5weScpCnRleHQgPSB0ZXN0LnJlYWRfdGV4dChlbmNvZGluZz0ndXRmLTgnKQptYXJrZXIgPSAnXG5cbmlmIF9fbmFtZV9fID09ICJfX21haW5fXyI6XG4nCmlmIHRleHQuY291bnQobWFya2VyKSAhPSAxOgogICAgcmFpc2UgUnVudGltZUVycm9yKCd0ZXN0IG1hcmtlciBtaXNzaW5nL2R1cGxpY2F0ZWQnKQphZGRpdGlvbiA9ICcnJwoKICAgIGRlZiB0ZXN0X2FtYmlndW91c19uYW1lZF9pZGVudGl0eV9kb2VzX25vdF9lbWl0X3VuYW5jaG9yZWRfYXR0cmlidXRlcyhzZWxmKToKICAgICAgICBmcm9tIHR5cGVzIGltcG9ydCBTaW1wbGVOYW1lc3BhY2UKCiAgICAgICAgd2l0aCB0ZW1wZmlsZS5UZW1wb3JhcnlEaXJlY3RvcnkoKSBhcyB0ZDoKICAgICAgICAgICAgZnggPSBUb3BEb3duRml4dHVyZSh0ZCkKICAgICAgICAgICAgZm9yIGtleSBpbiAoImNoYXI6YWxleC1hIiwgImNoYXI6YWxleC1iIik6CiAgICAgICAgICAgICAgICBmeC5kaXNjb3Zlcnkuc3RvcmUudXBzZXJ0X3Byb3Bvc2l0aW9uKAogICAgICAgICAgICAgICAgICAgIHByb2plY3RfaWQ9ZngucHJvamVjdFsiaWQiXSwgd29ybGRfaWQ9Zngud29ybGRfaWQsCiAgICAgICAgICAgICAgICAgICAgc3ViamVjdF90eXBlPSJjaGFyYWN0ZXIiLCBzdWJqZWN0X2tleT1rZXksIHN1YmplY3RfbGFiZWw9IkFsZXgiLAogICAgICAgICAgICAgICAgICAgIHByZWRpY2F0ZT0iYXBwZWFyYW5jZS5leWVfY29sb3IiLCB2YWx1ZT0iYmx1ZSIsIG9wZXJhdGlvbj0idXBkYXRlIiwKICAgICAgICAgICAgICAgICkKICAgICAgICAgICAgdHVybiA9IGZ4LnR1cm4oIkFsZXggaXMgMjAgeWVhcnMgb2xkLiIsICJhbWItYXR0ciIpCiAgICAgICAgICAgIHJlc3VsdCA9IFNpbXBsZU5hbWVzcGFjZSgKICAgICAgICAgICAgICAgIGV4dHJhY3RlZF9zdGF0ZT17CiAgICAgICAgICAgICAgICAgICAgImVudGl0aWVzIjogW3sKICAgICAgICAgICAgICAgICAgICAgICAgImlkIjogImNoYXI6ZXh0cmFjdG9yLWxvY2FsIiwgInR5cGUiOiAiY2hhcmFjdGVyIiwgImxhYmVsIjogIkFsZXgiLAogICAgICAgICAgICAgICAgICAgICAgICAiaW50cm9kdWNlZF9ieSI6ICJzZWctMSIsCiAgICAgICAgICAgICAgICAgICAgICAgICJhdHRyaWJ1dGVzIjogeyJhZ2UiOiB7CiAgICAgICAgICAgICAgICAgICAgICAgICAgICAidmFsdWUiOiAyMCwgInNvdXJjZV9zZWdtZW50IjogInNlZy0xIiwgImNvbmZpZGVuY2UiOiAxLjAsCiAgICAgICAgICAgICAgICAgICAgICAgICAgICAiZXBpc3RlbWljIjogImV4cGxpY2l0IiwgImluZmVycmVkIjogRmFsc2UsCiAgICAgICAgICAgICAgICAgICAgICAgIH19LAogICAgICAgICAgICAgICAgICAgIH1dLAogICAgICAgICAgICAgICAgICAgICJyZWxhdGlvbnMiOiBbXSwKICAgICAgICAgICAgICAgIH0sCiAgICAgICAgICAgICAgICBldmVudHM9eyJldmVudHMiOiBbXSwgInN0YXRlX3BhdGNoZXMiOiBbXX0sCiAgICAgICAgICAgICAgICBkZWJ1Zz17Im5vcm1hbGl6ZWRfc2VnbWVudHMiOiB7InNlZ21lbnRzIjogW3sKICAgICAgICAgICAgICAgICAgICAiaWQiOiAic2VnLTEiLCAicmF3X3RleHQiOiAiQWxleCBpcyAyMCB5ZWFycyBvbGQuIgogICAgICAgICAgICAgICAgfV19fSwKICAgICAgICAgICAgKQogICAgICAgICAgICBjbGFzcyBQaXBlbGluZToKICAgICAgICAgICAgICAgIGRlZiBydW4oc2VsZiwgX3RleHQpOgogICAgICAgICAgICAgICAgICAgIHJldHVybiByZXN1bHQKICAgICAgICAgICAgZnguZGlzY292ZXJ5LnBpcGVsaW5lID0gUGlwZWxpbmUoKQogICAgICAgICAgICByZXBvcnQgPSBmeC5kaXNjb3ZlcnkuY2FwdHVyZV90dXJuKHR1cm5bImlkIl0pCiAgICAgICAgICAgIHNlbGYuYXNzZXJ0RXF1YWwocmVwb3J0LnByb3Bvc2l0aW9ucywgMCkKICAgICAgICAgICAgd2l0aCBmeC5kaXNjb3Zlcnkuc3RvcmUuY29ubmVjdGlvbigpIGFzIGNvbjoKICAgICAgICAgICAgICAgIG1lbnRpb24gPSBjb24uZXhlY3V0ZSgKICAgICAgICAgICAgICAgICAgICAiU0VMRUNUIHJlc29sdXRpb25fc3RhdGUgRlJPTSBkaXNjb3ZlcnlfbWVudGlvbnMgV0hFUkUgc291cmNlX3R1cm5faWQ9PyBBTkQgcmF3X2VudGl0eV9rZXk9PyIsCiAgICAgICAgICAgICAgICAgICAgKHR1cm5bImlkIl0sICJjaGFyOmV4dHJhY3Rvci1sb2NhbCIpLAogICAgICAgICAgICAgICAgKS5mZXRjaG9uZSgpCiAgICAgICAgICAgIHNlbGYuYXNzZXJ0RXF1YWwobWVudGlvblsicmVzb2x1dGlvbl9zdGF0ZSJdLCAiYW1iaWd1b3VzIikKCiAgICBkZWYgdGVzdF9mb3JtX3BhcmVudF9zZWxlY3Rpb25fdXNlc19zY29wZWRfcmVhZF9tb2RlbChzZWxmKToKICAgICAgICBpbXBvcnQgaW5zcGVjdAogICAgICAgIGZyb20gc3JjLmRpc2NvdmVyeS5jb250aW51aXR5IGltcG9ydCBDb250aW51aXR5UmVzb2x2ZXIKCiAgICAgICAgc291cmNlID0gaW5zcGVjdC5nZXRzb3VyY2UoQ29udGludWl0eVJlc29sdmVyLl9idWlsZF9mb3JtKQogICAgICAgIHNlbGYuYXNzZXJ0SW4oInZpc2libGVfcGFyZW50cyA9IHNlbGYubGlzdF9mb3Jtcyhjb250ZXh0LCBzdWJqZWN0X2tleT1zdWJqZWN0X2tleSkiLCBzb3VyY2UpCiAgICAgICAgc2VsZi5hc3NlcnROb3RJbigiT1JERVIgQlkgQ09BTEVTQ0Uoc3Rvcnlfb3JkZXIsLTFlMzA4KSBERVNDIiwgc291cmNlKQonJycKdGVzdC53cml0ZV90ZXh0KHRleHQucmVwbGFjZShtYXJrZXIsIGFkZGl0aW9uICsgbWFya2VyLCAxKSwgZW5jb2Rpbmc9J3V0Zi04JykKcHJpbnQoJ0FwcGxpZWQgdjEuMi4yIHNjb3BlL2FtYmlndWl0eSBwb2xpc2gnKQo="
         run: |
           python - <<'PY'
-          from pathlib import Path
-
-          def replace_once(rel, old, new):
-              p = Path(rel)
-              text = p.read_text(encoding='utf-8')
-              assert text.count(old) == 1, f'{rel}: expected one target, got {text.count(old)}'
-              p.write_text(text.replace(old, new, 1), encoding='utf-8')
-
-          replace_once(
-              'src/discovery/service.py',
-              '''            for path, value, segment_id, confidence, epistemic, inferred in self._flatten_attributes(entity.get("attributes") or {}):\n                if not label or label.casefold() in GENERIC_ENTITY_LABELS:\n                    skipped += 1\n                    continue\n''',
-              '''            for path, value, segment_id, confidence, epistemic, inferred in self._flatten_attributes(entity.get("attributes") or {}):\n                if (\n                    not label or label.casefold() in GENERIC_ENTITY_LABELS\n                    or entity.get("resolution_state") != "resolved"\n                ):\n                    skipped += 1\n                    continue\n''',
-          )
-
-          replace_once(
-              'src/discovery/continuity.py',
-              '''        form_id = self._form_id(subject_key, turn_id, source_kind)\n        with self.store.connection() as con:\n            existing = con.execute("SELECT id FROM continuity_forms WHERE id=?", (form_id,)).fetchone()\n            parent = con.execute(\n                "SELECT * FROM continuity_forms WHERE project_id IS ? AND world_id IS ? AND subject_key=? AND id!=? "\n                "ORDER BY COALESCE(story_order,-1e308) DESC,created_at DESC LIMIT 1",\n                (session.get("project_id"), session.get("world_id"), subject_key, form_id),\n            ).fetchone()\n        if existing:\n            return False\n        before_state = loads(parent["after_state_json"] or parent["state_json"], {}) if parent else dict(after_state)\n''',
-              '''        form_id = self._form_id(subject_key, turn_id, source_kind)\n        with self.store.connection() as con:\n            existing = con.execute("SELECT id FROM continuity_forms WHERE id=?", (form_id,)).fetchone()\n        if existing:\n            return False\n        # Parent selection must use the same scoped visibility rule as the read\n        # model. A raw project/world query can accidentally parent a form to a\n        # sibling-branch state that is invisible in this lineage.\n        visible_parents = self.list_forms(context, subject_key=subject_key)\n        parent = visible_parents[-1] if visible_parents else None\n        before_state = (\n            dict(parent.get("after_state") or parent.get("state") or after_state)\n            if parent else dict(after_state)\n        )\n''',
-          )
-
-          test = Path('tests/test_v122_topdown_completion.py')
-          text = test.read_text(encoding='utf-8')
-          marker = '\n\nif __name__ == "__main__":\n'
-          assert text.count(marker) == 1
-          addition = r'''
-
-    def test_ambiguous_named_identity_does_not_emit_unanchored_attributes(self):
-        from types import SimpleNamespace
-
-        with tempfile.TemporaryDirectory() as td:
-            fx = TopDownFixture(td)
-            # Two exact prior subjects with the same label intentionally make the
-            # next mention ambiguous. The mention is inspectable, but its facts
-            # must not be attached to an extractor-local pseudo-identity.
-            for key in ("char:alex-a", "char:alex-b"):
-                fx.discovery.store.upsert_proposition(
-                    project_id=fx.project["id"], world_id=fx.world_id,
-                    subject_type="character", subject_key=key, subject_label="Alex",
-                    predicate="appearance.eye_color", value="blue", operation="update",
-                )
-            turn = fx.turn("Alex is 20 years old.", "amb-attr")
-            result = SimpleNamespace(
-                extracted_state={
-                    "entities": [{
-                        "id": "char:extractor-local", "type": "character", "label": "Alex",
-                        "introduced_by": "seg-1",
-                        "attributes": {"age": {
-                            "value": 20, "source_segment": "seg-1", "confidence": 1.0,
-                            "epistemic": "explicit", "inferred": False,
-                        }},
-                    }],
-                    "relations": [],
-                },
-                events={"events": [], "state_patches": []},
-                debug={"normalized_segments": {"segments": [{
-                    "id": "seg-1", "raw_text": "Alex is 20 years old."
-                }]}},
-            )
-            class Pipeline:
-                def run(self, _text):
-                    return result
-            fx.discovery.pipeline = Pipeline()
-            report = fx.discovery.capture_turn(turn["id"])
-            self.assertEqual(report.propositions, 0)
-            with fx.discovery.store.connection() as con:
-                mention = con.execute(
-                    "SELECT resolution_state FROM discovery_mentions WHERE source_turn_id=? AND raw_entity_key=?",
-                    (turn["id"], "char:extractor-local"),
-                ).fetchone()
-            self.assertEqual(mention["resolution_state"], "ambiguous")
-
-    def test_form_parent_selection_uses_scoped_read_model(self):
-        import inspect
-
-        source = inspect.getsource(__import__("src.discovery.continuity", fromlist=["ContinuityResolver"]).ContinuityResolver._build_form)
-        self.assertIn("visible_parents = self.list_forms(context, subject_key=subject_key)", source)
-        self.assertNotIn("ORDER BY COALESCE(story_order,-1e308) DESC", source)
-'''
-          test.write_text(text.replace(marker, addition + marker, 1), encoding='utf-8')
+          import base64, os
+          source = base64.b64decode(os.environ['PATCH_B64']).decode('utf-8')
+          compile(source, '<v122-scope-patch>', 'exec')
+          exec(compile(source, '<v122-scope-patch>', 'exec'), {'__name__': '__main__'})
           PY
       - name: Validate full repository
         run: |
@@ -113,8 +40,10 @@ jobs:
           node --check src/interface/web/static/arline.js
           node tests/frontend/memory_runtime_smoke.js
           git diff --check
-      - name: Remove temporary workflow
-        run: rm -f .github/workflows/apply-v122-scope-polish.yml
+      - name: Remove temporary workflow and trigger
+        run: |
+          rm -f .github/workflows/apply-v122-scope-polish.yml
+          rm -f .github/v122_scope_trigger
       - name: Commit validated polish
         run: |
           git config user.name "github-actions[bot]"
