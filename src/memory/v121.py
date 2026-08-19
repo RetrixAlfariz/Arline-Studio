@@ -430,8 +430,8 @@ def _index_turn_v121(self: MemoryIndexer, turn: dict[str, Any], *args, **kwargs)
     return _ORIGINAL_INDEX_TURN(self, scoped, *args, **kwargs)
 
 
-def _compile_v121(self: QueryCompiler, query: str, scope):
-    plan = _ORIGINAL_COMPILE(self, query, scope)
+def _compile_v121(self: QueryCompiler, query: str, scope, context_plan=None):
+    plan = _ORIGINAL_COMPILE(self, query, scope, context_plan=context_plan)
     if CharacterRailParser.parse(query).active:
         plan.route = QueryRoute.STORY_CONTINUE
         if "character_rails" not in plan.predicates:

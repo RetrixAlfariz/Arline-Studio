@@ -1,6 +1,6 @@
 [project]
 name = "arline-studio"
-version = "1.2.2a1"
+version = "1.2.3a1"
 description = "Arline story workspace with projects, worlds, entity variants, canon workflow, WCF, LM Studio writing, and dataset feedback"
 readme = "README.md"
 requires-python = ">=3.11"

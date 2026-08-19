@@ -32,6 +32,7 @@ class RetrievalLane(StrEnum):
     EVENTS = "events"
     EPISTEMIC = "epistemic"
     SPATIAL = "spatial"
+    RELATIONSHIPS = "relationships"
     THREADS = "threads"
     FTS_MANUSCRIPT = "fts_manuscript"
     FTS_CHAT = "fts_chat"
@@ -147,6 +148,7 @@ class QueryPlan:
     require_abstention: bool = True
     trace: bool = True
     normalized_query: str = ""
+    context_plan: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -165,6 +167,7 @@ class QueryPlan:
             "require_abstention": self.require_abstention,
             "trace": self.trace,
             "normalized_query": self.normalized_query,
+            "context_plan": self.context_plan,
         }
 
 

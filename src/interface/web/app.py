@@ -989,7 +989,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             token_budget=memory_budget,
         )
         try:
-            result = memory_service.retrieve(prompt, memory_scope)
+            result = memory_service.retrieve(prompt, memory_scope, workspace_context=ws_context)
             return memory_service.augment_workspace_context(ws_context, result)
         except Exception as exc:
             ws_context.scope["memory"] = {

@@ -10,6 +10,7 @@ from .index import MemoryIndexer
 from .models import MemoryQueryContext, RetrievalResult
 from .query import MemoryQueryEngine
 from .store import MemoryStore
+from src.context.intelligence import NarrativeContextPlanner
 
 
 class MemoryService:
@@ -33,6 +34,7 @@ class MemoryService:
                                      config=config, embedding=embedding)
         self.query_engine = MemoryQueryEngine(store=store, workspace=workspace, history=history, foundation=foundation,
                                               config=config, embedding=embedding, reranker=self.reranker)
+        self.context_planner = NarrativeContextPlanner()
         self._refresh_lock = RLock()
         self._refresh_timers: dict[str, Timer] = {}
 
@@ -175,26 +177,37 @@ class MemoryService:
                 "config": self.config.to_dict(), "embedding_available": embedding_available,
                 "fallback_active": bool(self.config.dense_enabled and not embedding_available),
                 "fallback": "structured indexes + SQLite FTS5" if self.config.fts_enabled else "structured indexes",
-                "reranker_requested": self.config.reranker.enabled, "reranker_available": self.reranker.available()}
+                "reranker_requested": self.config.reranker.enabled, "reranker_available": self.reranker.available(),
+                "context_intelligence_version": self.context_planner.VERSION}
 
     def backfill(self, project_id: str | None = None) -> dict[str, Any]:
         if not self.config.enabled:
             return {"disabled": True, "documents": 0, "turns": 0, "chunks": 0}
         return self.indexer.backfill(project_id)
 
-    def retrieve(self, query: str, context: MemoryQueryContext) -> RetrievalResult:
+    def retrieve(self, query: str, context: MemoryQueryContext, *, workspace_context=None) -> RetrievalResult:
         if not self.config.enabled or not query.strip():
             from .models import QueryPlan, QueryRoute
             plan = QueryPlan(QueryRoute.TEXT_RECALL, context, normalized_query=query.strip())
             return RetrievalResult("disabled", plan, [], [], "", {}, True, "Memory retrieval is disabled.")
-        return self.query_engine.execute(query, self._enrich_context(context))
+        enriched = self._enrich_context(context)
+        route = self.query_engine.compiler.route(query)
+        intelligence = self.context_planner.plan(
+            query, enriched, workspace_context=workspace_context, route=route
+        )
+        return self.query_engine.execute(query, enriched, context_plan=intelligence.to_dict())
 
     def augment_workspace_context(self, workspace_context, result: RetrievalResult):
+        intelligence = result.plan.context_plan or {}
         memory_meta = {
             "run_id": result.run_id, "route": result.plan.route.value, "selected": len(result.selected),
             "excluded": len(result.excluded), "abstain": result.abstain, "reason": result.abstention_reason,
             "token_budget": result.plan.scope.token_budget,
+            "context_intelligence_version": intelligence.get("version"),
+            "intent": intelligence.get("intent"),
         }
+        if intelligence:
+            workspace_context.scope["context_intelligence"] = intelligence
         if not result.packed_text:
             workspace_context.scope["memory"] = memory_meta
             return workspace_context
@@ -204,6 +217,9 @@ class MemoryService:
         workspace_context.scope["memory"] = {
             **memory_meta, "lens": result.plan.scope.context_lens.value, "lane_counts": result.lane_counts,
             "packed_tokens": packed_tokens, "diagnostics": result.diagnostics,
+            "dimensions": intelligence.get("dimensions") or {},
+            "preserve_lanes": intelligence.get("preserve_lanes") or [],
+            "focus_resources": intelligence.get("focus_resources") or [],
             "selected_sources": [{"id": item.id, "lane": item.lane.value, "source_type": item.source_type,
                                   "source_id": item.source_id, "score": round(item.score, 6), "ranks": item.ranks}
                                  for item in result.selected],

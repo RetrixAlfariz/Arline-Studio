@@ -27,8 +27,8 @@ def _structured_with_discovery(self: MemoryQueryEngine, plan, lane):
     return output
 
 
-def _rrf_with_discovery(self: MemoryQueryEngine, lane_results):
-    result = list(_ORIGINAL_RRF(self, lane_results))
+def _rrf_with_discovery(self: MemoryQueryEngine, lane_results, plan):
+    result = list(_ORIGINAL_RRF(self, lane_results, plan))
     for candidate in result:
         if candidate.authority == "discovery_reviewed":
             candidate.score += 0.055

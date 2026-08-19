@@ -159,3 +159,26 @@ specification.
 - Background refresh failures create a visible issue/activity record, pending refreshes are cancelled on delete, and source guards prevent a late timer from resurrecting deleted/stale evidence.
 - `enabled`, `fts_enabled`, `trace_enabled`, and `reranker.enabled` now control their advertised runtime behavior.
 - Query routing no longer treats the mere words “scene” or “dialogue” as a continuation command; deterministic routes abstain when their required evidence lanes are empty after ScopeGate.
+
+
+## v1.2.3 — Narrative Context Intelligence
+
+The v1.2.3 milestone adds one deterministic orchestration layer above Workspace,
+Memory and the v1.2.2 continuity graph.
+
+Implemented:
+
+- `NarrativeContextPlan` classifies the current narrative intent and records the active POV, location, participants and explicit references as focus anchors;
+- scene anchors are injected into retrieval even for terse prompts such as `Continue.`;
+- Continuity is a real retrieval lane exposing current heads, Forms, Events/Causes and unresolved conflicts without granting Canon;
+- Relationships are a real structured retrieval lane for focused variants;
+- dialogue/action/description/transition/causal/recall/summary/continuity-review/branch-compare intents receive different deterministic dimension weights;
+- POV, continuity and other high-value dimensions receive protected semantic slots under tight token budgets before verbose source evidence;
+- lane weights influence RRF ranking while ScopeGate remains authoritative for branch, temporal and POV visibility;
+- the packed generation context is now explicitly labeled `@ARLINE-NARRATIVE-CONTEXT 1.2.3` and separates unresolved continuity, active continuity, accepted state, POV knowledge, relationships, events, spatial context, threads and source evidence;
+- the exact context plan is exposed in `workspace_context.scope.context_intelligence` and Memory diagnostics so every automatic selection remains inspectable;
+- context relevance never mutates Discovery or Canon authority.
+
+The milestone deliberately avoids an LLM-based context router. Context planning
+is deterministic, cheap and rebuildable; model intelligence remains focused on
+writing rather than deciding source authority.
