@@ -9,6 +9,7 @@ import unittest
 from src.discovery.store import DiscoveryStore
 from src.domain_events import clear_domain_event_bus, get_domain_event_bus
 from src.history import HistoryStore
+from src.runtime_config import RuntimeConfig
 from src.version import __version__
 
 
@@ -149,6 +150,21 @@ class ArchitectureHardeningTests(unittest.TestCase):
         self.assertNotIn("api_key", legacy_get)
         self.assertIn("ModelsPayload", app)
         self.assertIn('api_key: str | None = None', app)
+
+    def test_saved_runtime_config_never_persists_api_key(self):
+        with tempfile.TemporaryDirectory() as td:
+            config_path = Path(td) / "arline.toml"
+            source = (ROOT / "config/arline.toml").read_text(encoding="utf-8")
+            source = source.replace('api_key = ""', 'api_key = "FAKE-STORED-SECRET"', 1)
+            config_path.write_text(source, encoding="utf-8")
+
+            cfg = RuntimeConfig.load(config_path)
+            cfg.lmstudio.api_key = "FAKE-RUNTIME-SECRET"
+            cfg.save_runtime_values()
+
+            saved = tomllib.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["lmstudio"]["api_key"], "")
+            self.assertNotIn("FAKE-RUNTIME-SECRET", config_path.read_text(encoding="utf-8"))
 
     def test_combined_migration_backup_covers_derived_stores_once(self):
         app = (ROOT / "src/interface/web/app.py").read_text(encoding="utf-8")
