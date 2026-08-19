@@ -57,12 +57,16 @@ jobs:
           test ! -e tools/apply_architecture_hardening.py
           test ! -e tools/apply_event_spine_polish.py
           test ! -e tools/apply_final_architecture_cleanup.py
+          test ! -e tools/apply_quick_create_request_boundary.py
+          test ! -e tools/apply_workspace_discovery_events.py
           test ! -e .github/workflows/apply-hardening.yml
           test ! -e .github/workflows/apply-v11-final.yml
           test ! -e .github/workflows/apply-v1-1-hardening.yml
           test ! -e .github/workflows/apply-architecture-hardening.yml
           test ! -e .github/workflows/apply-event-spine-polish.yml
           test ! -e .github/workflows/apply-final-architecture-cleanup.yml
+          test ! -e .github/workflows/apply-quick-create-boundary.yml
+          test ! -e .github/workflows/apply-workspace-discovery-events.yml
           if [ -d tools ] && find tools -maxdepth 1 -type f \( -iname '*v12*' -o -iname '*v1_2*' -o -iname '*v120*' \) | grep -q .; then
             echo 'Temporary v1.2 applicator/tooling is tracked in the repository.' >&2
             exit 1
