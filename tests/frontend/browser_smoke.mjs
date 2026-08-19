@@ -78,7 +78,7 @@ try {
   await page.click("#newChatBtn");
   await page.waitForFunction(() => document.getElementById("chatView")?.classList.contains("active"));
   await page.waitForFunction(() => window.ArlineRuntime?.getState?.().commandRegistryVersion === "1.2.4a1");
-  if (!document.getElementById("deliberationOutput")) throw new Error("Intuition inspector panel is missing");
+  if (!(await page.locator("#deliberationOutput").count())) throw new Error("Intuition inspector panel is missing");
 
   await page.fill("#promptInput", "/intu");
   await page.waitForFunction(() => !document.getElementById("slashPopup")?.classList.contains("hidden"));
