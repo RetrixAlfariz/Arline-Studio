@@ -1,6 +1,8 @@
 [lmstudio]
 base_url = "http://127.0.0.1:1234"
 model = "qwen3.5-4b-uncensored-hauhaucs-aggressive"
+# Runtime secret only. For persistence, set ARLINE_LMSTUDIO_API_KEY;
+# Settings saves intentionally keep this portable file blank.
 api_key = ""
 timeout_seconds = 600.0
 auto_load = true

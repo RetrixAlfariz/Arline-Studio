@@ -325,7 +325,9 @@ function applyConfig(config) {
   state.config = config;
   byId("serverUrl").value = config.server_url || "http://127.0.0.1:1234";
   byId("apiKey").value = "";
-  byId("apiKey").placeholder = config.api_key_configured ? "Configured — leave blank to keep" : "Optional API key";
+  byId("apiKey").placeholder = config.api_key_configured
+    ? "Configured securely · optional session override"
+    : "Session-only key · persist with ARLINE_LMSTUDIO_API_KEY";
   byId("gpuRatio").value = config.gpu_ratio ?? 1;
   byId("contextLength").value = config.context_length ?? 32768;
   byId("modeSelect").value = config.input_mode || "smart_hybrid";
@@ -393,7 +395,7 @@ function updateReasoningWarning() {
 async function saveSettings() {
   try {
     await api("/api/settings", { method: "POST", body: runtimePayload() });
-    toast("Settings saved");
+    toast("Settings saved · API keys stay out of arline.toml");
   } catch (error) { toast(`Save failed: ${error.message}`); }
 }
 
