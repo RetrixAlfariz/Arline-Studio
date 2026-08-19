@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/v123_topdown_apply.py'
+      - '.github/v123_compat_hotfix.py'
       - '.github/workflows/v123-topdown-completion.yml'
 
 permissions:
@@ -22,7 +23,9 @@ jobs:
         with:
           python-version: '3.13'
       - name: Apply top-down context intelligence
-        run: python .github/v123_topdown_apply.py
+        run: |
+          python .github/v123_topdown_apply.py
+          python .github/v123_compat_hotfix.py
       - name: Validate v1.2.3
         shell: bash
         run: |
@@ -39,7 +42,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f .github/v123_topdown_apply.py .github/workflows/v123-topdown-completion.yml
+          rm -f .github/v123_topdown_apply.py .github/v123_compat_hotfix.py .github/workflows/v123-topdown-completion.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
