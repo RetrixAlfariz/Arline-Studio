@@ -80,6 +80,7 @@
     return byId("quickCreateBranch")?.selectedOptions?.[0]?.dataset.kind || "main";
   }
   function currentScopeValue(id) { return byId(id)?.value || ""; }
+  function runtimeScope() { return window.ArlineRuntime?.getScope?.() || {}; }
 
   async function fetchJSON(url, init = undefined) {
     const response = await originalFetch(url, init);
@@ -104,9 +105,9 @@
   function selectedMode() { return decodeCreateAs(byId("quickCreateKind")?.value || ""); }
 
   function scopePayload(mode = selectedMode()) {
-    const projectId = byId("quickCreateProject")?.value || currentScopeValue("projectSelect") || null;
-    const worldId = byId("quickCreateWorld")?.value || currentScopeValue("worldSelect") || null;
-    const branchId = byId("quickCreateBranch")?.value || currentScopeValue("branchSelect") || null;
+    const projectId = byId("quickCreateProject")?.value || runtimeScope().projectId || null;
+    const worldId = byId("quickCreateWorld")?.value || runtimeScope().worldId || null;
+    const branchId = byId("quickCreateBranch")?.value || runtimeScope().branchId || null;
     const main = activeBranchKind() === "main";
     const folderId = byId("quickCreateFolder")?.value || null;
     if (mode.kind === "project") return { project_id: null, world_id: null, branch_id: null, folder_id: null };
@@ -210,7 +211,7 @@
   async function refreshProjectsAndWorlds() {
     const data = bootstrapCache || await loadBootstrap();
     const projectSelect = byId("quickCreateProject");
-    const currentProject = currentScopeValue("projectSelect") || data.active?.project?.id || data.projects?.[0]?.id || "";
+    const currentProject = runtimeScope().projectId || data.active?.project?.id || data.projects?.[0]?.id || "";
     fillSelect(projectSelect, data.projects || [], currentProject, (row) => row.name);
 
     let worlds = data.worlds || [];
@@ -221,7 +222,7 @@
         if (project.worlds?.length) worlds = project.worlds;
       } catch (_) {}
     }
-    const currentWorld = currentScopeValue("worldSelect") || data.active?.world?.id || data.world_bible?.default_world_id || worlds[0]?.id || "";
+    const currentWorld = runtimeScope().worldId || data.active?.world?.id || data.world_bible?.default_world_id || worlds[0]?.id || "";
     fillSelect(byId("quickCreateWorld"), worlds, currentWorld, (row) => `${row.name}${row.canon_status ? ` · ${row.canon_status}` : ""}`);
     await refreshBranches();
   }
@@ -232,7 +233,7 @@
     if (!worldId) { if (branchSelect) branchSelect.innerHTML = ""; return; }
     try {
       const world = await fetchJSON(`/api/worlds/${encodeURIComponent(worldId)}`);
-      const currentBranch = currentScopeValue("branchSelect") || world.branches?.find((b) => b.kind === "main")?.id || world.branches?.[0]?.id || "";
+      const currentBranch = runtimeScope().branchId || world.branches?.find((b) => b.kind === "main")?.id || world.branches?.[0]?.id || "";
       if (branchSelect) {
         branchSelect.innerHTML = (world.branches || []).map((branch) => `<option value="${branch.id}" data-kind="${branch.kind || "main"}">${branch.name} · ${branch.kind || "main"}</option>`).join("");
         if ([...branchSelect.options].some((option) => option.value === currentBranch)) branchSelect.value = currentBranch;

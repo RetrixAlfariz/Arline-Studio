@@ -10,6 +10,7 @@ import sqlite3
 from threading import RLock
 from typing import Any, Iterable
 from uuid import uuid4
+from src.domain_events import emit_domain_event
 
 
 WORKSPACE_SCHEMA_VERSION = 7
@@ -3651,7 +3652,9 @@ class WorkspaceStore:
                 "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (event_id, world_id, branch_id, owner_type, owner_id, time_label.strip(), float(order_key), event_type.strip() or "event", summary.strip(), _dumps(state_patch or {}), source_type, source_id, status, now, now),
             )
-        return self.get_timeline_event(event_id)
+        result=self.get_timeline_event(event_id)
+        emit_domain_event(self.path,"workspace.timeline_event_created",{"event":result})
+        return result
 
     def get_timeline_event(self, event_id: str) -> dict[str, Any]:
         with self._connection() as con:

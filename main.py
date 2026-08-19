@@ -15,6 +15,7 @@ from src.runtime_config import (
     VALID_PROJECTION_MODES,
 )
 from src.service import ArlineService
+from src.version import __version__
 
 
 def dump(path: Path, payload) -> None:
@@ -31,8 +32,8 @@ def dump(path: Path, payload) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Arline Studio v0.6.4 — projects, worlds, entity variants, WCF writer context, "
-            "LM Studio writer"
+            f"Arline Studio v{__version__} — local-first narrative workspace, memory, "
+            "continuity, and LM Studio writer"
         )
     )
     parser.add_argument("input", nargs="?", type=Path)

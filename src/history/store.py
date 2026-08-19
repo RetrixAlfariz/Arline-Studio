@@ -11,6 +11,7 @@ from threading import RLock
 from typing import Any, Iterable
 
 from src.storage_backup import backup_sqlite_before_migrations
+from src.domain_events import emit_domain_event
 from uuid import uuid4
 
 
@@ -573,27 +574,22 @@ class HistoryStore:
             cur = con.execute("DELETE FROM sessions WHERE id=?", (session_id,))
             if cur.rowcount == 0:
                 raise KeyError(session_id)
+        emit_domain_event(self.path,"history.session_deleted",{"session_id":session_id})
 
     def delete_sessions_by_scope(
         self, *, project_id: str | None = None, world_id: str | None = None,
         branch_id: str | None = None
     ) -> int:
-        """Delete chats bound to a workspace scope that is being deleted."""
-        filters: list[str] = []
-        params: list[Any] = []
-        for column, value in (
-            ("project_id", project_id), ("world_id", world_id), ("branch_id", branch_id)
-        ):
-            if value is not None:
-                filters.append(f"{column}=?")
-                params.append(value)
-        if not filters:
-            raise ValueError("At least one scope id is required")
-        with self._lock, self._connection() as con:
-            cur = con.execute(
-                f"DELETE FROM sessions WHERE {' AND '.join(filters)}", params
-            )
-            return max(0, cur.rowcount)
+        filters=[];params=[]
+        for column,value in (("project_id",project_id),("world_id",world_id),("branch_id",branch_id)):
+            if value is not None:filters.append(f"{column}=?");params.append(value)
+        if not filters:raise ValueError("At least one scope id is required")
+        with self._lock,self._connection() as con:
+            rows=con.execute(f"SELECT id FROM sessions WHERE {' AND '.join(filters)}",params).fetchall()
+            session_ids=[str(x["id"]) for x in rows]
+            cur=con.execute(f"DELETE FROM sessions WHERE {' AND '.join(filters)}",params);deleted=max(0,cur.rowcount)
+        emit_domain_event(self.path,"history.scope_deleted",{"project_id":project_id,"world_id":world_id,"branch_id":branch_id,"session_ids":session_ids,"deleted_count":deleted})
+        return deleted
 
     def clear_folder_reference(self, folder_id: str) -> int:
         """Keep chats when a folder is removed, but move them back to unfiled."""
@@ -682,7 +678,9 @@ class HistoryStore:
             except Exception:
                 con.execute("ROLLBACK")
                 raise
-        return self.get_turn(turn_id)
+        result=self.get_turn(turn_id)
+        emit_domain_event(self.path,"history.turn_created",{"turn":result})
+        return result
 
     def set_feedback(
         self,
@@ -726,7 +724,9 @@ class HistoryStore:
             except Exception:
                 con.execute("ROLLBACK")
                 raise
-        return self.get_turn(turn_id)
+        result=self.get_turn(turn_id)
+        emit_domain_event(self.path,"history.feedback_changed",{"turn":result})
+        return result
 
     def build_continuity_context(
         self,

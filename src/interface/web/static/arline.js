@@ -2332,6 +2332,7 @@ async function generateStory() {
     return;
   }
   const payload = promptPayload();
+  const sentDraftKey = composerDraftKey();
   if (!payload.prompt.trim()) return toast("Write a prompt first");
   if (!payload.model) return toast("Select a model first");
   const live = createLiveTurn(payload);

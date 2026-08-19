@@ -1,7 +1,7 @@
 # Arline v1.2 implementation status
 
 **Development branch:** `develop/v1.2`  
-**Package version:** `1.2.0a1` (v1.2.1 development extension reports `1.2.1a1`)  
+**Package version:** `1.2.2a1`
 **Merge policy:** do not merge into `main` until the repository owner explicitly approves the complete v1.2 line.
 
 ## v1.2.0 milestone — complete foundation
@@ -117,7 +117,6 @@ Still external or deferred before calling the v1.2.1 milestone fully closed:
 - controlled real LM Studio BGE-M3 smoke/backfill on a local corpus/model runtime;
 - larger-corpus retrieval quality benchmarking beyond deterministic synthetic regression fixtures;
 - future Timeline update/delete APIs must bind the same derived-refresh rule when those mutation surfaces are introduced (the current Workspace API exposes Timeline add only);
-- package/lock metadata remains on `1.2.0a1` until a synchronized `pyproject.toml` + `uv.lock` version bump is performed at milestone close.
 
 ## Explicit v1.2.0 boundary
 

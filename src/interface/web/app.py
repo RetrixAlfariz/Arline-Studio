@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from importlib.metadata import PackageNotFoundError, version as package_version
 from difflib import SequenceMatcher
 import json
+import os
 import re
 import sqlite3
 from pathlib import Path
@@ -33,6 +34,8 @@ from src.service.streaming import StreamingArlineService
 from src.writer.quality import ProseQualityAnalyzer
 from src.storage_backup import backup_sqlite_before_migrations
 from src.memory import MemoryConfig, MemoryQueryContext, MemoryService, MemoryStore
+from src.discovery.store import DiscoveryStore
+from src.version import __version__
 from src.memory.web import create_memory_router
 from src.workspace.store import WORKSPACE_SCHEMA_VERSION
 from src.workspace import (
@@ -53,7 +56,7 @@ from src.workspace import (
 try:
     STUDIO_VERSION = package_version("arline-studio")
 except PackageNotFoundError:
-    STUDIO_VERSION = "1.1.0"
+    STUDIO_VERSION = __version__
 
 MODE_LABELS = {
     "smart_hybrid": "Smart Hybrid",
@@ -875,6 +878,8 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     workspace_path = Path(initial_cfg.workspace.database_path).resolve()
     migration_targets.setdefault(history_path, {})["meta"] = HISTORY_SCHEMA_VERSION
     migration_targets.setdefault(workspace_path, {})["workspace_meta"] = max(WORKSPACE_SCHEMA_VERSION, FoundationStore.SCHEMA_VERSION)
+    migration_targets.setdefault(workspace_path, {})["memory_meta"] = MemoryStore.SCHEMA_VERSION
+    migration_targets.setdefault(workspace_path, {})["discovery_meta"] = DiscoveryStore.SCHEMA_VERSION
     migration_backups = []
     for database_path, targets in migration_targets.items():
         backup = backup_sqlite_before_migrations(database_path, targets)
@@ -885,7 +890,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     workspace = WorkspaceStore(initial_cfg.workspace.database_path, backup_before_migration=False)
     foundation = FoundationStore(initial_cfg.workspace.database_path)
     memory_config = MemoryConfig.load(config_path)
-    memory_store = MemoryStore(initial_cfg.workspace.database_path)
+    memory_store = MemoryStore(initial_cfg.workspace.database_path, backup_before_migration=False)
     memory_service = MemoryService(
         store=memory_store,
         workspace=workspace,
@@ -1028,13 +1033,9 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         }
 
     @app.get("/api/models")
-    def get_models(
-        server_url: str = Query("http://127.0.0.1:1234"),
-        api_key: str = Query(""),
-    ):
-        cfg = RuntimeConfig.load(config_path)
-        cfg.lmstudio.base_url = RuntimeConfig.normalize_server_url(server_url)
-        cfg.lmstudio.api_key = api_key
+    def get_models(server_url: str = Query("http://127.0.0.1:1234")):
+        # URL credentials are forbidden; transient keys use POST /api/models/query.
+        cfg=RuntimeConfig.load(config_path);cfg.lmstudio.base_url=RuntimeConfig.normalize_server_url(server_url)
         service = ArlineService(cfg)
         try:
             models = service.list_models()
@@ -3394,7 +3395,9 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
 
 
 def launch_ui(config_path: Path | str = DEFAULT_CONFIG_PATH) -> None:
-    cfg = RuntimeConfig.load(config_path)
+    cfg=RuntimeConfig.load(config_path);host=str(cfg.ui.host or "127.0.0.1").strip().lower()
+    if host not in {"127.0.0.1","localhost","::1"} and os.getenv("ARLINE_ALLOW_UNAUTHENTICATED_REMOTE_UI")!="1":
+        raise RuntimeError("Refusing unauthenticated remote UI bind. Keep ui.host on loopback or explicitly set ARLINE_ALLOW_UNAUTHENTICATED_REMOTE_UI=1.")
     uvicorn.run(
         create_app(config_path),
         host=cfg.ui.host,
