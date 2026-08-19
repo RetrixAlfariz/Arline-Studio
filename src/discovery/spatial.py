@@ -179,9 +179,11 @@ def detect_location_hierarchy(text: str) -> list[GeneralCandidate]:
 
 def install_spatial_discovery() -> None:
     global _INSTALLED
-    if _INSTALLED:
+    current = DiscoveryService.capture_text
+    if getattr(current, "_arline_spatial_discovery", False):
+        _INSTALLED = True
         return
-    original_capture_text = DiscoveryService.capture_text
+    original_capture_text = current
 
     def capture_text_with_spatial(
         self: DiscoveryService,
@@ -256,5 +258,7 @@ def install_spatial_discovery() -> None:
             report.skipped,
         )
 
+    capture_text_with_spatial._arline_spatial_discovery = True
+    capture_text_with_spatial._arline_capture_base = original_capture_text
     DiscoveryService.capture_text = capture_text_with_spatial
     _INSTALLED = True

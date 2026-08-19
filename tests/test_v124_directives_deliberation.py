@@ -124,6 +124,24 @@ class V124DirectiveDeliberationTests(unittest.TestCase):
             self.assertEqual(out.status, "fallback")
             self.assertTrue(out.uncertainties)
 
+    def test_discovery_spatial_installer_repairs_stale_class_composition(self):
+        from src.discovery.service import DiscoveryService
+        from src.discovery.general import _capture_text_general, install_general_discovery
+        from src.discovery.spatial import install_spatial_discovery
+
+        original = DiscoveryService.capture_text
+        try:
+            # Simulate a later adapter/test resetting the class capture method
+            # while spatial._INSTALLED remains True from an earlier attach.
+            DiscoveryService.capture_text = _capture_text_general
+            install_general_discovery()
+            install_spatial_discovery()
+            repaired = DiscoveryService.capture_text
+            self.assertTrue(getattr(repaired, "_arline_spatial_discovery", False))
+            self.assertIs(getattr(repaired, "_arline_capture_base", None), _capture_text_general)
+        finally:
+            DiscoveryService.capture_text = original
+
     def test_source_integration_contracts(self):
         service = Path("src/service/arline_service.py").read_text(encoding="utf-8")
         streaming = Path("src/service/streaming.py").read_text(encoding="utf-8")

@@ -351,7 +351,14 @@ def _capture_text_general(self: DiscoveryService, text: str, *, source_kind: str
 
 def install_general_discovery() -> None:
     global _INSTALLED
-    if _INSTALLED:
+    current = DiscoveryService.capture_text
+    # A spatial wrapper is built on top of the general adapter, so seeing its
+    # marker means the complete chain is already present. The old boolean alone
+    # is insufficient because another test/runtime adapter may have replaced the
+    # class method after initial installation.
+    if current is _capture_text_general or getattr(current, "_arline_spatial_discovery", False):
+        _INSTALLED = True
         return
     DiscoveryService.capture_text = _capture_text_general
+    _capture_text_general._arline_general_discovery = True
     _INSTALLED = True
