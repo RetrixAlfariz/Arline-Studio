@@ -1,0 +1,124 @@
+name: Apply v1.2.2 scope polish
+
+on:
+  push:
+    branches:
+      - work/v122-topdown-completion
+
+permissions:
+  contents: write
+
+jobs:
+  polish:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v122-topdown-completion
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Apply scoped continuity polish
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(rel, old, new):
+              p = Path(rel)
+              text = p.read_text(encoding='utf-8')
+              assert text.count(old) == 1, f'{rel}: expected one target, got {text.count(old)}'
+              p.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          replace_once(
+              'src/discovery/service.py',
+              '''            for path, value, segment_id, confidence, epistemic, inferred in self._flatten_attributes(entity.get("attributes") or {}):\n                if not label or label.casefold() in GENERIC_ENTITY_LABELS:\n                    skipped += 1\n                    continue\n''',
+              '''            for path, value, segment_id, confidence, epistemic, inferred in self._flatten_attributes(entity.get("attributes") or {}):\n                if (\n                    not label or label.casefold() in GENERIC_ENTITY_LABELS\n                    or entity.get("resolution_state") != "resolved"\n                ):\n                    skipped += 1\n                    continue\n''',
+          )
+
+          replace_once(
+              'src/discovery/continuity.py',
+              '''        form_id = self._form_id(subject_key, turn_id, source_kind)\n        with self.store.connection() as con:\n            existing = con.execute("SELECT id FROM continuity_forms WHERE id=?", (form_id,)).fetchone()\n            parent = con.execute(\n                "SELECT * FROM continuity_forms WHERE project_id IS ? AND world_id IS ? AND subject_key=? AND id!=? "\n                "ORDER BY COALESCE(story_order,-1e308) DESC,created_at DESC LIMIT 1",\n                (session.get("project_id"), session.get("world_id"), subject_key, form_id),\n            ).fetchone()\n        if existing:\n            return False\n        before_state = loads(parent["after_state_json"] or parent["state_json"], {}) if parent else dict(after_state)\n''',
+              '''        form_id = self._form_id(subject_key, turn_id, source_kind)\n        with self.store.connection() as con:\n            existing = con.execute("SELECT id FROM continuity_forms WHERE id=?", (form_id,)).fetchone()\n        if existing:\n            return False\n        # Parent selection must use the same scoped visibility rule as the read\n        # model. A raw project/world query can accidentally parent a form to a\n        # sibling-branch state that is invisible in this lineage.\n        visible_parents = self.list_forms(context, subject_key=subject_key)\n        parent = visible_parents[-1] if visible_parents else None\n        before_state = (\n            dict(parent.get("after_state") or parent.get("state") or after_state)\n            if parent else dict(after_state)\n        )\n''',
+          )
+
+          test = Path('tests/test_v122_topdown_completion.py')
+          text = test.read_text(encoding='utf-8')
+          marker = '\n\nif __name__ == "__main__":\n'
+          assert text.count(marker) == 1
+          addition = r'''
+
+    def test_ambiguous_named_identity_does_not_emit_unanchored_attributes(self):
+        from types import SimpleNamespace
+
+        with tempfile.TemporaryDirectory() as td:
+            fx = TopDownFixture(td)
+            # Two exact prior subjects with the same label intentionally make the
+            # next mention ambiguous. The mention is inspectable, but its facts
+            # must not be attached to an extractor-local pseudo-identity.
+            for key in ("char:alex-a", "char:alex-b"):
+                fx.discovery.store.upsert_proposition(
+                    project_id=fx.project["id"], world_id=fx.world_id,
+                    subject_type="character", subject_key=key, subject_label="Alex",
+                    predicate="appearance.eye_color", value="blue", operation="update",
+                )
+            turn = fx.turn("Alex is 20 years old.", "amb-attr")
+            result = SimpleNamespace(
+                extracted_state={
+                    "entities": [{
+                        "id": "char:extractor-local", "type": "character", "label": "Alex",
+                        "introduced_by": "seg-1",
+                        "attributes": {"age": {
+                            "value": 20, "source_segment": "seg-1", "confidence": 1.0,
+                            "epistemic": "explicit", "inferred": False,
+                        }},
+                    }],
+                    "relations": [],
+                },
+                events={"events": [], "state_patches": []},
+                debug={"normalized_segments": {"segments": [{
+                    "id": "seg-1", "raw_text": "Alex is 20 years old."
+                }]}},
+            )
+            class Pipeline:
+                def run(self, _text):
+                    return result
+            fx.discovery.pipeline = Pipeline()
+            report = fx.discovery.capture_turn(turn["id"])
+            self.assertEqual(report.propositions, 0)
+            with fx.discovery.store.connection() as con:
+                mention = con.execute(
+                    "SELECT resolution_state FROM discovery_mentions WHERE source_turn_id=? AND raw_entity_key=?",
+                    (turn["id"], "char:extractor-local"),
+                ).fetchone()
+            self.assertEqual(mention["resolution_state"], "ambiguous")
+
+    def test_form_parent_selection_uses_scoped_read_model(self):
+        import inspect
+
+        source = inspect.getsource(__import__("src.discovery.continuity", fromlist=["ContinuityResolver"]).ContinuityResolver._build_form)
+        self.assertIn("visible_parents = self.list_forms(context, subject_key=subject_key)", source)
+        self.assertNotIn("ORDER BY COALESCE(story_order,-1e308) DESC", source)
+'''
+          test.write_text(text.replace(marker, addition + marker, 1), encoding='utf-8')
+          PY
+      - name: Validate full repository
+        run: |
+          uv sync --frozen
+          uv run python -m unittest discover -s tests -v
+          uv run python -m compileall -q src tests
+          node --check src/interface/web/static/js/discovery-sheets.js
+          node --check src/interface/web/static/arline.js
+          node tests/frontend/memory_runtime_smoke.js
+          git diff --check
+      - name: Remove temporary workflow
+        run: rm -f .github/workflows/apply-v122-scope-polish.yml
+      - name: Commit validated polish
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: keep v1.2.2 continuity lineage-scoped"
+          git push origin HEAD:work/v122-topdown-completion
