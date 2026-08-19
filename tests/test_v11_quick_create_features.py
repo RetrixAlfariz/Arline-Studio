@@ -9,12 +9,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class V11QuickCreateFeatureTests(unittest.TestCase):
     def test_feature_module_exposes_required_quick_create_surfaces(self):
-        stream = (ROOT / "src/interface/web/static/js/stream.js").read_text(encoding="utf-8")
+        html = (ROOT / "src/interface/web/static/index.html").read_text(encoding="utf-8")
         quick = (ROOT / "src/interface/web/static/js/quick-create.js").read_text(encoding="utf-8")
+        main_js = (ROOT / "src/interface/web/static/arline.js").read_text(encoding="utf-8")
         app = (ROOT / "src/interface/web/app.py").read_text(encoding="utf-8")
 
-        self.assertIn("/static/js/quick-create.js?v=1.1.4-qc", stream)
-        self.assertIn("installQuickCreateProjectScopeBridge", stream)
+        self.assertIn("/static/js/quick-create.js?v=1.2.2-hardening", html)
+        self.assertNotIn("window.fetch =", quick)
+        self.assertIn("preparePayload", quick)
+        self.assertIn("previewOverride", quick)
+        self.assertIn("ArlineQuickCreate?.preparePayload", main_js)
+        self.assertIn("ArlineQuickCreate?.previewOverride", main_js)
+
         for token in (
             'value="entity:character"', 'value="entity:location"',
             'value="entity:item"', 'value="entity:organization"',
@@ -31,7 +37,7 @@ class V11QuickCreateFeatureTests(unittest.TestCase):
             self.assertIn(token, quick)
 
         # The UI enhancement deliberately reuses capability already exposed by
-        # the v1.1 backend instead of adding a parallel schema.
+        # the backend instead of adding a parallel schema.
         self.assertIn("entity_type: str | None = None", app)
         self.assertIn("document_type: str | None = None", app)
         self.assertIn("folder_id: str | None = None", app)
@@ -51,6 +57,8 @@ vm.runInContext(source, context, { filename: "quick-create.js" });
 
 const api = context.ArlineQuickCreate;
 if (!api) throw new Error("ArlineQuickCreate helpers were not exported");
+if (typeof api.preparePayload !== "function") throw new Error("preparePayload missing");
+if (typeof api.previewOverride !== "function") throw new Error("previewOverride missing");
 
 const character = api.decodeCreateAs("entity:character");
 const research = api.decodeCreateAs("document:research");
