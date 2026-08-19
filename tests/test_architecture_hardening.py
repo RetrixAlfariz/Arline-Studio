@@ -76,11 +76,11 @@ class ArchitectureHardeningTests(unittest.TestCase):
             )
             clear_domain_event_bus(db)
 
-    def test_discovery_store_owns_continuity_schema(self):
+    def test_discovery_store_owns_all_discovery_derived_schema(self):
         with tempfile.TemporaryDirectory() as td:
             db = Path(td) / "discovery.db"
             store = DiscoveryStore(db)
-            self.assertEqual(store.SCHEMA_VERSION, 2)
+            self.assertEqual(store.SCHEMA_VERSION, 3)
             with sqlite3.connect(db) as con:
                 tables = {
                     row[0]
@@ -88,22 +88,37 @@ class ArchitectureHardeningTests(unittest.TestCase):
                         "SELECT name FROM sqlite_master WHERE type='table'"
                     ).fetchall()
                 }
-                version = con.execute(
+                continuity_version = con.execute(
                     "SELECT value FROM discovery_meta WHERE key='continuity_version'"
                 ).fetchone()[0]
+                provisional_version = con.execute(
+                    "SELECT value FROM discovery_provisional_meta WHERE key='schema_version'"
+                ).fetchone()[0]
             self.assertTrue(
-                {"continuity_edges", "continuity_conflicts", "continuity_forms"}
+                {
+                    "continuity_edges",
+                    "continuity_conflicts",
+                    "continuity_forms",
+                    "discovery_changes",
+                    "discovery_spatial_zones",
+                    "discovery_provisional_meta",
+                }
                 <= tables
             )
-            self.assertEqual(version, "1.2.2a1")
+            self.assertEqual(continuity_version, "1.2.2a1")
+            self.assertEqual(provisional_version, "1")
 
-        resolver = (ROOT / "src/discovery/continuity.py").read_text(encoding="utf-8")
-        self.assertNotIn("def _ensure_schema", resolver)
-        self.assertNotIn("CREATE TABLE IF NOT EXISTS continuity_", resolver)
+        continuity = (ROOT / "src/discovery/continuity.py").read_text(encoding="utf-8")
+        provisional = (ROOT / "src/discovery/provisional.py").read_text(encoding="utf-8")
+        self.assertNotIn("CREATE TABLE IF NOT EXISTS continuity_", continuity)
+        self.assertNotIn("CREATE TABLE IF NOT EXISTS discovery_changes", provisional)
+        self.assertNotIn("backup_sqlite_before_migrations", provisional)
 
-    def test_derived_systems_use_source_specific_event_buses_not_method_replacement(self):
+    def test_derived_systems_use_domain_events_not_authoritative_method_replacement(self):
         memory_web = (ROOT / "src/memory/web.py").read_text(encoding="utf-8")
         discovery_web = (ROOT / "src/discovery/web.py").read_text(encoding="utf-8")
+        provisional = (ROOT / "src/discovery/provisional.py").read_text(encoding="utf-8")
+        workspace = (ROOT / "src/workspace/store.py").read_text(encoding="utf-8")
 
         self.assertNotIn("workspace.add_timeline_event =", memory_web)
         for assignment in (
@@ -115,10 +130,16 @@ class ArchitectureHardeningTests(unittest.TestCase):
             "foundation_store.restore =",
         ):
             self.assertNotIn(assignment, discovery_web)
+        self.assertNotIn("workspace.update_variant =", provisional)
+        self.assertNotIn("workspace.update_entity_family =", provisional)
 
         self.assertIn("workspace_path = getattr(workspace,", memory_web)
         self.assertIn("history_bus = get_domain_event_bus(memory_service.history.path)", discovery_web)
         self.assertIn("workspace_bus = get_domain_event_bus(discovery.store.path)", discovery_web)
+        self.assertIn('"workspace.variant_updated"', provisional)
+        self.assertIn('"workspace.entity_family_updated"', provisional)
+        self.assertIn('"workspace.variant_updated"', workspace)
+        self.assertIn('"workspace.entity_family_updated"', workspace)
 
     def test_model_discovery_never_accepts_api_key_in_get_query(self):
         app = (ROOT / "src/interface/web/app.py").read_text(encoding="utf-8")
@@ -154,13 +175,17 @@ class ArchitectureHardeningTests(unittest.TestCase):
         self.assertEqual(project["project"]["version"], __version__)
         self.assertEqual(__version__, "1.2.2a1")
 
-    def test_frontend_has_no_runtime_compatibility_shim(self):
+    def test_frontend_has_no_runtime_compatibility_or_global_fetch_shim(self):
         compat = ROOT / "src/interface/web/static/js/compat.js"
         html = (ROOT / "src/interface/web/static/index.html").read_text(encoding="utf-8")
+        quick = (ROOT / "src/interface/web/static/js/quick-create.js").read_text(encoding="utf-8")
         self.assertFalse(compat.exists())
         self.assertNotIn("compat.js", html)
         self.assertIn("quick-create.js", html)
         self.assertIn("discovery-sheets.js", html)
+        self.assertNotIn("window.fetch =", quick)
+        self.assertIn("preparePayload", quick)
+        self.assertIn("previewOverride", quick)
 
 
 if __name__ == "__main__":
