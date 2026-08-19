@@ -1,0 +1,75 @@
+name: Purge branches once
+
+on:
+  push:
+    branches:
+      - develop/v1.2
+    paths:
+      - .github/workflows/purge-branches-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop/v1.2
+          fetch-depth: 0
+
+      - name: Fetch all branch refs
+        run: git fetch origin '+refs/heads/*:refs/remotes/origin/*' --prune
+
+      - name: Delete every branch except main and develop/v1.2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t branches < <(
+            git for-each-ref refs/remotes/origin \
+              --format='%(refname:strip=3)' \
+              | grep -v '^HEAD$' \
+              | sort -u
+          )
+
+          echo "Remote branches before purge:"
+          printf '  %s\n' "${branches[@]}"
+
+          for branch in "${branches[@]}"; do
+            case "$branch" in
+              main|develop/v1.2)
+                echo "Keeping $branch"
+                ;;
+              *)
+                echo "Deleting $branch"
+                git push origin --delete "$branch"
+                ;;
+            esac
+          done
+
+      - name: Verify only keeper branches remain
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin '+refs/heads/*:refs/remotes/origin/*' --prune
+          mapfile -t remaining < <(
+            git for-each-ref refs/remotes/origin \
+              --format='%(refname:strip=3)' \
+              | grep -v '^HEAD$' \
+              | sort -u
+          )
+          printf 'Remaining branches:\n'
+          printf '  %s\n' "${remaining[@]}"
+          test "${#remaining[@]}" -eq 2
+          test "${remaining[0]}" = "develop/v1.2"
+          test "${remaining[1]}" = "main"
+
+      - name: Remove one-shot workflow
+        run: |
+          rm -f .github/workflows/purge-branches-once.yml
+          git config user.name "Aestem"
+          git config user.email "aestem@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: remove one-shot branch purge workflow"
+          git push origin HEAD:develop/v1.2
