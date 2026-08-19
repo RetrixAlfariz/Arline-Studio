@@ -15,7 +15,8 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  floating:
+    name: Floating dependencies · Python 3.11
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,7 +27,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Install
+      - name: Install floating compatible dependencies
         run: python -m pip install -e .
       - name: Python regression suite
         run: python -m unittest discover -s tests -v
@@ -36,23 +37,29 @@ jobs:
         run: |
           node --check src/interface/web/static/js/commands.js
           node --check src/interface/web/static/js/stream.js
+          node --check src/interface/web/static/js/compat.js
           node --check src/interface/web/static/js/quick-create.js
           node --check src/interface/web/static/js/memory.js
+          node --check src/interface/web/static/js/discovery-sheets.js
           node --check src/interface/web/static/arline.js
           node --check tests/frontend/memory_runtime_smoke.js
       - name: Memory runtime scope smoke
         run: node tests/frontend/memory_runtime_smoke.js
-      - name: Repository hygiene
+      - name: Diff and repository hygiene
         run: |
+          git diff --check
           if git ls-files 'src/arline_studio.egg-info/**' | grep -q .; then
             echo 'Generated egg-info is tracked in the repository.' >&2
             exit 1
           fi
           test ! -e tools/apply_v11_hardening.py
           test ! -e tools/apply_v11_final.py
+          test ! -e tools/apply_architecture_hardening.py
           test ! -e .github/workflows/apply-hardening.yml
           test ! -e .github/workflows/apply-v11-final.yml
-          if find tools -maxdepth 1 -type f \( -iname '*v12*' -o -iname '*v1_2*' -o -iname '*v120*' \) | grep -q .; then
+          test ! -e .github/workflows/apply-v1-1-hardening.yml
+          test ! -e .github/workflows/apply-architecture-hardening.yml
+          if [ -d tools ] && find tools -maxdepth 1 -type f \( -iname '*v12*' -o -iname '*v1_2*' -o -iname '*v120*' \) | grep -q .; then
             echo 'Temporary v1.2 applicator/tooling is tracked in the repository.' >&2
             exit 1
           fi
@@ -60,3 +67,32 @@ jobs:
             echo 'Temporary v1.2 workflows are tracked in the repository.' >&2
             exit 1
           fi
+
+  frozen:
+    name: Frozen uv.lock · Python 3.13
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify and install locked environment
+        run: |
+          uv lock --check
+          uv sync --frozen
+      - name: Python regression suite
+        run: uv run python -m unittest discover -s tests -v
+      - name: Compile Python
+        run: uv run python -m compileall -q src tests
+      - name: JavaScript/runtime smoke
+        run: |
+          node --check src/interface/web/static/js/commands.js
+          node --check src/interface/web/static/js/stream.js
+          node --check src/interface/web/static/js/compat.js
+          node --check src/interface/web/static/js/quick-create.js
+          node --check src/interface/web/static/js/memory.js
+          node --check src/interface/web/static/js/discovery-sheets.js
+          node --check src/interface/web/static/arline.js
+          node tests/frontend/memory_runtime_smoke.js
+          git diff --check
