@@ -124,6 +124,12 @@ All list values must be short strings. Keep each list concise."""
         mode = str(directive.get("deliberation_mode") or "auto")
         if mode == "off":
             return self.disabled(directive, model=model)
+        options = dict(directive.get("options") or {})
+        try:
+            requested_alternatives = int(options.get("count", cfg.alternatives))
+        except (TypeError, ValueError):
+            requested_alternatives = int(cfg.alternatives)
+        requested_alternatives = max(1, min(8, requested_alternatives))
         context = "\n\n".join(filter(None, [
             "<WORKSPACE>\n" + workspace_text.strip() + "\n</WORKSPACE>" if workspace_text.strip() else "",
             "<WCF>\n" + wcf_text.strip() + "\n</WCF>" if wcf_text.strip() else "",
@@ -134,7 +140,7 @@ All list values must be short strings. Keep each list concise."""
             "directive": directive,
             "context_plan": context_plan,
             "deliberation_mode": mode,
-            "alternatives_requested": max(1, int(cfg.alternatives)),
+            "alternatives_requested": requested_alternatives,
         }
         input_text = (
             "<AUTHORITATIVE_CONTEXT>\n" + context + "\n</AUTHORITATIVE_CONTEXT>\n\n"
@@ -168,7 +174,7 @@ All list values must be short strings. Keep each list concise."""
                 character_intentions=self._clip_list(payload.get("character_intentions")),
                 emotional_trajectories=self._clip_list(payload.get("emotional_trajectories")),
                 opportunities=self._clip_list(payload.get("opportunities")),
-                alternatives=self._clip_list(payload.get("alternatives"), max(1, int(cfg.alternatives))),
+                alternatives=self._clip_list(payload.get("alternatives"), requested_alternatives),
                 uncertainties=self._clip_list(payload.get("uncertainties")),
                 constraints=self._clip_list(payload.get("constraints")),
                 model=model,

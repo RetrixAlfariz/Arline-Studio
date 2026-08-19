@@ -107,6 +107,44 @@ class V124DirectiveDeliberationTests(unittest.TestCase):
         cfg.write_text("""[lmstudio]\nbase_url="http://127.0.0.1:1"\nmodel="fake-model"\napi_key=""\nauto_load=false\n[writer]\nsystem_prompt_file="writer_system.txt"\n[reasoning_runtime]\nguard_prompt_file="reasoning_guard.txt"\n[deliberation]\nenabled=true\nmax_tokens=500\ntemperature=0.2\nalternatives=3\ncontext_chars=8000\n""", encoding="utf-8")
         return RuntimeConfig.load(cfg)
 
+    def test_pov_command_sets_request_scoped_epistemic_anchor(self):
+        refs = [{"type": "entity_variant", "id": "V-FILA", "label": "Fila", "mode": "context"}]
+        result = DirectiveEngine.parse('/pov @Fila "stay close to her internal perspective"', explicit_references=refs)
+        self.assertEqual(result.options["pov_variant_id"], "V-FILA")
+        self.assertEqual(result.command["id"], "pov")
+
+    def test_dynamic_threads_and_recent_boost_their_dimensions(self):
+        class Scope:
+            explicit_references = []
+            pov_variant_id = None
+            world_time = None
+            story_order = None
+            token_budget = 1600
+            context_lens = "scene"
+            allow_future_author_knowledge = False
+        ws = SimpleNamespace(
+            scope={"directive": {"version": "1.2.4a1", "dynamic_scopes": ["threads", "recent"], "resolved_references": []}},
+            auto_selected=[], explicit_references=[],
+        )
+        plan = NarrativeContextPlanner().plan("continue", Scope(), workspace_context=ws, route="STORY_CONTINUE")
+        self.assertEqual(plan.dimensions["threads"], 1.0)
+        self.assertEqual(plan.dimensions["source"], 1.0)
+        self.assertIn("threads", plan.optional_lanes)
+        self.assertIn("fts_manuscript", plan.optional_lanes)
+
+    def test_alternatives_count_controls_deliberator_request_and_output(self):
+        with tempfile.TemporaryDirectory() as td:
+            cfg = self._config(Path(td))
+            payload = '{"scene_goal":"choose","likely_beats":[],"character_intentions":[],"emotional_trajectories":[],"opportunities":[],"alternatives":["a","b","c","d","e","f"],"uncertainties":[],"constraints":[]}'
+            client = _FakeClient(payload)
+            out = NarrativeDeliberator(cfg).deliberate(
+                client=client, model="fake-model",
+                directive={"planner_intent":"deliberate","output_mode":"author_alternatives","semantic_prompt":"options","options":{"count":"5"}},
+                context_plan={"intent":"deliberate"}, workspace_text="trusted", wcf_text="LOCKED", narrative_brief="brief",
+            )
+            self.assertEqual(out.alternatives, ["a", "b", "c", "d", "e"])
+            self.assertIn('"alternatives_requested": 5', client.calls[0]["input_text"])
+
     def test_model_deliberation_is_soft_noncanon(self):
         with tempfile.TemporaryDirectory() as td:
             cfg = self._config(Path(td))
@@ -154,6 +192,7 @@ class V124DirectiveDeliberationTests(unittest.TestCase):
         self.assertIn("deliberation = await asyncio.to_thread", streaming)
         self.assertIn('"command_registry_version"', app)
         self.assertIn('"reference_selectors"', app)
+        self.assertIn('pov_variant_id=directive_pov or payload.pov_variant_id', app)
 
     def test_frontend_has_remote_commands_dynamic_refs_and_intuition_panel(self):
         js = Path("src/interface/web/static/arline.js").read_text(encoding="utf-8")

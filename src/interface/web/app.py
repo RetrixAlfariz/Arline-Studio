@@ -971,6 +971,9 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         memory_refs = directive.resolved_references or refs
         memory_query = directive.semantic_prompt or prompt
         lens = str(payload.context_lens or memory_config.default_lens or "scene").lower()
+        directive_pov = str(directive.options.get("pov_variant_id") or "").strip() or None
+        if (directive.command or {}).get("id") == "pov" and directive_pov:
+            lens = "pov"
         if lens not in {"author", "scene", "pov"}:
             lens = memory_config.default_lens if memory_config.default_lens in {"author", "scene", "pov"} else "scene"
         output_reserve = int(payload.visible_output_tokens) + (int(payload.reasoning_reserve_tokens) if payload.reasoning != "off" else 0)
@@ -989,7 +992,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             session_id=session_id,
             world_time=payload.world_time if payload.world_time is not None else (active_scene.get("narrative_time") or None),
             story_order=payload.story_order,
-            pov_variant_id=payload.pov_variant_id or active_scene.get("pov_variant_id"),
+            pov_variant_id=directive_pov or payload.pov_variant_id or active_scene.get("pov_variant_id"),
             context_lens=lens,
             retrieval_mode="generation",
             explicit_references=memory_refs,

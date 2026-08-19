@@ -299,6 +299,12 @@ class DirectiveEngine:
             resolved.append(candidate)
 
         resolved = cls._dedupe(resolved)
+        if command_spec is not None and command_spec.id == "pov":
+            pov_ref = next((item for item in resolved if item.get("type") == "entity_variant"), None)
+            if pov_ref is not None:
+                options["pov_variant_id"] = str(pov_ref["id"])
+            else:
+                diagnostics.append("/pov requires one resolved character reference; the existing scene POV remains active.")
         kept_lines = [line for index, line in enumerate(lines) if index != command_line_index]
         prose_tail = "\n".join(kept_lines).strip()
         seed = " ".join(seed_parts).strip()

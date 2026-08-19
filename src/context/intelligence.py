@@ -213,6 +213,13 @@ class NarrativeContextPlanner:
         if "conflicts" in selectors:
             dimensions["continuity"] = 1.0
 
+        dynamic_scopes = {str(item).casefold() for item in (directive.get("dynamic_scopes") or [])}
+        if "threads" in dynamic_scopes:
+            dimensions["threads"] = 1.0
+        if "recent" in dynamic_scopes:
+            dimensions["source"] = 1.0
+            dimensions["events"] = max(dimensions["events"], .72)
+
         lane_weights: dict[str, float] = {}
         lane_factor = {"fts_manuscript": .80, "fts_chat": .55, "dense": .70}
         for dimension, weight in dimensions.items():
