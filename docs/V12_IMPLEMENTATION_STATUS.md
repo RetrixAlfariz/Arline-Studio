@@ -131,7 +131,7 @@ Implemented:
 - unresolved, plural or ambiguous references abstain and remain auditable as `MENTION-*` diagnostics;
 - mention diagnostics retain both the literal surface form and the resolved identity label;
 - Discovery schema v4 owns mention, event, event-effect, causal-link and conflict-resolution derived tables;
-- state transitions create or reuse `EVENT-*` records and connect visible before/after propositions through causal links;
+- state transitions create or reuse `EVENT-*` records, expose explicit before/after event effects, and connect the propositions through causal links;
 - `SUPER-*`, `CONFLICT-*` and `FORM-*` reconstruction remains derived and cannot grant Canon;
 - conflict resolution is an explicit user action choosing correction, story change direction or leave-unresolved;
 - Library resources expose one continuity payload for Current State, Forms, Change History, Events & Causes, Conflicts and mention provenance;

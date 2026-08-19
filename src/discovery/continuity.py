@@ -306,7 +306,7 @@ class ContinuityResolver:
                 (
                     form_id, session.get("project_id"), session.get("world_id"), session.get("branch_id"), session.get("id"),
                     subject_key, subject_label, turn_id, source_kind, anchor_prop_id,
-                    parent["id"] if parent else None, "state_transition" if parent else "baseline_observed",
+                    parent["id"] if parent else None, "state_transition",
                     story_order, dumps(world_time) if world_time is not None else None, dumps(state), utc_now(),
                 ),
             )
@@ -352,6 +352,14 @@ class ContinuityResolver:
                                 predicate=current["predicate"], role="after",
                             )
                         if event is not None:
+                            self.store.link_event_effect(
+                                event["id"], previous["id"], subject_key=previous["subject_key"],
+                                predicate=previous["predicate"], role="before",
+                            )
+                            self.store.link_event_effect(
+                                event["id"], current["id"], subject_key=current["subject_key"],
+                                predicate=current["predicate"], role="after",
+                            )
                             link_id = "CAUSE-" + sha256(
                                 dumps([event["id"], previous["id"], current["id"]]).encode("utf-8")
                             ).hexdigest()[:16].upper()
@@ -533,11 +541,58 @@ class ContinuityResolver:
                 "project_id": conflict.get("project_id"), "world_id": conflict.get("world_id"),
                 "branch_id": conflict.get("branch_id"), "id": conflict.get("session_id"),
             }
+            target_instances = self.store.list_instances(current["id"], active=True)
+            target_instance = max(target_instances, key=self._instance_order) if target_instances else {}
+            resolved_turn_id = str(target_instance.get("source_turn_id") or conflict.get("source_turn_id") or "user_resolution")
+            resolved_story_order = target_instance.get("story_order")
+            resolved_world_time = target_instance.get("world_time")
             self._insert_edge(
                 previous=previous, current=current, kind=action, session=session,
-                turn_id=conflict.get("source_turn_id") or "user_resolution",
-                source_kind="user_continuity_resolution", story_order=None, world_time=None,
+                turn_id=resolved_turn_id, source_kind="user_continuity_resolution",
+                story_order=resolved_story_order, world_time=resolved_world_time,
             )
+            if action == "story_change":
+                event = self.store.upsert_continuity_event(
+                    project_id=session.get("project_id"), world_id=session.get("world_id"),
+                    branch_id=session.get("branch_id"), session_id=session.get("id"),
+                    source_turn_id=resolved_turn_id, source_kind="user_continuity_resolution",
+                    event_type="user_story_change",
+                    summary=note.strip() or f"{current.get('subject_label') or current['subject_key']} changed {current['predicate']}",
+                    story_order=resolved_story_order, world_time=resolved_world_time,
+                    stable_seed=[conflict_id, previous["id"], current["id"], "user_story_change"],
+                )
+                self.store.link_event_effect(
+                    event["id"], previous["id"], subject_key=previous["subject_key"],
+                    predicate=previous["predicate"], role="before",
+                )
+                self.store.link_event_effect(
+                    event["id"], current["id"], subject_key=current["subject_key"],
+                    predicate=current["predicate"], role="after",
+                )
+                causal_id = "CAUSE-" + sha256(
+                    dumps([event["id"], previous["id"], current["id"], "user_story_change"]).encode("utf-8")
+                ).hexdigest()[:16].upper()
+                with self.store._lock, self.store.connection() as con:
+                    con.execute(
+                        "INSERT OR IGNORE INTO continuity_causal_links(id,event_id,subject_key,predicate,"
+                        "from_proposition_id,to_proposition_id,kind,created_at) VALUES(?,?,?,?,?,?,?,?)",
+                        (causal_id, event["id"], current["subject_key"], current["predicate"],
+                         previous["id"], current["id"], "user_story_change", utc_now()),
+                    )
+                if current.get("subject_type") == "character" and str(current.get("predicate") or "").startswith("state."):
+                    context = MemoryQueryContext(
+                        project_id=session.get("project_id"), world_id=session.get("world_id"),
+                        branch_id=session.get("branch_id"), session_id=session.get("id"),
+                        current_turn_id=resolved_turn_id, world_time=resolved_world_time,
+                        story_order=resolved_story_order, context_lens="scene", retrieval_mode="continuity",
+                    )
+                    self._build_form(
+                        subject_key=current["subject_key"],
+                        subject_label=current.get("subject_label") or current["subject_key"],
+                        anchor_prop_id=current["id"], context=context, session=session,
+                        turn_id=resolved_turn_id, source_kind="user_continuity_resolution",
+                        story_order=resolved_story_order, world_time=resolved_world_time,
+                    )
             with self.store._lock, self.store.connection() as con:
                 con.execute("UPDATE continuity_conflicts SET status='resolved',resolved_at=? WHERE id=?", (now, conflict_id))
         with self.store._lock, self.store.connection() as con:

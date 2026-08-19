@@ -160,6 +160,52 @@ class V122TopDownCompletionTests(unittest.TestCase):
             self.assertTrue(events[0]["id"].startswith("EVENT-"))
             self.assertEqual(events[0]["causal_links"][0]["from_proposition_id"], p1["id"])
             self.assertEqual(events[0]["causal_links"][0]["to_proposition_id"], p2["id"])
+            roles = {(item["role"], item["proposition_id"]) for item in events[0]["effects"]}
+            self.assertIn(("before", p1["id"]), roles)
+            self.assertIn(("after", p2["id"]), roles)
+
+    def test_manual_story_change_resolution_builds_same_causal_model(self):
+        with tempfile.TemporaryDirectory() as td:
+            fx = Fixture(td)
+            t1 = fx.turn("Alex's form is human.", "manual-1")
+            t2 = fx.turn("Alex's form is wolf.", "manual-2")
+
+            def state_claim(turn, value, rev):
+                prop = fx.discovery.store.upsert_proposition(
+                    project_id=fx.project["id"], world_id=fx.world_id, subject_type="character",
+                    subject_key="char:alex", subject_label="Alex", predicate="state.form",
+                    value=value, operation="update", temporal_state="current_or_unspecified",
+                )
+                fx.discovery.store.add_instance(
+                    prop["id"], source_kind="user_prompt", source_session_id=fx.session["id"],
+                    source_turn_id=turn["id"], origin_session_id=fx.session["id"], origin_turn_id=turn["id"],
+                    source_revision=rev, project_id=fx.project["id"], world_id=fx.world_id,
+                    branch_id=fx.branch["id"], span_text=turn["user_prompt"], extraction_confidence=1,
+                    explicitness="explicit", qualifies_review=True,
+                )
+                return prop
+
+            before = state_claim(t1, "human", "MAN-A")
+            after = state_claim(t2, "wolf", "MAN-B")
+            fx.discovery.continuity.resolve_turn(t2["id"])
+            conflict = next(
+                item for item in fx.discovery.continuity.list_conflicts(fx.context(), subject_key="char:alex")
+                if {item["left_proposition_id"], item["right_proposition_id"]} == {before["id"], after["id"]}
+            )
+            fx.discovery.continuity.resolve_conflict(
+                conflict["id"], action="story_change",
+                from_proposition_id=before["id"], to_proposition_id=after["id"],
+                note="Alex transformed into wolf form",
+            )
+            events = fx.discovery.continuity.list_events(fx.context(), subject_key="char:alex")
+            event = next(item for item in events if item["event_type"] == "user_story_change")
+            roles = {(item["role"], item["proposition_id"]) for item in event["effects"]}
+            self.assertEqual(roles, {("before", before["id"]), ("after", after["id"])})
+            self.assertEqual(event["causal_links"][0]["from_proposition_id"], before["id"])
+            self.assertEqual(event["causal_links"][0]["to_proposition_id"], after["id"])
+            forms = fx.discovery.continuity.list_forms(fx.context(), subject_key="char:alex")
+            self.assertTrue(any(item["anchor_proposition_id"] == after["id"] and item["reason"] == "state_transition" for item in forms))
+            self.assertEqual(fx.discovery.store.get_proposition(after["id"])["authority_state"], "observed")
 
     def test_resource_view_contains_one_continuity_projection(self):
         with tempfile.TemporaryDirectory() as td:

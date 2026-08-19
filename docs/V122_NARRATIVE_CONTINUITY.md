@@ -161,8 +161,8 @@ changing identity authority.
 ### Phase D — event/state causality
 
 Implemented as rebuildable derived state: analytical state patches create stable
-`EVENT-*` records and effect links; continuity supersession then joins the
-visible before/after propositions through `CAUSE-*` links. Deterministic
+`EVENT-*` records with explicit `before`/`after` effects; continuity supersession then joins the
+visible propositions through `CAUSE-*` links. Explicit user conflict resolution as a story change uses the same causal model. Deterministic
 transition fallbacks synthesize an event only when the extractor supplied a
 transition without an event object. No event or causal edge grants Canon.
 
