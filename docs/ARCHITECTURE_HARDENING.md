@@ -85,7 +85,7 @@ This override is intentionally noisy: it acknowledges that the current FastAPI s
 
 ## 6. Version contract
 
-`src/version.py`, `pyproject.toml`, and `uv.lock` represent one development version contract. The v1.2.2 hardening baseline is `1.2.2a1`.
+`src/version.py`, `pyproject.toml`, and `uv.lock` represent one development version contract. The v1.2.2 hardening baseline is `1.2.2b1`.
 
 ## 7. CI contract
 

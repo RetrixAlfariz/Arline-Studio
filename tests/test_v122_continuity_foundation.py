@@ -169,7 +169,7 @@ class V122ContinuityFoundationTests(unittest.TestCase):
             p2 = fx.add_claim(after, value=100, operation="transition")
             fx.discovery.continuity.resolve_turn(after["id"])
             self.assertEqual(fx.discovery.store.get_proposition(p2["id"])["authority_state"], "observed")
-            self.assertEqual(fx.discovery.continuity.status()["version"], "1.2.2a1")
+            self.assertEqual(fx.discovery.continuity.status()["version"], "1.2.2b1")
 
 
 if __name__ == "__main__":

@@ -13,8 +13,8 @@ from uuid import uuid4
 from src.storage_backup import backup_sqlite_before_migrations
 
 
-DISCOVERY_SCHEMA_VERSION = 3
-CONTINUITY_SCHEMA_VERSION = "1.2.2a1"
+DISCOVERY_SCHEMA_VERSION = 4
+CONTINUITY_SCHEMA_VERSION = "1.2.2b1"
 PROVISIONAL_SCHEMA_VERSION = 1
 
 
@@ -187,6 +187,79 @@ class DiscoveryStore:
                 CREATE TABLE IF NOT EXISTS continuity_forms(id TEXT PRIMARY KEY,project_id TEXT,world_id TEXT,branch_id TEXT,session_id TEXT,subject_key TEXT NOT NULL,subject_label TEXT NOT NULL,source_turn_id TEXT NOT NULL,source_kind TEXT NOT NULL,anchor_proposition_id TEXT,parent_form_id TEXT,reason TEXT NOT NULL,story_order REAL,world_time_json TEXT,state_json TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(subject_key,source_turn_id,source_kind));
                 CREATE INDEX IF NOT EXISTS idx_continuity_form_subject ON continuity_forms(project_id,world_id,subject_key,story_order,created_at);
 
+                CREATE TABLE IF NOT EXISTS discovery_mentions(
+                    id TEXT PRIMARY KEY,
+                    mention_key TEXT NOT NULL UNIQUE,
+                    project_id TEXT,
+                    world_id TEXT,
+                    branch_id TEXT,
+                    source_session_id TEXT,
+                    source_turn_id TEXT,
+                    source_kind TEXT NOT NULL,
+                    source_revision TEXT NOT NULL,
+                    raw_entity_key TEXT NOT NULL,
+                    surface TEXT NOT NULL,
+                    normalized_surface TEXT NOT NULL,
+                    entity_type TEXT NOT NULL,
+                    mention_role TEXT NOT NULL DEFAULT 'explicit',
+                    resolution_state TEXT NOT NULL,
+                    resolved_subject_key TEXT,
+                    resolved_label TEXT,
+                    resolved_resource_type TEXT,
+                    resolved_resource_id TEXT,
+                    candidates_json TEXT NOT NULL DEFAULT '[]',
+                    source_segment TEXT,
+                    span_text TEXT NOT NULL DEFAULT '',
+                    story_order REAL,
+                    world_time_json TEXT,
+                    active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    CHECK(resolution_state IN ('resolved','ambiguous','unresolved'))
+                );
+                CREATE INDEX IF NOT EXISTS idx_discovery_mentions_scope
+                    ON discovery_mentions(project_id,world_id,branch_id,source_session_id,active,created_at);
+                CREATE INDEX IF NOT EXISTS idx_discovery_mentions_subject
+                    ON discovery_mentions(resolved_subject_key,active,created_at);
+
+                CREATE TABLE IF NOT EXISTS narrative_events(
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT,
+                    world_id TEXT,
+                    branch_id TEXT,
+                    session_id TEXT,
+                    source_turn_id TEXT NOT NULL,
+                    source_kind TEXT NOT NULL,
+                    source_revision TEXT NOT NULL,
+                    raw_event_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    summary TEXT NOT NULL DEFAULT '',
+                    source_segment TEXT,
+                    participants_json TEXT NOT NULL DEFAULT '[]',
+                    story_order REAL,
+                    world_time_json TEXT,
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_narrative_events_scope
+                    ON narrative_events(project_id,world_id,branch_id,source_turn_id,active,story_order);
+                CREATE TABLE IF NOT EXISTS narrative_event_state_links(
+                    id TEXT PRIMARY KEY,
+                    event_id TEXT NOT NULL REFERENCES narrative_events(id) ON DELETE CASCADE,
+                    subject_key TEXT NOT NULL,
+                    predicate TEXT NOT NULL,
+                    before_proposition_id TEXT,
+                    after_proposition_id TEXT NOT NULL,
+                    change_kind TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(event_id,after_proposition_id)
+                );
+                CREATE INDEX IF NOT EXISTS idx_event_state_subject
+                    ON narrative_event_state_links(subject_key,predicate,event_id);
+
                 CREATE TABLE IF NOT EXISTS discovery_provisional_meta(
                     key TEXT PRIMARY KEY,
                     value TEXT NOT NULL
@@ -228,6 +301,19 @@ class DiscoveryStore:
                     ON discovery_spatial_zones(world_id,branch_id,subject_key);
                 """
             )
+            def ensure_column(table: str, column: str, ddl: str) -> None:
+                columns = {row["name"] for row in con.execute(f"PRAGMA table_info({table})").fetchall()}
+                if column not in columns:
+                    con.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+            ensure_column("continuity_forms", "event_id", "TEXT")
+            ensure_column("continuity_forms", "form_name", "TEXT")
+            ensure_column("continuity_forms", "before_state_json", "TEXT")
+            ensure_column("continuity_forms", "after_state_json", "TEXT")
+            ensure_column("continuity_conflicts", "resolution_kind", "TEXT")
+            ensure_column("continuity_conflicts", "resolution_note", "TEXT")
+            ensure_column("continuity_conflicts", "chosen_proposition_id", "TEXT")
+
             con.execute(
                 "INSERT INTO discovery_meta(key,value) VALUES('schema_version',?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value",

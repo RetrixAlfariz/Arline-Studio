@@ -1,7 +1,7 @@
 # Arline v1.2 implementation status
 
 **Development branch:** `develop/v1.2`  
-**Package version:** `1.2.2a1`
+**Package version:** `1.2.2b1`
 **Merge policy:** do not merge into `main` until the repository owner explicitly approves the complete v1.2 line.
 
 ## v1.2.0 milestone — complete foundation
@@ -135,3 +135,28 @@ specification.
 - Background refresh failures create a visible issue/activity record, pending refreshes are cancelled on delete, and source guards prevent a late timer from resurrecting deleted/stale evidence.
 - `enabled`, `fts_enabled`, `trace_enabled`, and `reranker.enabled` now control their advertised runtime behavior.
 - Query routing no longer treats the mere words “scene” or “dialogue” as a continuation command; deterministic routes abstain when their required evidence lanes are empty after ScopeGate.
+
+
+## v1.2.2 — Narrative State & Continuity — feature complete beta
+
+The v1.2.2 top-down completion replaces incremental semantic patching with one
+explicit narrative orchestration contract:
+
+`analytical extraction → stable entity resolution → bounded coreference → EVENT projection → proposition/state capture → continuity reconstruction`.
+
+Completed:
+
+- exact, conservative Narrative Entity Resolver with stable Library/Discovery anchors and no fuzzy auto-merge;
+- physical items remain instance-sensitive instead of being merged by class/label;
+- persisted `MENTION-*` diagnostics for resolved, ambiguous and unresolved references;
+- bounded cross-turn/self coreference that abstains when candidate sets are not unique;
+- first-class rebuildable `EVENT-*` records and event→before/after state causality links;
+- `FORM-*` frames carry explicit before/after state and causing event ids;
+- explicit correction/story-change operations participate directly in continuity classification;
+- user conflict resolution can classify a conflict as correction/story change, select a preferred derived head, or preserve ambiguity without granting Canon;
+- writer-facing Discovery candidates exclude superseded values and emit explicit DO-NOT-ASSUME ambiguity candidates;
+- scoped continuity status/current/conflict/rebuild/mention APIs;
+- Library entity sheets expose Current State, Forms, Event/State Causality, Conflicts and unresolved-reference diagnostics;
+- v1.2.2 semantic ordering is owned by `NarrativeSemanticOrchestrator`; the old identity and continuity runtime installers no longer patch capture order.
+
+Remaining real-model retrieval benchmarking and broader Memory quality work are v1.2.3 concerns, not unfinished v1.2.2 continuity work.

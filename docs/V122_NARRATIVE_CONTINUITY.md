@@ -110,8 +110,7 @@ ENT-REV
 
 A form stores the visible `state.*` heads at that narrative point and points to
 its parent form when one exists. The first implementation creates forms from
-explicit state transitions. Later v1.2.2 passes will enrich form naming, event
-causality, and before/after reconstruction.
+explicit state transitions. Forms now carry their causing `EVENT-*` id plus explicit before/after state snapshots. Event causality and before/after reconstruction are part of the feature-complete v1.2.2 beta.
 
 ## Current-view reconstruction
 
@@ -177,3 +176,18 @@ Continuity tables are rebuildable derived state. No historical continuity scan i
 required for application startup. New/edited turns resolve incrementally; old
 content may be rebuilt explicitly or by a bounded background task later in the
 milestone.
+
+
+## Top-down completion status
+
+All five v1.2.2 phases are implemented in the `1.2.2b1` feature-complete beta:
+
+- **A — Continuity graph:** `SUPER-*`, `CONFLICT-*`, current-view reconstruction and `FORM-*`;
+- **B — Narrative Entity Resolver:** exact stable anchors across Library names, aliases and unique variants;
+- **C — Cross-turn coreference:** persisted `MENTION-*` resolution with conservative self/recent-reference rules and explicit abstention;
+- **D — Event/state causality:** first-class `EVENT-*` records, event/state links and before/after forms;
+- **E — Continuity UI:** Current State, Forms, event causality, conflicts and unresolved-reference diagnostics on Library sheets.
+
+The semantic path is owned by `NarrativeSemanticOrchestrator`; v1.2.2 does not add another layer of runtime method wrappers. Identity/coreference resolution runs before proposition creation, event projection runs before state capture, and continuity reconstruction runs after persisted source-backed evidence exists.
+
+Conflict resolution remains derived. Choosing correction/story-change/preferred-head semantics never promotes a proposition to Canon.

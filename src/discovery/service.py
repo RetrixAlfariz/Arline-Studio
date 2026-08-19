@@ -12,6 +12,8 @@ from src.narrative.rails import CharacterRailParser
 from src.pipeline import ArlineAnalyticalPipeline
 from src.workspace.store import WORLD_BIBLE_PROJECT_ID
 
+from .identity import resolve_existing_family
+from .orchestration import NarrativeSemanticOrchestrator
 from .store import DiscoveryStore, checksum
 
 
@@ -60,6 +62,11 @@ class DiscoveryService:
         self.foundation = foundation
         self.pipeline = ArlineAnalyticalPipeline.default()
         self.gate = ScopeGate(workspace, history)
+        self.narrative = NarrativeSemanticOrchestrator(self)
+        self.coreference = self.narrative.coreference
+        self.entity_resolver = self.narrative.entity_resolver
+        self.events = self.narrative.events
+        self.continuity = self.narrative.continuity
 
     @staticmethod
     def _segment_map(result) -> dict[str, dict[str, Any]]:
@@ -100,12 +107,7 @@ class DiscoveryService:
 
     def _existing_family(self, label: str, entity_type: str) -> dict[str, Any] | None:
         mapped = LIBRARY_ENTITY_TYPE.get(entity_type, entity_type)
-        needle = label.strip().casefold()
-        try:
-            families = self.workspace.list_entity_families(None, entity_type=mapped)
-        except Exception:
-            families = []
-        return next((item for item in families if str(item.get("name") or "").strip().casefold() == needle), None)
+        return resolve_existing_family(self.workspace, self.foundation, label, mapped)
 
     def _subject_link(self, *, project_id: str | None, world_id: str | None,
                       subject_key: str, subject_label: str, subject_type: str) -> dict[str, str] | None:
@@ -145,7 +147,7 @@ class DiscoveryService:
                       explicitness: str, inferred: bool = False,
                       object_type: str | None = None, object_key: str | None = None,
                       object_label: str | None = None,
-                      temporal_state: str = "current_or_unspecified") -> bool:
+                      temporal_state: str = "current_or_unspecified") -> dict[str, Any]:
         segment = source["segments"].get(str(source_segment)) if source_segment else None
         span_start, span_end, span_text = self._span(segment)
         link = self._subject_link(
@@ -180,7 +182,7 @@ class DiscoveryService:
             qualifies_review=qualifies,
         )
         report_keys.add(prop["id"])
-        return True
+        return prop
 
     def capture_text(self, text: str, *, source_kind: str, turn: dict[str, Any],
                      session: dict[str, Any], qualifies_review: bool | None = None) -> CaptureReport:
@@ -216,19 +218,27 @@ class DiscoveryService:
             "segments": segments, "base_qualifies": base_qualifies,
         }
 
-        entities = {str(item["id"]): item for item in result.extracted_state.get("entities", []) if item.get("id")}
+        raw_entities = {str(item["id"]): item for item in result.extracted_state.get("entities", []) if item.get("id")}
+        semantic = self.narrative.prepare(
+            result=result, text=evidence, source=source, entities=raw_entities
+        )
+        entities = semantic.entities
         prop_ids: set[str] = set()
         skipped = 0
 
         for entity_id, entity in entities.items():
             entity_type = str(entity.get("type") or "").strip()
             label = str(entity.get("label") or "").strip()
+            subject_key = str(entity.get("id") or entity_id)
             mapped = LIBRARY_ENTITY_TYPE.get(entity_type)
-            meaningful = bool(mapped and label and label.casefold() not in GENERIC_ENTITY_LABELS)
+            meaningful = bool(
+                mapped and label and label.casefold() not in GENERIC_ENTITY_LABELS
+                and entity.get("resolution_state") != "ambiguous"
+            )
             if meaningful:
                 self._capture_prop(
                     report_keys=prop_ids, source=source, subject_type=entity_type,
-                    subject_key=entity_id, subject_label=label, predicate="entity.exists",
+                    subject_key=subject_key, subject_label=label, predicate="entity.exists",
                     value={"entity_type": mapped, "label": label}, operation="create",
                     source_segment=entity.get("introduced_by"), confidence=0.95,
                     explicitness="explicit", inferred=False,
@@ -242,22 +252,24 @@ class DiscoveryService:
                     continue
                 self._capture_prop(
                     report_keys=prop_ids, source=source, subject_type=entity_type or "entity",
-                    subject_key=entity_id, subject_label=label, predicate=path,
+                    subject_key=subject_key, subject_label=label, predicate=path,
                     value=value, operation="update", source_segment=segment_id,
                     confidence=confidence, explicitness=epistemic, inferred=inferred,
                 )
 
         for relation in result.extracted_state.get("relations", []):
-            subject_key = str(relation.get("subject") or "")
-            if not subject_key:
+            raw_subject_key = str(relation.get("subject") or "")
+            if not raw_subject_key:
                 continue
-            subject = entities.get(subject_key) or {}
+            subject = entities.get(raw_subject_key) or {}
+            subject_key = str(subject.get("id") or semantic.key_map.get(raw_subject_key) or raw_subject_key)
             subject_label = str(subject.get("label") or subject_key)
-            if subject_label.casefold() in GENERIC_ENTITY_LABELS:
+            if subject_label.casefold() in GENERIC_ENTITY_LABELS or subject.get("resolution_state") == "ambiguous":
                 skipped += 1
                 continue
-            object_key = str(relation.get("object") or "") or None
-            obj = entities.get(object_key or "") or {}
+            raw_object_key = str(relation.get("object") or "") or None
+            obj = entities.get(raw_object_key or "") or {}
+            object_key = str(obj.get("id") or semantic.key_map.get(raw_object_key or "") or raw_object_key or "") or None
             self._capture_prop(
                 report_keys=prop_ids, source=source,
                 subject_type=str(subject.get("type") or "entity"), subject_key=subject_key,
@@ -281,20 +293,26 @@ class DiscoveryService:
                 match = re.match(r"runtime\.([^.]*)\.(.+)", raw_path)
                 if not match:
                     continue
-                subject_key, state_path = match.group(1), match.group(2)
-                subject = entities.get(subject_key) or {}
+                raw_subject_key, state_path = match.group(1), match.group(2)
+                subject = entities.get(raw_subject_key) or {}
+                subject_key = str(subject.get("id") or semantic.key_map.get(raw_subject_key) or raw_subject_key)
                 subject_label = str(subject.get("label") or subject_key)
-                if subject_label.casefold() in GENERIC_ENTITY_LABELS:
+                if subject_label.casefold() in GENERIC_ENTITY_LABELS or subject.get("resolution_state") == "ambiguous":
                     skipped += 1
                     continue
                 value = patch.get("value") if patch.get("op") != "delete" else {"deleted": True, "previous": patch.get("from")}
-                self._capture_prop(
+                captured = self._capture_prop(
                     report_keys=prop_ids, source=source,
                     subject_type=str(subject.get("type") or "character"), subject_key=subject_key,
                     subject_label=subject_label, predicate=f"state.{state_path}", value=value,
                     operation="transition", source_segment=event.get("source_segment"),
                     confidence=float(event.get("eventhood_score") or 0.8), explicitness="explicit",
                     temporal_state="historical_or_current",
+                )
+                self.events.link_after(
+                    event_id=semantic.event_ids.get(str(state_patch.get("event_id") or "")),
+                    subject_key=subject_key, predicate=f"state.{state_path}",
+                    after_proposition_id=captured["id"],
                 )
 
         instances = sum(
@@ -319,7 +337,15 @@ class DiscoveryService:
             qualifies = True
         else:
             raise ValueError(f"Unsupported discovery source kind: {source_kind}")
-        return self.capture_text(text, source_kind=source_kind, turn=turn, session=session, qualifies_review=qualifies)
+        report = self.capture_text(text, source_kind=source_kind, turn=turn, session=session, qualifies_review=qualifies)
+        try:
+            self.narrative.finalize_turn(turn_id, source_kind=source_kind)
+            self._continuity_last_error = None
+        except Exception as exc:
+            # Continuity is rebuildable derived state: evidence capture is never
+            # rolled back because reconstruction failed.
+            self._continuity_last_error = str(exc)
+        return report
 
     def _instance_allowed(self, instance: dict[str, Any], context: MemoryQueryContext) -> bool:
         if not instance.get("active"):
@@ -420,7 +446,18 @@ class DiscoveryService:
         query = (plan.normalized_query or "").casefold()
         labels = {str(item.get("label") or "").casefold() for item in plan.resolved_entities}
         output: list[MemoryCandidate] = []
+        continuity_view = self.continuity.current_view(context) if getattr(self, "continuity", None) else {
+            "superseded_proposition_ids": [], "ambiguous": []
+        }
+        superseded = set(continuity_view.get("superseded_proposition_ids") or [])
+        ambiguous_ids = {
+            prop_id
+            for group in continuity_view.get("ambiguous") or []
+            for prop_id in group.get("proposition_ids") or []
+        }
         for item in rows:
+            if item["id"] in superseded or item["id"] in ambiguous_ids:
+                continue
             if item["knowledge_state"] in {"canon", "dismissed"} or item.get("materialized_resource_id"):
                 continue
             label = str(item.get("subject_label") or "")
@@ -447,6 +484,29 @@ class DiscoveryService:
                     "qualified_support_count": item["qualified_support_count"],
                     "structured": False,
                 },
+            ))
+        for ambiguity in (continuity_view.get("ambiguous") or [])[:8]:
+            props = []
+            for prop_id in ambiguity.get("proposition_ids") or []:
+                try:
+                    props.append(self.store.get_proposition(prop_id))
+                except KeyError:
+                    pass
+            if not props:
+                continue
+            label = str(props[0].get("subject_label") or ambiguity.get("subject_key") or "entity")
+            if labels and label.casefold() not in labels and label.casefold() not in query:
+                continue
+            values = ", ".join(json.dumps(item.get("value"), ensure_ascii=False, default=str) for item in props)
+            output.append(MemoryCandidate(
+                id=f"CONTINUITY:AMBIGUOUS:{ambiguity.get('subject_key')}:{ambiguity.get('predicate')}",
+                lane=RetrievalLane.STRUCTURED_STATE,
+                text=f"[CONTINUITY AMBIGUOUS — DO NOT ASSUME] {label}.{ambiguity.get('predicate')} has competing visible values: {values}",
+                source_type="continuity_conflict", source_id=str(ambiguity.get("subject_key") or "continuity"),
+                project_id=context.project_id, world_id=context.world_id, branch_id=context.branch_id,
+                session_id=context.session_id, authority="derived_continuity",
+                trust_level=TrustLevel.USER_PROVIDED.value, importance=0.9, extraction_confidence=1.0,
+                metadata={"continuity": True, "ambiguous": True, "structured": True},
             ))
         return output[:24]
 

@@ -9,6 +9,7 @@ from src.memory.models import MemoryQueryContext
 from src.domain_events import get_domain_event_bus
 from src.workspace.store import WORLD_BIBLE_PROJECT_ID
 
+from .identity import resolve_existing_family
 from .service import DiscoveryService
 from .store import checksum, dumps, loads, make_id, utc_now
 
@@ -62,15 +63,7 @@ def _resource_subject_links(service: DiscoveryService, resource_id: str) -> list
 
 
 def _existing_family(service: DiscoveryService, label: str, entity_type: str) -> dict[str, Any] | None:
-    needle = label.strip().casefold()
-    try:
-        rows = service.workspace.list_entity_families(None, entity_type=entity_type)
-    except Exception:
-        return None
-    return next(
-        (row for row in rows if str(row.get("name") or "").strip().casefold() == needle),
-        None,
-    )
+    return resolve_existing_family(service.workspace, service.foundation, label, entity_type)
 
 
 def _update_target(service: DiscoveryService, proposition_id: str, family_id: str) -> None:
@@ -436,6 +429,7 @@ def resource_view(service: DiscoveryService, resource_id: str, context: MemoryQu
         return {
             "resource": family, "provisional": False, "knowledge_state": None,
             "claims": [], "relations": [], "changes": [], "spatial_path": [],
+            "continuity": {"version": "1.2.2b1", "current": [], "current_state": [], "ambiguous": [], "forms": [], "events": [], "conflicts": [], "mentions": []},
         }
 
     placeholders = ",".join("?" for _ in subject_keys)
@@ -509,6 +503,7 @@ def resource_view(service: DiscoveryService, resource_id: str, context: MemoryQu
     identity = next((item for item in subject_claims if item["predicate"] == "entity.exists"), None)
     core = family.get("shared_core") or {}
     provisional = bool((core.get("_discovery") or {}).get("provisional"))
+    continuity = service.continuity.resource_summary(context, subject_keys=subject_keys) if getattr(service, "continuity", None) else None
     return {
         "resource": family,
         "provisional": provisional,
@@ -518,6 +513,7 @@ def resource_view(service: DiscoveryService, resource_id: str, context: MemoryQu
         "changes": changes,
         "spatial_path": path if family.get("entity_type") == "location" else [],
         "zones": list(zones.values()),
+        "continuity": continuity,
     }
 
 
@@ -632,6 +628,10 @@ def record_explicit_edit(
         extraction_confidence=1.0, explicitness="explicit", qualifies_review=True,
     )
     _materialize_proposition(service, new["id"])
+    if getattr(service, "continuity", None):
+        service.continuity.record_explicit_change(
+            old, new, context, kind=mode, note=f"Explicit {mode} from Library"
+        )
     return service.evaluate_proposition(new, context, include_instances=True)
 
 

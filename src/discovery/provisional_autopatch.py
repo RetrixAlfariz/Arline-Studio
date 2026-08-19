@@ -6,11 +6,9 @@ from . import physical_item_refinement as physical_refinement_module
 from . import physical_items as physical_items_module
 from . import provisional
 from . import provisional_runtime as provisional_runtime_module
-from . import service as service_module
 from . import spatial as spatial_module
 from .continuity import install_continuity_runtime
 from .garment import install_garment_materialization, install_garment_runtime
-from .identity import install_identity_resolution
 from .library_scope import install_library_scope_lineage
 from .performance import finalize_discovery_performance, prepare_discovery_performance
 from .physical_item_ambiguity import install_physical_item_ambiguity_guard
@@ -31,10 +29,9 @@ from .startup import (
 )
 
 
-# These extensions must be installed before web.attach_discovery() binds the
-# capture/materialization hooks. They replace deterministic resolver adapters;
-# no source truth is mutated at import time.
-install_identity_resolution(service_module, provisional)
+# Legacy v1.2.1 enrichers still install before web.attach_discovery(), but
+# v1.2.2 identity/coreference/event/continuity ordering is owned explicitly by
+# NarrativeSemanticOrchestrator inside DiscoveryService.
 install_spatial_v2(spatial_module)
 install_garment_materialization(provisional)
 install_safe_anaphora_merge(physical_refinement_module)
@@ -124,10 +121,9 @@ if not getattr(provisional, "_RUNTIME_FIX_WRAPPED", False):
         # scope wrapper so all fast paths preserve the final authority contract.
         finalize_discovery_performance(service)
 
-        # v1.2.2 starts here: supersession/conflict/form reconstruction is a
-        # derived post-capture layer. It never mutates Canon and it is installed
-        # after every v1.2.1 scope/identity/performance wrapper so it observes the
-        # exact persisted evidence that the user can actually see.
+        # v1.2.2 continuity is already owned by DiscoveryService's explicit
+        # NarrativeSemanticOrchestrator. This compatibility call only publishes
+        # historical helper attributes; it does not wrap capture_turn.
         install_continuity_runtime(service)
 
         # Legacy non-Canon garment cleanup is derived compatibility work. It is

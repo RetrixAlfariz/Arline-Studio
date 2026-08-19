@@ -20,15 +20,10 @@ def _visible_family(foundation, family: dict[str, Any] | None) -> dict[str, Any]
 
 
 def resolve_existing_family(workspace, foundation, label: str, entity_type: str) -> dict[str, Any] | None:
-    """Resolve an existing Library identity without fuzzy auto-merging.
+    """Resolve exact Library identity without fuzzy auto-merging.
 
-    Resolution order is deliberately conservative:
-      1. exact normalized family name;
-      2. exact normalized alias;
-      3. exact normalized *unique* variant display name.
-
-    Ambiguous matches return ``None``. Narrative Discovery must never guess that
-    two identities are the same merely because their names are similar.
+    The order is intentionally precision-first: exact family name, exact alias,
+    then exact *unique* variant display name. Any ambiguity abstains.
     """
     needle = normalize_identity_label(label)
     if not needle:
@@ -90,18 +85,23 @@ def resolve_existing_family(workspace, foundation, label: str, entity_type: str)
     return None
 
 
-def install_identity_resolution(service_module, provisional_module) -> None:
-    """Make Discovery capture and provisional materialization share one resolver."""
-    if getattr(service_module.DiscoveryService, "_identity_resolution_v2", False):
-        return
+def linked_subject_keys(store, *, project_id: str | None, world_id: str | None, family_id: str) -> list[str]:
+    """Return exact Discovery subject anchors already linked to a Library family."""
+    with store.connection() as con:
+        rows = con.execute(
+            "SELECT subject_key FROM discovery_subject_links "
+            "WHERE project_id=? AND world_id=? AND resource_type='entity_family' AND resource_id=? "
+            "ORDER BY updated_at DESC,subject_key",
+            (project_id or "", world_id or "", family_id),
+        ).fetchall()
+    return [str(row["subject_key"]) for row in rows if row["subject_key"]]
 
-    def service_existing_family(self, label: str, entity_type: str):
-        mapped = service_module.LIBRARY_ENTITY_TYPE.get(entity_type, entity_type)
-        return resolve_existing_family(self.workspace, self.foundation, label, mapped)
 
-    def provisional_existing_family(service, label: str, entity_type: str):
-        return resolve_existing_family(service.workspace, service.foundation, label, entity_type)
+def install_identity_resolution(*_args, **_kwargs) -> None:
+    """Deprecated compatibility shim.
 
-    service_module.DiscoveryService._existing_family = service_existing_family
-    service_module.DiscoveryService._identity_resolution_v2 = True
-    provisional_module._existing_family = provisional_existing_family
+    v1.2.2 resolves identity explicitly inside NarrativeSemanticOrchestrator.
+    Keeping this callable avoids breaking old imports without mutating class or
+    module methods at import time.
+    """
+    return None
