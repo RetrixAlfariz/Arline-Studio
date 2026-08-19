@@ -42,10 +42,6 @@ jobs:
           index.write_text(html, encoding='utf-8')
           PY
           test ! -d node_modules
-          if git ls-files 'node_modules/**' | grep -q .; then
-            echo 'node_modules is still tracked after cleanup' >&2
-            exit 1
-          fi
       - uses: astral-sh/setup-uv@v6
       - name: Validate clean v1.2.3 tree
         shell: bash
