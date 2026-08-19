@@ -1,0 +1,44 @@
+name: Apply final architecture cleanup
+
+on:
+  pull_request:
+    branches: [develop/v1.2]
+    paths:
+      - tools/apply_final_architecture_cleanup.py
+      - .github/workflows/apply-final-architecture-cleanup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'fix/architecture-hardening'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/architecture-hardening
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Apply and verify cleanup
+        run: |
+          python tools/apply_final_architecture_cleanup.py
+          rm -f src/interface/web/static/js/compat.js
+          python -m compileall -q src
+          node --check src/interface/web/static/arline.js
+          node --check src/interface/web/static/js/stream.js
+          node --check src/interface/web/static/js/quick-create.js
+          node --check src/interface/web/static/js/discovery-sheets.js
+          node --check src/interface/web/static/js/memory.js
+          git diff --check
+      - name: Commit final cleanup
+        run: |
+          rm -f tools/apply_final_architecture_cleanup.py
+          rm -f .github/workflows/apply-final-architecture-cleanup.yml
+          git config user.name "Aestem"
+          git config user.email "aestem@users.noreply.github.com"
+          git add -A
+          git commit -m "refactor: remove frontend compatibility shim"
+          git push origin HEAD:fix/architecture-hardening
