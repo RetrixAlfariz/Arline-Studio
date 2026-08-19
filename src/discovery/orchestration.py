@@ -3,10 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .continuity import ContinuityResolver
 from .coreference import CrossTurnCoreferenceResolver
 from .entity_resolver import NarrativeEntityResolver, ResolvedEntityFrame
 from .events import NarrativeEventProjector
+from .scoped_continuity import LineageScopedContinuityResolver
 
 
 @dataclass(slots=True)
@@ -29,7 +29,7 @@ class NarrativeSemanticOrchestrator:
         self.coreference = CrossTurnCoreferenceResolver(service)
         self.entity_resolver = NarrativeEntityResolver(service, self.coreference)
         self.events = NarrativeEventProjector(service)
-        self.continuity = ContinuityResolver(service)
+        self.continuity = LineageScopedContinuityResolver(service)
 
     def prepare(
         self,
