@@ -12,6 +12,8 @@ from src.narrative.rails import CharacterRailParser
 from src.pipeline import ArlineAnalyticalPipeline
 from src.workspace.store import WORLD_BIBLE_PROJECT_ID
 
+from .identity import resolve_existing_family
+from .resolution import NarrativeEntityResolver
 from .store import DiscoveryStore, checksum
 
 
@@ -60,6 +62,7 @@ class DiscoveryService:
         self.foundation = foundation
         self.pipeline = ArlineAnalyticalPipeline.default()
         self.gate = ScopeGate(workspace, history)
+        self.entity_resolver = NarrativeEntityResolver(self)
 
     @staticmethod
     def _segment_map(result) -> dict[str, dict[str, Any]]:
@@ -100,12 +103,7 @@ class DiscoveryService:
 
     def _existing_family(self, label: str, entity_type: str) -> dict[str, Any] | None:
         mapped = LIBRARY_ENTITY_TYPE.get(entity_type, entity_type)
-        needle = label.strip().casefold()
-        try:
-            families = self.workspace.list_entity_families(None, entity_type=mapped)
-        except Exception:
-            families = []
-        return next((item for item in families if str(item.get("name") or "").strip().casefold() == needle), None)
+        return resolve_existing_family(self.workspace, self.foundation, label, mapped)
 
     def _subject_link(self, *, project_id: str | None, world_id: str | None,
                       subject_key: str, subject_label: str, subject_type: str) -> dict[str, str] | None:
@@ -145,9 +143,37 @@ class DiscoveryService:
                       explicitness: str, inferred: bool = False,
                       object_type: str | None = None, object_key: str | None = None,
                       object_label: str | None = None,
-                      temporal_state: str = "current_or_unspecified") -> bool:
+                      temporal_state: str = "current_or_unspecified") -> dict[str, Any] | None:
         segment = source["segments"].get(str(source_segment)) if source_segment else None
         span_start, span_end, span_text = self._span(segment)
+        resolved = self.entity_resolver.resolve(
+            project_id=source["project_id"], world_id=source["world_id"],
+            branch_id=source["branch_id"], session_id=source["session_id"],
+            turn_id=source["turn_id"], source_kind=source["source_kind"],
+            source_text=source.get("text") or span_text, entity_type=subject_type,
+            raw_subject_key=subject_key, label=subject_label,
+            span_start=span_start, span_end=span_end,
+        )
+        if not resolved.resolved:
+            return None
+        subject_key = str(resolved.subject_key)
+        subject_label = resolved.subject_label or subject_label
+
+        resolved_object = None
+        if object_key and object_label:
+            resolved_object = self.entity_resolver.resolve(
+                project_id=source["project_id"], world_id=source["world_id"],
+                branch_id=source["branch_id"], session_id=source["session_id"],
+                turn_id=source["turn_id"], source_kind=source["source_kind"],
+                source_text=source.get("text") or span_text, entity_type=object_type or "entity",
+                raw_subject_key=object_key, label=object_label,
+                span_start=span_start, span_end=span_end,
+            )
+            if not resolved_object.resolved:
+                return None
+            object_key = str(resolved_object.subject_key)
+            object_label = resolved_object.subject_label or object_label
+
         link = self._subject_link(
             project_id=source["project_id"], world_id=source["world_id"],
             subject_key=subject_key, subject_label=subject_label, subject_type=subject_type,
@@ -158,8 +184,8 @@ class DiscoveryService:
             predicate=predicate, value=value, object_type=object_type,
             object_key=object_key, object_label=object_label, operation=operation,
             temporal_state=temporal_state,
-            target_resource_type=link.get("resource_type") if link else None,
-            target_resource_id=link.get("resource_id") if link else None,
+            target_resource_type=link.get("resource_type") if link else resolved.target_resource_type,
+            target_resource_id=link.get("resource_id") if link else resolved.target_resource_id,
         )
         qualifies = bool(
             source["base_qualifies"]
@@ -175,12 +201,12 @@ class DiscoveryService:
             world_id=source["world_id"], branch_id=source["branch_id"],
             world_time=source["world_time"], story_order=source["story_order"],
             source_segment=source_segment, span_start=span_start, span_end=span_end,
-            span_text=span_text, extraction_confidence=confidence,
+            span_text=span_text or source.get("text", ""), extraction_confidence=confidence,
             explicitness="inferred" if inferred else explicitness,
             qualifies_review=qualifies,
         )
         report_keys.add(prop["id"])
-        return True
+        return prop
 
     def capture_text(self, text: str, *, source_kind: str, turn: dict[str, Any],
                      session: dict[str, Any], qualifies_review: bool | None = None) -> CaptureReport:
@@ -213,7 +239,7 @@ class DiscoveryService:
             "revision": revision, "project_id": session.get("project_id"),
             "world_id": session.get("world_id"), "branch_id": session.get("branch_id"),
             "world_time": world_time, "story_order": story_order,
-            "segments": segments, "base_qualifies": base_qualifies,
+            "segments": segments, "base_qualifies": base_qualifies, "text": evidence,
         }
 
         entities = {str(item["id"]): item for item in result.extracted_state.get("entities", []) if item.get("id")}
@@ -224,7 +250,7 @@ class DiscoveryService:
             entity_type = str(entity.get("type") or "").strip()
             label = str(entity.get("label") or "").strip()
             mapped = LIBRARY_ENTITY_TYPE.get(entity_type)
-            meaningful = bool(mapped and label and label.casefold() not in GENERIC_ENTITY_LABELS)
+            meaningful = bool(mapped and label)
             if meaningful:
                 self._capture_prop(
                     report_keys=prop_ids, source=source, subject_type=entity_type,
@@ -237,7 +263,7 @@ class DiscoveryService:
                 skipped += 1
 
             for path, value, segment_id, confidence, epistemic, inferred in self._flatten_attributes(entity.get("attributes") or {}):
-                if not label or label.casefold() in GENERIC_ENTITY_LABELS:
+                if not label:
                     skipped += 1
                     continue
                 self._capture_prop(
@@ -253,9 +279,6 @@ class DiscoveryService:
                 continue
             subject = entities.get(subject_key) or {}
             subject_label = str(subject.get("label") or subject_key)
-            if subject_label.casefold() in GENERIC_ENTITY_LABELS:
-                skipped += 1
-                continue
             object_key = str(relation.get("object") or "") or None
             obj = entities.get(object_key or "") or {}
             self._capture_prop(
@@ -274,6 +297,15 @@ class DiscoveryService:
         event_by_id = {str(item.get("id")): item for item in result.events.get("events", []) if item.get("id")}
         for state_patch in result.events.get("state_patches", []):
             event = event_by_id.get(str(state_patch.get("event_id") or "")) or {}
+            event_record = self.store.upsert_continuity_event(
+                project_id=source["project_id"], world_id=source["world_id"],
+                branch_id=source["branch_id"], session_id=source["session_id"],
+                source_turn_id=source["turn_id"], source_kind=source["source_kind"],
+                event_type=str(event.get("type") or event.get("event_type") or "state_transition"),
+                summary=str(event.get("summary") or event.get("description") or event.get("label") or "Narrative state transition"),
+                source_segment=event.get("source_segment"), story_order=source["story_order"],
+                world_time=source["world_time"], stable_seed=state_patch.get("event_id") or state_patch,
+            )
             for patch in state_patch.get("patch", []):
                 if patch.get("op") not in {"set", "replace", "delete"}:
                     continue
@@ -288,7 +320,7 @@ class DiscoveryService:
                     skipped += 1
                     continue
                 value = patch.get("value") if patch.get("op") != "delete" else {"deleted": True, "previous": patch.get("from")}
-                self._capture_prop(
+                transition_prop = self._capture_prop(
                     report_keys=prop_ids, source=source,
                     subject_type=str(subject.get("type") or "character"), subject_key=subject_key,
                     subject_label=subject_label, predicate=f"state.{state_path}", value=value,
@@ -296,6 +328,12 @@ class DiscoveryService:
                     confidence=float(event.get("eventhood_score") or 0.8), explicitness="explicit",
                     temporal_state="historical_or_current",
                 )
+                if transition_prop is not None:
+                    self.store.link_event_effect(
+                        event_record["id"], transition_prop["id"],
+                        subject_key=transition_prop["subject_key"],
+                        predicate=transition_prop["predicate"], role="after",
+                    )
 
         instances = sum(
             1 for prop_id in prop_ids

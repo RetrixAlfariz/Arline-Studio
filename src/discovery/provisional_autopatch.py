@@ -10,7 +10,6 @@ from . import service as service_module
 from . import spatial as spatial_module
 from .continuity import install_continuity_runtime
 from .garment import install_garment_materialization, install_garment_runtime
-from .identity import install_identity_resolution
 from .library_scope import install_library_scope_lineage
 from .performance import finalize_discovery_performance, prepare_discovery_performance
 from .physical_item_ambiguity import install_physical_item_ambiguity_guard
@@ -34,7 +33,6 @@ from .startup import (
 # These extensions must be installed before web.attach_discovery() binds the
 # capture/materialization hooks. They replace deterministic resolver adapters;
 # no source truth is mutated at import time.
-install_identity_resolution(service_module, provisional)
 install_spatial_v2(spatial_module)
 install_garment_materialization(provisional)
 install_safe_anaphora_merge(physical_refinement_module)

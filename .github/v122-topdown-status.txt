@@ -1,8 +1,0 @@
-exit_code=1
-commit=5dc40297c159c0a4266a462ad1379c450c557e68
-
-=== HOTFIX ===
-  File "/home/runner/work/Arline-Studio/Arline-Studio/.github/v122_topdown_hotfix.py", line 36
-    '''                    "continuity_forms",\n                    "discovery_changes",''',
-                                                                                            ^
-SyntaxError: unexpected character after line continuation character

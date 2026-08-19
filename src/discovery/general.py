@@ -199,6 +199,31 @@ def detect_general(text: str, *, existing: list[dict[str, Any]] | None = None) -
             temporal_state="historical_or_current",
         ))
 
+    pronoun_trait = re.compile(
+        rf"(?<![\w@])(?P<label>(?i:Aku|Saya|I|Dia|Ia|He|She))\s+(?i:adalah|is|was)\s+"
+        rf"(?:(?i:orang\s+yang|a|an)\s+)?(?P<trait>(?i:{trait_words}))\b"
+    )
+    for match in pronoun_trait.finditer(text):
+        label = match.group("label")
+        out.append(GeneralCandidate(
+            subject_type="character", subject_key=f"mention:{match.start()}", subject_label=label,
+            predicate="personality.descriptor", value=match.group("trait").strip().lower(), operation="update",
+            start=match.start(), end=match.end(), span_text=match.group(0), confidence=0.9,
+        ))
+
+    pronoun_transition = re.compile(
+        r"(?<![\w@])(?P<label>(?i:Aku|Saya|I|Dia|Ia|He|She))\s+"
+        r"(?:(?i:sekarang|now)\s+)?(?i:berubah\s+menjadi|menjadi|became|becomes|transformed?\s+into)\s+"
+        r"(?P<value>[^.!?\n]{2,180})"
+    )
+    for match in pronoun_transition.finditer(text):
+        out.append(GeneralCandidate(
+            subject_type="character", subject_key=f"mention:{match.start()}", subject_label=match.group("label"),
+            predicate="state.form_description", value=" ".join(match.group("value").strip().split()),
+            operation="transition", start=match.start(), end=match.end(), span_text=match.group(0),
+            confidence=0.9, temporal_state="historical_or_current",
+        ))
+
     residence = re.compile(
         rf"(?<![\w@])(?P<char>{PROPER})\s+(?i:tinggal|lives|resides)\s+"
         rf"(?i:di|in|at)\s+(?:(?i:kota|city|apartemen|apartment|rumah|house)\s+)?"
@@ -252,20 +277,43 @@ def _capture_text_general(self: DiscoveryService, text: str, *, source_kind: str
     origin_session_id = str(lineage.get("forked_from_session_id") or session["id"])
 
     for index, item in enumerate(candidates, 1):
+        resolved = self.entity_resolver.resolve(
+            project_id=session.get("project_id"), world_id=session.get("world_id"),
+            branch_id=session.get("branch_id"), session_id=session.get("id"),
+            turn_id=turn.get("id"), source_kind=source_kind, source_text=evidence,
+            entity_type=item.subject_type, raw_subject_key=item.subject_key, label=item.subject_label,
+            span_start=item.start, span_end=item.end,
+        )
+        if not resolved.resolved:
+            continue
+        object_key = item.object_key
+        object_label = item.object_label
+        if object_key and object_label:
+            resolved_object = self.entity_resolver.resolve(
+                project_id=session.get("project_id"), world_id=session.get("world_id"),
+                branch_id=session.get("branch_id"), session_id=session.get("id"),
+                turn_id=turn.get("id"), source_kind=source_kind, source_text=evidence,
+                entity_type=item.object_type or "entity", raw_subject_key=object_key, label=object_label,
+                span_start=item.start, span_end=item.end,
+            )
+            if not resolved_object.resolved:
+                continue
+            object_key = resolved_object.subject_key
+            object_label = resolved_object.subject_label
         link = self._subject_link(
             project_id=session.get("project_id"), world_id=session.get("world_id"),
-            subject_key=item.subject_key, subject_label=item.subject_label,
+            subject_key=str(resolved.subject_key), subject_label=resolved.subject_label,
             subject_type=item.subject_type,
         )
         proposition = self.store.upsert_proposition(
             project_id=session.get("project_id"), world_id=session.get("world_id"),
-            subject_type=item.subject_type, subject_key=item.subject_key,
-            subject_label=item.subject_label, predicate=item.predicate, value=item.value,
-            object_type=item.object_type, object_key=item.object_key,
-            object_label=item.object_label, operation=item.operation,
+            subject_type=item.subject_type, subject_key=str(resolved.subject_key),
+            subject_label=resolved.subject_label, predicate=item.predicate, value=item.value,
+            object_type=item.object_type, object_key=object_key,
+            object_label=object_label, operation=item.operation,
             temporal_state=item.temporal_state,
-            target_resource_type=link.get("resource_type") if link else None,
-            target_resource_id=link.get("resource_id") if link else None,
+            target_resource_type=link.get("resource_type") if link else resolved.target_resource_type,
+            target_resource_id=link.get("resource_id") if link else resolved.target_resource_id,
         )
         existing_instances = self.store.list_instances(proposition["id"])
         if any(

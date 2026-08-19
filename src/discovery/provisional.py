@@ -9,6 +9,7 @@ from src.memory.models import MemoryQueryContext
 from src.domain_events import get_domain_event_bus
 from src.workspace.store import WORLD_BIBLE_PROJECT_ID
 
+from .identity import resolve_existing_family
 from .service import DiscoveryService
 from .store import checksum, dumps, loads, make_id, utc_now
 
@@ -62,15 +63,7 @@ def _resource_subject_links(service: DiscoveryService, resource_id: str) -> list
 
 
 def _existing_family(service: DiscoveryService, label: str, entity_type: str) -> dict[str, Any] | None:
-    needle = label.strip().casefold()
-    try:
-        rows = service.workspace.list_entity_families(None, entity_type=entity_type)
-    except Exception:
-        return None
-    return next(
-        (row for row in rows if str(row.get("name") or "").strip().casefold() == needle),
-        None,
-    )
+    return resolve_existing_family(service.workspace, service.foundation, label, entity_type)
 
 
 def _update_target(service: DiscoveryService, proposition_id: str, family_id: str) -> None:
@@ -509,6 +502,43 @@ def resource_view(service: DiscoveryService, resource_id: str, context: MemoryQu
     identity = next((item for item in subject_claims if item["predicate"] == "entity.exists"), None)
     core = family.get("shared_core") or {}
     provisional = bool((core.get("_discovery") or {}).get("provisional"))
+    continuity_payload = {
+        "current": {"version": "1.2.2a1", "heads": [], "ambiguous": [], "superseded_proposition_ids": []},
+        "forms": [], "history": [], "events": [], "conflicts": [], "mentions": [],
+    }
+    resolver = getattr(service, "continuity", None)
+    if resolver is not None:
+        seen_heads: set[str] = set()
+        seen_forms: set[str] = set()
+        seen_history: set[str] = set()
+        seen_events: set[str] = set()
+        seen_conflicts: set[str] = set()
+        seen_mentions: set[str] = set()
+        for key in subject_keys:
+            current = resolver.current_view(context, subject_key=key)
+            for head in current.get("heads", []):
+                if head["id"] not in seen_heads:
+                    continuity_payload["current"]["heads"].append(head); seen_heads.add(head["id"])
+            continuity_payload["current"]["ambiguous"].extend(current.get("ambiguous", []))
+            continuity_payload["current"]["superseded_proposition_ids"].extend(current.get("superseded_proposition_ids", []))
+            for item in resolver.list_forms(context, subject_key=key):
+                if item["id"] not in seen_forms:
+                    continuity_payload["forms"].append(item); seen_forms.add(item["id"])
+            for item in resolver.change_history(context, subject_key=key):
+                if item["id"] not in seen_history:
+                    continuity_payload["history"].append(item); seen_history.add(item["id"])
+            for item in resolver.list_events(context, subject_key=key):
+                if item["id"] not in seen_events:
+                    continuity_payload["events"].append(item); seen_events.add(item["id"])
+            for item in resolver.list_conflicts(context, subject_key=key, include_resolved=True):
+                if item["id"] not in seen_conflicts:
+                    continuity_payload["conflicts"].append(item); seen_conflicts.add(item["id"])
+            for item in service.store.list_mentions_for_subject(
+                project_id=context.project_id, world_id=context.world_id, subject_key=key, limit=80
+            ):
+                if item["id"] not in seen_mentions:
+                    continuity_payload["mentions"].append(item); seen_mentions.add(item["id"])
+        continuity_payload["current"]["superseded_proposition_ids"] = sorted(set(continuity_payload["current"]["superseded_proposition_ids"]))
     return {
         "resource": family,
         "provisional": provisional,
@@ -518,6 +548,7 @@ def resource_view(service: DiscoveryService, resource_id: str, context: MemoryQu
         "changes": changes,
         "spatial_path": path if family.get("entity_type") == "location" else [],
         "zones": list(zones.values()),
+        "continuity": continuity_payload,
     }
 
 

@@ -81,7 +81,7 @@ class ArchitectureHardeningTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             db = Path(td) / "discovery.db"
             store = DiscoveryStore(db)
-            self.assertEqual(store.SCHEMA_VERSION, 3)
+            self.assertEqual(store.SCHEMA_VERSION, 4)
             with sqlite3.connect(db) as con:
                 tables = {
                     row[0]

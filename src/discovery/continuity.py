@@ -156,7 +156,7 @@ class ContinuityResolver:
 
     def _insert_edge(self, *, previous: dict[str, Any], current: dict[str, Any], kind: str,
                      session: dict[str, Any], turn_id: str, source_kind: str,
-                     story_order: float | None, world_time: Any) -> None:
+                     story_order: float | None, world_time: Any) -> str:
         now = utc_now()
         edge_id = "SUPER-" + sha256(
             dumps([previous["id"], current["id"], kind, turn_id]).encode("utf-8")
@@ -172,6 +172,7 @@ class ContinuityResolver:
                     turn_id, source_kind, story_order, dumps(world_time) if world_time is not None else None, now,
                 ),
             )
+        return edge_id
 
     def _insert_conflict(self, *, previous: dict[str, Any], current: dict[str, Any],
                          session: dict[str, Any], turn_id: str) -> None:
@@ -335,6 +336,33 @@ class ContinuityResolver:
                         story_order=story_order, world_time=world_time,
                     )
                     if kind == "story_change":
+                        event = self.store.find_event_for_proposition(current["id"])
+                        if event is None and current.get("operation") == "transition":
+                            event = self.store.upsert_continuity_event(
+                                project_id=session.get("project_id"), world_id=session.get("world_id"),
+                                branch_id=session.get("branch_id"), session_id=session.get("id"),
+                                source_turn_id=turn_id, source_kind=source_kind,
+                                event_type="state_transition",
+                                summary=(source_text.strip()[:240] or f"{current.get('subject_label')} changed"),
+                                story_order=story_order, world_time=world_time,
+                                stable_seed=[current["id"], "synthetic_transition"],
+                            )
+                            self.store.link_event_effect(
+                                event["id"], current["id"], subject_key=current["subject_key"],
+                                predicate=current["predicate"], role="after",
+                            )
+                        if event is not None:
+                            link_id = "CAUSE-" + sha256(
+                                dumps([event["id"], previous["id"], current["id"]]).encode("utf-8")
+                            ).hexdigest()[:16].upper()
+                            with self.store._lock, self.store.connection() as con:
+                                con.execute(
+                                    "INSERT OR IGNORE INTO continuity_causal_links(id,event_id,subject_key,predicate,"
+                                    "from_proposition_id,to_proposition_id,kind,created_at) VALUES(?,?,?,?,?,?,?,?)",
+                                    (link_id, event["id"], current["subject_key"], current["predicate"],
+                                     previous["id"], current["id"], "state_transition", utc_now()),
+                                )
+                    if kind == "story_change":
                         report.story_changes += 1
                     elif kind == "correction":
                         report.corrections += 1
@@ -378,16 +406,163 @@ class ContinuityResolver:
             forms.append(item)
         return forms
 
+    def list_events(self, context: MemoryQueryContext, *, subject_key: str | None = None) -> list[dict[str, Any]]:
+        params: list[Any] = [context.project_id, context.world_id]
+        subject_join = ""
+        subject_where = ""
+        if subject_key:
+            subject_join = " JOIN continuity_event_effects x ON x.event_id=e.id "
+            subject_where = " AND x.subject_key=?"
+            params.append(subject_key)
+        with self.store.connection() as con:
+            rows = con.execute(
+                "SELECT DISTINCT e.* FROM continuity_events e" + subject_join +
+                " WHERE e.project_id IS ? AND e.world_id IS ?" + subject_where +
+                " ORDER BY COALESCE(e.story_order,-1e308),e.created_at,e.id",
+                params,
+            ).fetchall()
+        output = []
+        for row in rows:
+            item = dict(row)
+            item["world_time"] = loads(item.pop("world_time_json", None), None)
+            with self.store.connection() as con:
+                effects = con.execute(
+                    "SELECT * FROM continuity_event_effects WHERE event_id=? ORDER BY created_at,proposition_id",
+                    (item["id"],),
+                ).fetchall()
+                causes = con.execute(
+                    "SELECT * FROM continuity_causal_links WHERE event_id=? ORDER BY created_at,id",
+                    (item["id"],),
+                ).fetchall()
+            visible_effects = []
+            for effect in effects:
+                effect_item = dict(effect)
+                try:
+                    evaluated = self.service.evaluate_proposition(
+                        self.store.get_proposition(effect_item["proposition_id"]), context
+                    )
+                except KeyError:
+                    continue
+                if evaluated.get("knowledge_state") == "canon" or int(evaluated.get("support_count") or 0) > 0:
+                    visible_effects.append(effect_item)
+            if not visible_effects:
+                continue
+            item["effects"] = visible_effects
+            item["causal_links"] = [dict(row) for row in causes]
+            output.append(item)
+        return output
+
+    def list_conflicts(self, context: MemoryQueryContext, *, subject_key: str | None = None,
+                       include_resolved: bool = False) -> list[dict[str, Any]]:
+        where = ["project_id IS ?", "world_id IS ?"]
+        params: list[Any] = [context.project_id, context.world_id]
+        if subject_key:
+            where.append("subject_key=?")
+            params.append(subject_key)
+        if not include_resolved:
+            where.append("status='open'")
+        with self.store.connection() as con:
+            rows = con.execute(
+                f"SELECT * FROM continuity_conflicts WHERE {' AND '.join(where)} ORDER BY created_at,id",
+                params,
+            ).fetchall()
+        output = []
+        for row in rows:
+            item = dict(row)
+            try:
+                left = self.service.evaluate_proposition(self.store.get_proposition(item["left_proposition_id"]), context)
+                right = self.service.evaluate_proposition(self.store.get_proposition(item["right_proposition_id"]), context)
+            except KeyError:
+                continue
+            if not any(x.get("knowledge_state") == "canon" or int(x.get("support_count") or 0) > 0 for x in (left, right)):
+                continue
+            item["left"] = left
+            item["right"] = right
+            output.append(item)
+        return output
+
+    def change_history(self, context: MemoryQueryContext, *, subject_key: str) -> list[dict[str, Any]]:
+        with self.store.connection() as con:
+            rows = con.execute(
+                "SELECT * FROM continuity_edges WHERE project_id IS ? AND world_id IS ? AND subject_key=? "
+                "ORDER BY COALESCE(story_order,-1e308),created_at,id",
+                (context.project_id, context.world_id, subject_key),
+            ).fetchall()
+        output = []
+        for row in rows:
+            edge = dict(row)
+            try:
+                before = self.service.evaluate_proposition(self.store.get_proposition(edge["from_proposition_id"]), context)
+                after = self.service.evaluate_proposition(self.store.get_proposition(edge["to_proposition_id"]), context)
+            except KeyError:
+                continue
+            if not (before.get("knowledge_state") == "canon" or int(before.get("support_count") or 0) > 0):
+                continue
+            if not (after.get("knowledge_state") == "canon" or int(after.get("support_count") or 0) > 0):
+                continue
+            event = self.store.find_event_for_proposition(after["id"])
+            edge["before"] = before
+            edge["after"] = after
+            edge["event"] = event
+            edge["world_time"] = loads(edge.pop("world_time_json", None), None)
+            output.append(edge)
+        return output
+
+    def resolve_conflict(self, conflict_id: str, *, action: str,
+                         from_proposition_id: str | None = None,
+                         to_proposition_id: str | None = None,
+                         note: str = "") -> dict[str, Any]:
+        if action not in {"correction", "story_change", "dismiss"}:
+            raise ValueError("action must be correction, story_change, or dismiss")
+        with self.store.connection() as con:
+            row = con.execute("SELECT * FROM continuity_conflicts WHERE id=?", (conflict_id,)).fetchone()
+        if row is None:
+            raise KeyError(conflict_id)
+        conflict = dict(row)
+        pair = {conflict["left_proposition_id"], conflict["right_proposition_id"]}
+        now = utc_now()
+        if action == "dismiss":
+            with self.store._lock, self.store.connection() as con:
+                con.execute("UPDATE continuity_conflicts SET status='dismissed',resolved_at=? WHERE id=?", (now, conflict_id))
+        else:
+            if not from_proposition_id or not to_proposition_id or {from_proposition_id, to_proposition_id} != pair:
+                raise ValueError("from_proposition_id and to_proposition_id must select the two conflicting claims")
+            previous = self.store.get_proposition(from_proposition_id)
+            current = self.store.get_proposition(to_proposition_id)
+            session = {
+                "project_id": conflict.get("project_id"), "world_id": conflict.get("world_id"),
+                "branch_id": conflict.get("branch_id"), "id": conflict.get("session_id"),
+            }
+            self._insert_edge(
+                previous=previous, current=current, kind=action, session=session,
+                turn_id=conflict.get("source_turn_id") or "user_resolution",
+                source_kind="user_continuity_resolution", story_order=None, world_time=None,
+            )
+            with self.store._lock, self.store.connection() as con:
+                con.execute("UPDATE continuity_conflicts SET status='resolved',resolved_at=? WHERE id=?", (now, conflict_id))
+        with self.store._lock, self.store.connection() as con:
+            con.execute(
+                "INSERT INTO continuity_conflict_resolutions(id,conflict_id,action,from_proposition_id,to_proposition_id,note,created_at) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (make_id("CONFRES"), conflict_id, action, from_proposition_id, to_proposition_id, note.strip(), now),
+            )
+            result = con.execute("SELECT * FROM continuity_conflicts WHERE id=?", (conflict_id,)).fetchone()
+        return dict(result)
+
     def status(self) -> dict[str, Any]:
         with self.store.connection() as con:
             edges = con.execute("SELECT COUNT(*) AS n FROM continuity_edges").fetchone()["n"]
             conflicts = con.execute("SELECT COUNT(*) AS n FROM continuity_conflicts WHERE status='open'").fetchone()["n"]
             forms = con.execute("SELECT COUNT(*) AS n FROM continuity_forms").fetchone()["n"]
+            events = con.execute("SELECT COUNT(*) AS n FROM continuity_events").fetchone()["n"]
+            mentions = con.execute("SELECT COUNT(*) AS n FROM discovery_mentions").fetchone()["n"]
         return {
             "version": CONTINUITY_VERSION,
             "supersession_edges": int(edges),
             "open_conflicts": int(conflicts),
             "forms": int(forms),
+            "events": int(events),
+            "mentions": int(mentions),
         }
 
 
@@ -414,5 +589,8 @@ def install_continuity_runtime(service) -> ContinuityResolver:
     service.continuity = resolver
     service.continuity_current_view = resolver.current_view
     service.continuity_forms = resolver.list_forms
+    service.continuity_events = resolver.list_events
+    service.continuity_conflicts = resolver.list_conflicts
+    service.continuity_history = resolver.change_history
     service._continuity_runtime_installed = True
     return resolver

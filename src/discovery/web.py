@@ -33,6 +33,12 @@ class DiscoveryEditPayload(DiscoveryDecisionPayload):
     mode: str = "correction"
 
 
+class ContinuityConflictResolutionPayload(DiscoveryDecisionPayload):
+    action: str
+    from_proposition_id: str | None = None
+    to_proposition_id: str | None = None
+
+
 def _context(*, project_id=None, world_id=None, branch_id=None, session_id=None,
              story_order=None, world_time=None) -> MemoryQueryContext:
     return MemoryQueryContext(
@@ -300,6 +306,34 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
             )
         except KeyError as exc:
             raise HTTPException(404, "Entity sheet not found") from exc
+
+    @router.get("/discoveries/continuity/status")
+    def continuity_status():
+        return discovery.continuity.status()
+
+    @router.get("/discoveries/continuity/conflicts")
+    def continuity_conflicts(
+        project_id: str | None = Query(None), world_id: str | None = Query(None),
+        branch_id: str | None = Query(None), session_id: str | None = Query(None),
+        include_resolved: bool = Query(False),
+    ):
+        return {"items": discovery.continuity.list_conflicts(
+            _context(project_id=project_id, world_id=world_id, branch_id=branch_id, session_id=session_id),
+            include_resolved=include_resolved,
+        )}
+
+    @router.post("/discoveries/continuity/conflicts/{conflict_id}/resolve")
+    def resolve_continuity_conflict(conflict_id: str, payload: ContinuityConflictResolutionPayload):
+        try:
+            return discovery.continuity.resolve_conflict(
+                conflict_id, action=payload.action,
+                from_proposition_id=payload.from_proposition_id,
+                to_proposition_id=payload.to_proposition_id, note=payload.note,
+            )
+        except KeyError as exc:
+            raise HTTPException(404, "Continuity conflict not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @router.get("/discoveries/{proposition_id}")
     def get_discovery(

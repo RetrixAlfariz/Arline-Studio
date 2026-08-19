@@ -141,29 +141,38 @@ requested lineage.
 
 ### Phase B — Narrative Entity Resolver
 
-Replace hard-coded story identities in the analytical extractor with arbitrary
-entity mentions and stable anchors. Resolve exact Library identity and aliases
-before propositions are emitted. Fuzzy merging remains forbidden.
+Implemented top-down: extractors now propose mentions/temporary keys, while one
+shared `NarrativeEntityResolver` chooses the stable anchor before propositions
+are persisted. Resolution order is conservative: existing subject link, exact
+Library name/alias/unique variant, exact same-turn anchor, then bounded
+coreference. Every attempt is written as a rebuildable `MENTION-*` diagnostic.
+Fuzzy merging remains forbidden.
 
 ### Phase C — cross-turn coreference
 
-Resolve narrator/self references, pronouns, possessives, demonstratives, and
-recent mentions across turns. Examples include `aku`, `saya`, `dia`, `-ku`,
-`-nya`, `itu`, and `tadi`. Ambiguous candidate sets remain unresolved rather
-than guessed.
+Implemented conservatively for the high-confidence first/third-person surface:
+explicit narrator identity can anchor later `aku`/`saya`/`I` references, and a
+unique bounded recent character can anchor `dia`/`ia`/`he`/`she`. Generic,
+possessive/demonstrative surfaces enter the same resolver gate; plural or
+ambiguous candidate sets remain unresolved and are retained as diagnostics
+rather than guessed. Extraction grammars can be widened independently without
+changing identity authority.
 
 ### Phase D — event/state causality
 
-Connect state changes to their causing `EVENT-*` records and reconstruct explicit
-before/after frames. Character Rails and Memory can then answer questions such as
-"what was Character A like before the transformation?" without flattening the
-history.
+Implemented as rebuildable derived state: analytical state patches create stable
+`EVENT-*` records and effect links; continuity supersession then joins the
+visible before/after propositions through `CAUSE-*` links. Deterministic
+transition fallbacks synthesize an event only when the extractor supplied a
+transition without an event object. No event or causal edge grants Canon.
 
 ### Phase E — continuity UI
 
-Library sheets gain Current State, Forms, Change History, and Conflicts sections.
-Conflict resolution remains an explicit user action and does not silently grant
-Canon.
+Implemented through one resource-level continuity payload consumed by Library
+sheets: Current State, Forms, Change History, Events & Causes, and Conflicts.
+Conflict resolution is an explicit user action choosing correction, story
+transition direction, or leaving the conflict unresolved. The action changes
+derived continuity only and never silently grants Canon.
 
 ## Non-goals
 

@@ -13,7 +13,7 @@ from uuid import uuid4
 from src.storage_backup import backup_sqlite_before_migrations
 
 
-DISCOVERY_SCHEMA_VERSION = 3
+DISCOVERY_SCHEMA_VERSION = 4
 CONTINUITY_SCHEMA_VERSION = "1.2.2a1"
 PROVISIONAL_SCHEMA_VERSION = 1
 
@@ -186,6 +186,88 @@ class DiscoveryStore:
                 CREATE INDEX IF NOT EXISTS idx_continuity_conflict_subject ON continuity_conflicts(project_id,world_id,subject_key,predicate,status);
                 CREATE TABLE IF NOT EXISTS continuity_forms(id TEXT PRIMARY KEY,project_id TEXT,world_id TEXT,branch_id TEXT,session_id TEXT,subject_key TEXT NOT NULL,subject_label TEXT NOT NULL,source_turn_id TEXT NOT NULL,source_kind TEXT NOT NULL,anchor_proposition_id TEXT,parent_form_id TEXT,reason TEXT NOT NULL,story_order REAL,world_time_json TEXT,state_json TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(subject_key,source_turn_id,source_kind));
                 CREATE INDEX IF NOT EXISTS idx_continuity_form_subject ON continuity_forms(project_id,world_id,subject_key,story_order,created_at);
+
+                CREATE TABLE IF NOT EXISTS discovery_mentions(
+                    id TEXT PRIMARY KEY,
+                    mention_key TEXT NOT NULL UNIQUE,
+                    project_id TEXT,
+                    world_id TEXT,
+                    branch_id TEXT,
+                    session_id TEXT,
+                    source_turn_id TEXT,
+                    source_kind TEXT NOT NULL,
+                    surface TEXT NOT NULL,
+                    entity_type TEXT NOT NULL,
+                    raw_subject_key TEXT NOT NULL,
+                    resolved_subject_key TEXT,
+                    resolved_label TEXT,
+                    target_resource_type TEXT,
+                    target_resource_id TEXT,
+                    resolution_kind TEXT NOT NULL,
+                    confidence REAL NOT NULL DEFAULT 0.0,
+                    ambiguous_json TEXT NOT NULL DEFAULT '[]',
+                    span_start INTEGER,
+                    span_end INTEGER,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_discovery_mentions_scope
+                    ON discovery_mentions(session_id,branch_id,entity_type,created_at);
+                CREATE INDEX IF NOT EXISTS idx_discovery_mentions_anchor
+                    ON discovery_mentions(project_id,world_id,resolved_subject_key,created_at);
+
+                CREATE TABLE IF NOT EXISTS continuity_events(
+                    id TEXT PRIMARY KEY,
+                    event_key TEXT NOT NULL UNIQUE,
+                    project_id TEXT,
+                    world_id TEXT,
+                    branch_id TEXT,
+                    session_id TEXT,
+                    source_turn_id TEXT,
+                    source_kind TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    summary TEXT NOT NULL,
+                    source_segment TEXT,
+                    story_order REAL,
+                    world_time_json TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_continuity_events_scope
+                    ON continuity_events(project_id,world_id,branch_id,story_order,created_at);
+                CREATE TABLE IF NOT EXISTS continuity_event_effects(
+                    event_id TEXT NOT NULL REFERENCES continuity_events(id) ON DELETE CASCADE,
+                    proposition_id TEXT NOT NULL REFERENCES discovery_propositions(id) ON DELETE CASCADE,
+                    subject_key TEXT NOT NULL,
+                    predicate TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'after',
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY(event_id,proposition_id,role)
+                );
+                CREATE INDEX IF NOT EXISTS idx_continuity_effect_subject
+                    ON continuity_event_effects(subject_key,predicate,event_id);
+                CREATE TABLE IF NOT EXISTS continuity_causal_links(
+                    id TEXT PRIMARY KEY,
+                    event_id TEXT NOT NULL REFERENCES continuity_events(id) ON DELETE CASCADE,
+                    subject_key TEXT NOT NULL,
+                    predicate TEXT NOT NULL,
+                    from_proposition_id TEXT,
+                    to_proposition_id TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    UNIQUE(event_id,from_proposition_id,to_proposition_id,kind)
+                );
+                CREATE INDEX IF NOT EXISTS idx_continuity_causal_subject
+                    ON continuity_causal_links(subject_key,predicate,event_id);
+                CREATE TABLE IF NOT EXISTS continuity_conflict_resolutions(
+                    id TEXT PRIMARY KEY,
+                    conflict_id TEXT NOT NULL REFERENCES continuity_conflicts(id) ON DELETE CASCADE,
+                    action TEXT NOT NULL,
+                    from_proposition_id TEXT,
+                    to_proposition_id TEXT,
+                    note TEXT NOT NULL DEFAULT '',
+                    created_at TEXT NOT NULL
+                );
 
                 CREATE TABLE IF NOT EXISTS discovery_provisional_meta(
                     key TEXT PRIMARY KEY,
@@ -485,6 +567,153 @@ class DiscoveryStore:
                 (project_id or "", world_id or "", subject_key),
             ).fetchone()
         return dict(row) if row else None
+
+    def find_subject_key_for_resource(self, *, project_id: str | None, world_id: str | None,
+                                      resource_type: str, resource_id: str) -> str | None:
+        with self.connection() as con:
+            row = con.execute(
+                "SELECT subject_key FROM discovery_subject_links WHERE project_id=? AND world_id=? "
+                "AND resource_type=? AND resource_id=? ORDER BY updated_at DESC LIMIT 1",
+                (project_id or "", world_id or "", resource_type, resource_id),
+            ).fetchone()
+        return str(row["subject_key"]) if row else None
+
+    def record_mention(self, *, project_id: str | None, world_id: str | None,
+                       branch_id: str | None, session_id: str | None,
+                       source_turn_id: str | None, source_kind: str, surface: str,
+                       entity_type: str, raw_subject_key: str,
+                       resolved_subject_key: str | None,
+                       target_resource_type: str | None,
+                       target_resource_id: str | None,
+                       resolution_kind: str, confidence: float,
+                       ambiguous_candidates: list[str] | None = None,
+                       span_start: int | None = None, span_end: int | None = None,
+                       resolved_label: str | None = None) -> dict[str, Any]:
+        seed = dumps([
+            source_turn_id or "", source_kind, raw_subject_key, surface,
+            entity_type, span_start, span_end,
+        ])
+        mention_key = hashlib.sha256(seed.encode("utf-8")).hexdigest()
+        now = utc_now()
+        with self._lock, self.connection() as con:
+            row = con.execute("SELECT id FROM discovery_mentions WHERE mention_key=?", (mention_key,)).fetchone()
+            if row:
+                mention_id = row["id"]
+                con.execute(
+                    "UPDATE discovery_mentions SET resolved_subject_key=?,resolved_label=?,target_resource_type=?,"
+                    "target_resource_id=?,resolution_kind=?,confidence=?,ambiguous_json=?,updated_at=? WHERE id=?",
+                    (resolved_subject_key, resolved_label or surface, target_resource_type, target_resource_id,
+                     resolution_kind, max(0.0, min(1.0, float(confidence))),
+                     dumps(ambiguous_candidates or []), now, mention_id),
+                )
+            else:
+                mention_id = make_id("MENTION")
+                con.execute(
+                    "INSERT INTO discovery_mentions(id,mention_key,project_id,world_id,branch_id,session_id,"
+                    "source_turn_id,source_kind,surface,entity_type,raw_subject_key,resolved_subject_key,resolved_label,"
+                    "target_resource_type,target_resource_id,resolution_kind,confidence,ambiguous_json,span_start,span_end,created_at,updated_at) "
+                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (mention_id, mention_key, project_id, world_id, branch_id, session_id,
+                     source_turn_id, source_kind, surface, entity_type, raw_subject_key,
+                     resolved_subject_key, resolved_label or surface, target_resource_type,
+                     target_resource_id, resolution_kind, max(0.0, min(1.0, float(confidence))),
+                     dumps(ambiguous_candidates or []), span_start, span_end, now, now),
+                )
+            result = con.execute("SELECT * FROM discovery_mentions WHERE id=?", (mention_id,)).fetchone()
+        item = dict(result)
+        item["ambiguous_candidates"] = loads(item.pop("ambiguous_json", None), [])
+        return item
+
+    def recent_mentions(self, *, session_id: str, branch_id: str | None,
+                        entity_type: str | None = None, limit: int = 32) -> list[dict[str, Any]]:
+        where = ["session_id=?", "(branch_id IS ? OR branch_id IS NULL)"]
+        params: list[Any] = [session_id, branch_id]
+        if entity_type:
+            where.append("entity_type=?")
+            params.append(entity_type)
+        params.append(max(1, min(int(limit), 256)))
+        with self.connection() as con:
+            rows = con.execute(
+                f"SELECT * FROM discovery_mentions WHERE {' AND '.join(where)} ORDER BY rowid DESC LIMIT ?",
+                params,
+            ).fetchall()
+        output = []
+        for row in rows:
+            item = dict(row)
+            item["ambiguous_candidates"] = loads(item.pop("ambiguous_json", None), [])
+            output.append(item)
+        return output
+
+    def list_mentions_for_subject(self, *, project_id: str | None, world_id: str | None,
+                                  subject_key: str, limit: int = 100) -> list[dict[str, Any]]:
+        with self.connection() as con:
+            rows = con.execute(
+                "SELECT * FROM discovery_mentions WHERE project_id IS ? AND world_id IS ? AND resolved_subject_key=? "
+                "ORDER BY rowid DESC LIMIT ?",
+                (project_id, world_id, subject_key, max(1, min(int(limit), 500))),
+            ).fetchall()
+        output = []
+        for row in rows:
+            item = dict(row)
+            item["ambiguous_candidates"] = loads(item.pop("ambiguous_json", None), [])
+            output.append(item)
+        return output
+
+    def upsert_continuity_event(self, *, project_id: str | None, world_id: str | None,
+                                branch_id: str | None, session_id: str | None,
+                                source_turn_id: str | None, source_kind: str,
+                                event_type: str, summary: str,
+                                source_segment: str | None = None,
+                                story_order: float | None = None,
+                                world_time: Any = None, stable_seed: Any = None) -> dict[str, Any]:
+        seed = dumps([source_turn_id or "", source_kind, event_type, source_segment or "", stable_seed or summary])
+        event_key = hashlib.sha256(seed.encode("utf-8")).hexdigest()
+        now = utc_now()
+        with self._lock, self.connection() as con:
+            row = con.execute("SELECT id FROM continuity_events WHERE event_key=?", (event_key,)).fetchone()
+            if row:
+                event_id = row["id"]
+                con.execute(
+                    "UPDATE continuity_events SET summary=?,story_order=?,world_time_json=?,updated_at=? WHERE id=?",
+                    (summary, story_order, dumps(world_time) if world_time is not None else None, now, event_id),
+                )
+            else:
+                digest = hashlib.sha256(event_key.encode("utf-8")).hexdigest()[:16].upper()
+                event_id = f"EVENT-{digest}"
+                con.execute(
+                    "INSERT INTO continuity_events(id,event_key,project_id,world_id,branch_id,session_id,source_turn_id,"
+                    "source_kind,event_type,summary,source_segment,story_order,world_time_json,created_at,updated_at) "
+                    "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (event_id, event_key, project_id, world_id, branch_id, session_id, source_turn_id,
+                     source_kind, event_type, summary, source_segment, story_order,
+                     dumps(world_time) if world_time is not None else None, now, now),
+                )
+            result = con.execute("SELECT * FROM continuity_events WHERE id=?", (event_id,)).fetchone()
+        item = dict(result)
+        item["world_time"] = loads(item.pop("world_time_json", None), None)
+        return item
+
+    def link_event_effect(self, event_id: str, proposition_id: str, *, subject_key: str,
+                          predicate: str, role: str = "after") -> None:
+        with self._lock, self.connection() as con:
+            con.execute(
+                "INSERT OR IGNORE INTO continuity_event_effects(event_id,proposition_id,subject_key,predicate,role,created_at) "
+                "VALUES(?,?,?,?,?,?)",
+                (event_id, proposition_id, subject_key, predicate, role, utc_now()),
+            )
+
+    def find_event_for_proposition(self, proposition_id: str) -> dict[str, Any] | None:
+        with self.connection() as con:
+            row = con.execute(
+                "SELECT e.* FROM continuity_events e JOIN continuity_event_effects x ON x.event_id=e.id "
+                "WHERE x.proposition_id=? ORDER BY e.rowid DESC LIMIT 1",
+                (proposition_id,),
+            ).fetchone()
+        if not row:
+            return None
+        item = dict(row)
+        item["world_time"] = loads(item.pop("world_time_json", None), None)
+        return item
 
     def status(self) -> dict[str, int]:
         with self.connection() as con:
