@@ -81,7 +81,7 @@ class ArchitectureHardeningTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             db = Path(td) / "discovery.db"
             store = DiscoveryStore(db)
-            self.assertEqual(store.SCHEMA_VERSION, 3)
+            self.assertEqual(store.SCHEMA_VERSION, 4)
             with sqlite3.connect(db) as con:
                 tables = {
                     row[0]
@@ -106,7 +106,7 @@ class ArchitectureHardeningTests(unittest.TestCase):
                 }
                 <= tables
             )
-            self.assertEqual(continuity_version, "1.2.2a1")
+            self.assertEqual(continuity_version, "1.2.2b1")
             self.assertEqual(provisional_version, "1")
 
         continuity = (ROOT / "src/discovery/continuity.py").read_text(encoding="utf-8")
@@ -189,7 +189,7 @@ class ArchitectureHardeningTests(unittest.TestCase):
     def test_package_and_source_versions_are_one_contract(self):
         project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
         self.assertEqual(project["project"]["version"], __version__)
-        self.assertEqual(__version__, "1.2.2a1")
+        self.assertEqual(__version__, "1.2.2b1")
 
     def test_frontend_has_no_runtime_compatibility_or_global_fetch_shim(self):
         compat = ROOT / "src/interface/web/static/js/compat.js"

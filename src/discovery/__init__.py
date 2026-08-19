@@ -1,5 +1,6 @@
 from .store import DISCOVERY_SCHEMA_VERSION, DiscoveryStore
 from .service import CaptureReport, DiscoveryService
+from .orchestration import NarrativeSemanticOrchestrator
 from .memory import install_discovery_memory_bridge
 # Import side effect: wraps provisional installation with scoped spatial/branch repair.
 from . import provisional_autopatch as _provisional_autopatch  # noqa: F401
@@ -9,5 +10,6 @@ __all__ = [
     "DISCOVERY_SCHEMA_VERSION",
     "DiscoveryService",
     "DiscoveryStore",
+    "NarrativeSemanticOrchestrator",
     "install_discovery_memory_bridge",
 ]

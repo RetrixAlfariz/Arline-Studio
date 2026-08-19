@@ -33,6 +33,10 @@ class DiscoveryEditPayload(DiscoveryDecisionPayload):
     mode: str = "correction"
 
 
+class ContinuityConflictPayload(DiscoveryDecisionPayload):
+    resolution: str
+
+
 def _context(*, project_id=None, world_id=None, branch_id=None, session_id=None,
              story_order=None, world_time=None) -> MemoryQueryContext:
     return MemoryQueryContext(
@@ -300,6 +304,72 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
             )
         except KeyError as exc:
             raise HTTPException(404, "Entity sheet not found") from exc
+
+    @router.get("/discoveries/continuity/status")
+    def continuity_status():
+        return discovery.continuity.status()
+
+    @router.get("/discoveries/continuity/current")
+    def continuity_current(
+        project_id: str | None = Query(None), world_id: str | None = Query(None),
+        branch_id: str | None = Query(None), session_id: str | None = Query(None),
+        subject_key: str | None = Query(None), story_order: float | None = Query(None),
+    ):
+        return discovery.continuity.current_view(
+            _context(project_id=project_id, world_id=world_id, branch_id=branch_id,
+                     session_id=session_id, story_order=story_order),
+            subject_key=subject_key,
+        )
+
+    @router.get("/discoveries/continuity/conflicts")
+    def continuity_conflicts(
+        project_id: str | None = Query(None), world_id: str | None = Query(None),
+        branch_id: str | None = Query(None), session_id: str | None = Query(None),
+        subject_key: str | None = Query(None), status: str = Query("open"),
+    ):
+        context = _context(project_id=project_id, world_id=world_id, branch_id=branch_id, session_id=session_id)
+        return {"items": discovery.continuity.list_conflicts(
+            context, subject_keys=[subject_key] if subject_key else None, status=status
+        )}
+
+    @router.post("/discoveries/continuity/conflicts/{conflict_id}/resolve")
+    def resolve_continuity_conflict(conflict_id: str, payload: ContinuityConflictPayload):
+        try:
+            return discovery.continuity.resolve_conflict(
+                conflict_id,
+                _context(
+                    project_id=payload.project_id, world_id=payload.world_id,
+                    branch_id=payload.branch_id, session_id=payload.session_id,
+                    story_order=payload.story_order, world_time=payload.world_time,
+                ),
+                resolution=payload.resolution, note=payload.note,
+            )
+        except KeyError as exc:
+            raise HTTPException(404, "Continuity conflict not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @router.post("/discoveries/continuity/rebuild")
+    def rebuild_continuity(
+        project_id: str | None = Query(None), world_id: str | None = Query(None),
+        branch_id: str | None = Query(None), session_id: str | None = Query(None),
+        limit: int = Query(2000, ge=1, le=10000),
+    ):
+        return discovery.continuity.rebuild(
+            _context(project_id=project_id, world_id=world_id, branch_id=branch_id, session_id=session_id),
+            limit=limit,
+        )
+
+    @router.get("/discoveries/continuity/mentions")
+    def continuity_mentions(
+        project_id: str | None = Query(None), world_id: str | None = Query(None),
+        branch_id: str | None = Query(None), session_id: str | None = Query(None),
+        subject_key: str | None = Query(None), limit: int = Query(100, ge=1, le=1000),
+    ):
+        context = _context(project_id=project_id, world_id=world_id, branch_id=branch_id, session_id=session_id)
+        return {"items": discovery.continuity.list_mentions(
+            context, subject_keys=[subject_key] if subject_key else None, limit=limit
+        )}
 
     @router.get("/discoveries/{proposition_id}")
     def get_discovery(
