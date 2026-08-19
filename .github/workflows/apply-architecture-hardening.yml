@@ -6,12 +6,18 @@ on:
     paths:
       - tools/apply_architecture_hardening.py
       - .github/workflows/apply-architecture-hardening.yml
+  pull_request:
+    branches: [develop/v1.2]
+    paths:
+      - tools/apply_architecture_hardening.py
+      - .github/workflows/apply-architecture-hardening.yml
 
 permissions:
   contents: write
 
 jobs:
   apply-and-verify:
+    if: github.event_name == 'push' || github.head_ref == 'fix/architecture-hardening'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
