@@ -900,6 +900,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         lmstudio_base_url=initial_cfg.lmstudio.base_url,
         lmstudio_api_key=initial_cfg.lmstudio.api_key,
     )
+    memory_service._combined_migration_backup_complete = True
     media_root = workspace_path.parent / "media"
     media_root.mkdir(parents=True, exist_ok=True)
     for backup in migration_backups:

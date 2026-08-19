@@ -62,7 +62,12 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
     if isinstance(existing, DiscoveryService):
         discovery = existing
     else:
-        discovery_store = DiscoveryStore(memory_service.store.path)
+        discovery_store = DiscoveryStore(
+            memory_service.store.path,
+            backup_before_migration=not bool(
+                getattr(memory_service, "_combined_migration_backup_complete", False)
+            ),
+        )
         discovery = DiscoveryService(
             store=discovery_store,
             workspace=memory_service.workspace,
