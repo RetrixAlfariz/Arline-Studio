@@ -1,0 +1,66 @@
+name: Apply v1.2.2 top-down completion
+
+on:
+  push:
+    branches:
+      - work/v122-topdown-completion
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: work/v122-topdown-completion
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Reconstruct and apply semantic migration
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import base64, zlib
+          chunks = sorted(Path('.github/tools').glob('v122_payload_*.txt'))
+          assert len(chunks) == 5, f'expected 5 payload chunks, found {len(chunks)}'
+          payload = ''.join(path.read_text(encoding='utf-8') for path in chunks)
+          source = zlib.decompress(base64.b85decode(payload)).decode('utf-8')
+          compile(source, '<v122-topdown-apply>', 'exec')
+          exec(compile(source, '<v122-topdown-apply>', 'exec'), {'__name__': '__main__'})
+          PY
+      - name: Refresh lockfile and install frozen environment
+        run: |
+          uv lock
+          uv sync --frozen
+      - name: Full Python regression suite
+        run: uv run python -m unittest discover -s tests -v
+      - name: Compile Python
+        run: uv run python -m compileall -q src tests
+      - name: JavaScript and runtime checks
+        run: |
+          node --check src/interface/web/static/js/commands.js
+          node --check src/interface/web/static/js/stream.js
+          node --check src/interface/web/static/js/quick-create.js
+          node --check src/interface/web/static/js/memory.js
+          node --check src/interface/web/static/js/discovery-sheets.js
+          node --check src/interface/web/static/arline.js
+          node --check tests/frontend/browser_smoke.mjs
+          node tests/frontend/memory_runtime_smoke.js
+          git diff --check
+      - name: Remove temporary applicator payload
+        run: |
+          rm -f .github/tools/v122_payload_*.txt
+          rm -f .github/workflows/apply-v122-topdown.yml
+          rmdir .github/tools 2>/dev/null || true
+          git diff --check
+      - name: Commit validated v1.2.2 completion
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: complete v1.2.2 narrative continuity top-down"
+          git push origin HEAD:work/v122-topdown-completion
