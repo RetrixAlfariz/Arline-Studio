@@ -65,9 +65,16 @@ try {
     await page.waitForFunction(() => !document.getElementById("welcomeDialog")?.open);
   }
 
-  // Exercise actual bound UI handlers, not just DOM presence.
+  // Settings is an inspector drawer rather than a workspace view. Exercise the
+  // real open/close controls before moving on to normal workspace navigation.
   await page.click("#settingsBtn");
-  await page.waitForFunction(() => document.getElementById("settingsView")?.classList.contains("active"));
+  await page.waitForFunction(() => (
+    document.getElementById("inspector")?.classList.contains("open")
+    && document.querySelector('[data-inspector-panel="runtime"]')?.classList.contains("active")
+  ));
+  await page.click("#closeInspectorBtn");
+  await page.waitForFunction(() => !document.getElementById("inspector")?.classList.contains("open"));
+
   await page.click("#newChatBtn");
   await page.waitForFunction(() => document.getElementById("chatView")?.classList.contains("active"));
 
