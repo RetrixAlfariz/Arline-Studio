@@ -44,7 +44,7 @@ try {
     };
   });
 
-  if (contract.version !== "1.2.2a1") {
+  if (contract.version !== "1.2.3a1") {
     throw new Error(`Unexpected Studio version: ${contract.version}`);
   }
   if (contract.publicHasApiKey) throw new Error("/api/config exposed api_key");
