@@ -22,6 +22,7 @@ try {
     && typeof window.ArlineQuickCreate?.preparePayload === "function"
     && typeof window.ArlineQuickCreate?.previewOverride === "function"
   ));
+  await page.waitForFunction(() => Boolean(document.querySelector('[data-view="commands"]')));
 
   const contract = await page.evaluate(async () => {
     const publicConfig = await fetch("/api/config").then((res) => res.json());
@@ -38,13 +39,14 @@ try {
         .filter((id) => document.getElementById(id)),
       hasDestination: Boolean(document.getElementById("quickCreateDestination")),
       hasBulkTrash: Boolean(document.getElementById("bulkTrashBtn")),
+      hasCommandsNav: Boolean(document.querySelector('[data-view="commands"]')),
       welcomeOpen: Boolean(document.getElementById("welcomeDialog")?.open),
       fetchLooksPatched: String(window.fetch).includes("isQuick")
         || String(window.fetch).includes("quick-create"),
     };
   });
 
-  if (contract.version !== "1.2.4a1") {
+  if (contract.version !== "1.2.5a1") {
     throw new Error(`Unexpected Studio version: ${contract.version}`);
   }
   if (contract.publicHasApiKey) throw new Error("/api/config exposed api_key");
@@ -53,20 +55,17 @@ try {
   }
   if (!contract.hasDestination) throw new Error("Quick Create Destination UI did not initialize");
   if (!contract.hasBulkTrash) throw new Error("Library bulk Trash control is missing");
+  if (!contract.hasCommandsNav) throw new Error("Command Center navigation is missing");
   if (contract.fetchLooksPatched) throw new Error("Quick Create patched global window.fetch");
   if (contract.prepared.forced_kind !== "entity" || contract.prepared.entity_type !== "character") {
     throw new Error(`Quick Create payload contract failed: ${JSON.stringify(contract.prepared)}`);
   }
 
-  // First-run onboarding is intentionally modal. Exercise the real dismiss
-  // control before checking navigation so the smoke follows a user's path.
   if (contract.welcomeOpen) {
     await page.click("#welcomeSkipX");
     await page.waitForFunction(() => !document.getElementById("welcomeDialog")?.open);
   }
 
-  // Settings is an inspector drawer rather than a workspace view. Exercise the
-  // real open/close controls before moving on to normal workspace navigation.
   await page.click("#settingsBtn");
   await page.waitForFunction(() => (
     document.getElementById("inspector")?.classList.contains("open")
@@ -74,6 +73,14 @@ try {
   ));
   await page.click("#closeInspectorBtn");
   await page.waitForFunction(() => !document.getElementById("inspector")?.classList.contains("open"));
+
+  await page.click('[data-view="commands"]');
+  await page.waitForFunction(() => document.getElementById("commandCenterView")?.classList.contains("active"));
+  const commandCenterText = await page.locator("#commandCenterView").innerText();
+  if (!commandCenterText.includes("Command Center")) throw new Error("Command Center did not render");
+  if (!commandCenterText.includes("Built-in")) throw new Error("Built-in command docs tab is missing");
+  if (!commandCenterText.includes("Custom")) throw new Error("Custom commands tab is missing");
+  if (!commandCenterText.includes("References")) throw new Error("Reference guide tab is missing");
 
   await page.click("#newChatBtn");
   await page.waitForFunction(() => document.getElementById("chatView")?.classList.contains("active"));
@@ -89,8 +96,6 @@ try {
   await page.fill("#promptInput", "");
 
   if (pageErrors.length) throw new Error(`Page errors:\n${pageErrors.join("\n")}`);
-  // Browser/network extensions occasionally emit console errors unrelated to the
-  // app; keep only errors that clearly reference Arline source or uncaught JS.
   const appConsoleErrors = consoleErrors.filter((line) => (
     line.includes("/static/") || line.includes("Uncaught") || line.includes("TypeError")
   ));
