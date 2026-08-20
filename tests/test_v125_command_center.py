@@ -63,10 +63,10 @@ class V125CommandCenterTests(unittest.TestCase):
 
     def test_command_center_is_loaded_and_exposes_first_class_surfaces(self):
         stream = (ROOT / "src/interface/web/static/js/stream.js").read_text(encoding="utf-8")
-        quick = (ROOT / "src/interface/web/static/js/quick-create.js").read_text(encoding="utf-8")
+        commands = (ROOT / "src/interface/web/static/js/commands.js").read_text(encoding="utf-8")
         center = (ROOT / "src/interface/web/static/js/command-center.js").read_text(encoding="utf-8")
         self.assertNotIn("command-center.js", stream)
-        self.assertIn("command-center.js?v=1.2.5-command-center", quick)
+        self.assertIn("command-center.js?v=1.2.5-command-center", commands)
         self.assertIn('button.dataset.view = "commands"', center)
         self.assertIn('"overview", "builtin", "custom", "profiles", "references", "history"', center)
         self.assertIn("Custom command", center)
