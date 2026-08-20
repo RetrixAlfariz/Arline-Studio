@@ -12,7 +12,7 @@ from .store import (
 from .quick_create import QuickCreatePreview, parse_quick_create
 from .context import WorkspaceContext, WorkspaceContextResolver
 from .foundation import FoundationStore as PythonFoundationStore
-from src.storage.foundation import NativeAwareFoundationStore
+from .native_foundation import NativeAwareFoundationStore
 
 # Keep the original implementation explicitly available for compatibility and
 # parity tests, while routing normal application imports through the storage
