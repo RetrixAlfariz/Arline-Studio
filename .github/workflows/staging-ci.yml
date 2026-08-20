@@ -1,12 +1,13 @@
 name: v1.2.5 Staging Validation
-# Second push after workflow creation intentionally triggers staging checks.
 
 on:
   push:
     branches: [tmp-v125-write]
+    paths-ignore:
+      - '.github/V125_STAGING_RESULT'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   python:
@@ -71,3 +72,36 @@ jobs:
               assert store.read_bytes(a.digest) == payload
           print("strict Rust storage backend: ok")
           PY
+
+  report:
+    if: always()
+    needs: [python, native]
+    runs-on: ubuntu-latest
+    env:
+      PYTHON_RESULT: ${{ needs.python.result }}
+      NATIVE_RESULT: ${{ needs.native.result }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: tmp-v125-write
+          fetch-depth: 0
+      - name: Record staging result
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$PYTHON_RESULT" = success ] && [ "$NATIVE_RESULT" = success ]; then
+            result=success
+          else
+            result=failure
+          fi
+          cat > .github/V125_STAGING_RESULT <<EOF
+          result=$result
+          python=$PYTHON_RESULT
+          native=$NATIVE_RESULT
+          tested_sha=$GITHUB_SHA
+          EOF
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- .github/V125_STAGING_RESULT
+          git commit -m 'chore: record v1.2.5 staging result [skip ci]' || exit 0
+          git push origin HEAD:tmp-v125-write
