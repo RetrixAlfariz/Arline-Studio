@@ -6,7 +6,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from src.storage.backend import BlobStore, STORAGE_LAYER_VERSION
-from src.storage.foundation import NativeAwareFoundationStore
+from src.workspace.native_foundation import NativeAwareFoundationStore
 from src.workspace.foundation import FoundationStore as PythonFoundationStore
 from src.workspace import FoundationStore as ApplicationFoundationStore
 
