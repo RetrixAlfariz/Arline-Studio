@@ -1,4 +1,5 @@
 name: v1.2.5 Staging Validation
+# Second push after workflow creation intentionally triggers staging checks.
 
 on:
   push:
