@@ -5,7 +5,6 @@ from .backend import (
     native_available,
     native_import_error,
 )
-from .foundation import NativeAwareFoundationStore
 
 __all__ = [
     "STORAGE_LAYER_VERSION",
@@ -13,5 +12,4 @@ __all__ = [
     "BlobStore",
     "native_available",
     "native_import_error",
-    "NativeAwareFoundationStore",
 ]
