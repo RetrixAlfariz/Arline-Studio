@@ -49,3 +49,15 @@
 
   window.ArlineStream = { consume };
 })();
+
+// v1.2.5 keeps Command Center isolated from the streaming/runtime bundle while
+// guaranteeing it initializes only after the normal deferred Studio scripts
+// have established ArlineRuntime and the backend command registry.
+window.addEventListener("load", () => {
+  if (document.querySelector('script[data-arline-command-center]')) return;
+  const script = document.createElement("script");
+  script.src = "/static/js/command-center.js?v=1.2.5-command-center";
+  script.async = false;
+  script.dataset.arlineCommandCenter = "1";
+  document.head.appendChild(script);
+}, { once: true });
