@@ -11,7 +11,13 @@ from .store import (
 )
 from .quick_create import QuickCreatePreview, parse_quick_create
 from .context import WorkspaceContext, WorkspaceContextResolver
-from .foundation import FoundationStore
+from .foundation import FoundationStore as PythonFoundationStore
+from src.storage.foundation import NativeAwareFoundationStore
+
+# Keep the original implementation explicitly available for compatibility and
+# parity tests, while routing normal application imports through the storage
+# adapter. The adapter falls back to Python when `_arline_native` is absent.
+FoundationStore = NativeAwareFoundationStore
 
 __all__ = [
     "QuickCreatePreview",
@@ -27,5 +33,6 @@ __all__ = [
     "WorkspaceStore",
     "WorkspaceContext",
     "WorkspaceContextResolver",
+    "PythonFoundationStore",
     "FoundationStore",
 ]
