@@ -1,0 +1,75 @@
+name: v1.2.5 Staging Validation
+
+on:
+  push:
+    branches: [tmp-v125-write]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install frozen environment
+        run: uv sync --frozen
+      - name: Full Python regression
+        run: uv run python -m unittest discover -s tests -v
+      - name: Compile and frontend syntax
+        run: |
+          uv run python -m compileall -q src tests
+          node --check src/interface/web/static/js/commands.js
+          node --check src/interface/web/static/js/command-center.js
+          node --check src/interface/web/static/js/stream.js
+          node --check src/interface/web/static/js/quick-create.js
+          node --check src/interface/web/static/js/memory.js
+          node --check src/interface/web/static/js/discovery-sheets.js
+          node --check src/interface/web/static/arline.js
+          node tests/frontend/memory_runtime_smoke.js
+          git diff --check
+
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Format and build native core
+        run: |
+          cargo fmt --manifest-path crates/arline-native/Cargo.toml -- --check
+          python -m pip install "maturin>=1.8,<2"
+          maturin build --release --manifest-path crates/arline-native/Cargo.toml --out /tmp/native-wheel
+          python -m pip install /tmp/native-wheel/*.whl
+      - name: Exercise strict Rust backend
+        env:
+          ARLINE_STORAGE_BACKEND: rust
+        run: |
+          python - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+          import _arline_native
+          from src.storage.backend import BlobStore
+
+          assert _arline_native.storage_version() == "0.1.0"
+          with TemporaryDirectory() as td:
+              store = BlobStore(Path(td) / "objects", backend="rust")
+              payload = b"arline-staging-native"
+              a = store.put_bytes(payload)
+              b = store.put_bytes(payload)
+              assert a.digest == sha256(payload).hexdigest()
+              assert a.backend == "rust"
+              assert a.path == b.path
+              assert a.created and not b.created
+              assert store.read_bytes(a.digest) == payload
+          print("strict Rust storage backend: ok")
+          PY
