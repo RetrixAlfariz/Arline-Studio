@@ -1,13 +1,16 @@
+===== uv lock check =====
+Using CPython 3.13.15
+Resolved 23 packages in 0.78ms
+exit=0
+
 ===== uv sync frozen =====
-Downloading cpython-3.13.15-linux-x86_64-gnu (download) (33.2MiB)
- Downloaded cpython-3.13.15-linux-x86_64-gnu (download)
 Using CPython 3.13.15
 Creating virtual environment at: .venv
 warning: Skipping installation of entry points (`project.scripts`) for package `arline-studio` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
 Downloading pydantic-core (2.0MiB)
  Downloaded pydantic-core
-Prepared 21 packages in 99ms
-Installed 21 packages in 12ms
+Prepared 21 packages in 156ms
+Installed 21 packages in 8ms
  + annotated-doc==0.0.5
  + annotated-types==0.8.0
  + anyio==4.14.2
@@ -71,9 +74,9 @@ ok
 test_frontend_has_no_runtime_compatibility_or_global_fetch_shim (test_architecture_hardening.ArchitectureHardeningTests.test_frontend_has_no_runtime_compatibility_or_global_fetch_shim) ... ok
 test_history_emits_only_after_authoritative_turn_and_feedback_commit (test_architecture_hardening.ArchitectureHardeningTests.test_history_emits_only_after_authoritative_turn_and_feedback_commit) ... ok
 test_model_discovery_never_accepts_api_key_in_get_query (test_architecture_hardening.ArchitectureHardeningTests.test_model_discovery_never_accepts_api_key_in_get_query) ... ok
-test_package_and_source_versions_are_one_contract (test_architecture_hardening.ArchitectureHardeningTests.test_package_and_source_versions_are_one_contract) ... ok
+test_package_and_source_versions_are_one_contract (test_architecture_hardening.ArchitectureHardeningTests.test_package_and_source_versions_are_one_contract) ... FAIL
 test_remote_ui_bind_requires_explicit_override (test_architecture_hardening.ArchitectureHardeningTests.test_remote_ui_bind_requires_explicit_override) ... ok
-test_saved_runtime_config_never_persists_api_key (test_architecture_hardening.ArchitectureHardeningTests.test_saved_runtime_config_never_persists_api_key) ... <frozen importlib._bootstrap>:488: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7fe038ee8b80>
+test_saved_runtime_config_never_persists_api_key (test_architecture_hardening.ArchitectureHardeningTests.test_saved_runtime_config_never_persists_api_key) ... <frozen importlib._bootstrap>:488: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f8e39058b80>
 ResourceWarning: Enable tracemalloc to get the object allocation traceback
 ok
 test_feedback_lab_is_not_a_main_workspace_view (test_settings_stack_layout.SettingsStackLayoutTests.test_feedback_lab_is_not_a_main_workspace_view) ... ok
@@ -227,13 +230,13 @@ test_unique_cross_turn_pronoun_resolves (test_v122_topdown_completion.V122TopDow
 test_active_scene_anchors_become_focus_resources_without_prompt_names (test_v123_context_intelligence.V123ContextIntelligenceTests.test_active_scene_anchors_become_focus_resources_without_prompt_names) ... ok
 test_continuity_lane_retrieves_current_head_for_active_scene_entity (test_v123_context_intelligence.V123ContextIntelligenceTests.test_continuity_lane_retrieves_current_head_for_active_scene_entity) ... ok
 test_dialogue_plan_prioritizes_pov_relationship_and_continuity (test_v123_context_intelligence.V123ContextIntelligenceTests.test_dialogue_plan_prioritizes_pov_relationship_and_continuity) ... ok
-test_memory_status_reports_context_intelligence_version (test_v123_context_intelligence.V123ContextIntelligenceTests.test_memory_status_reports_context_intelligence_version) ... ok
+test_memory_status_reports_context_intelligence_version (test_v123_context_intelligence.V123ContextIntelligenceTests.test_memory_status_reports_context_intelligence_version) ... FAIL
 test_plan_allocates_lane_budget_but_keeps_hard_global_ceiling (test_v123_context_intelligence.V123ContextIntelligenceTests.test_plan_allocates_lane_budget_but_keeps_hard_global_ceiling) ... ok
 test_query_compiler_injects_scene_focus_and_plan_lanes (test_v123_context_intelligence.V123ContextIntelligenceTests.test_query_compiler_injects_scene_focus_and_plan_lanes) ... ok
 test_relationship_lane_uses_focused_variants (test_v123_context_intelligence.V123ContextIntelligenceTests.test_relationship_lane_uses_focused_variants) ... ok
 test_tight_budget_preserves_semantic_lanes_before_verbose_source (test_v123_context_intelligence.V123ContextIntelligenceTests.test_tight_budget_preserves_semantic_lanes_before_verbose_source) ... ok
 test_unresolved_continuity_is_surfaced_not_guessed (test_v123_context_intelligence.V123ContextIntelligenceTests.test_unresolved_continuity_is_surfaced_not_guessed) ... ok
-test_workspace_context_exposes_exact_context_plan (test_v123_context_intelligence.V123ContextIntelligenceTests.test_workspace_context_exposes_exact_context_plan) ... ok
+test_workspace_context_exposes_exact_context_plan (test_v123_context_intelligence.V123ContextIntelligenceTests.test_workspace_context_exposes_exact_context_plan) ... FAIL
 test_alternatives_count_controls_deliberator_request_and_output (test_v124_directives_deliberation.V124DirectiveDeliberationTests.test_alternatives_count_controls_deliberator_request_and_output) ... ok
 test_deliberation_failure_fails_soft (test_v124_directives_deliberation.V124DirectiveDeliberationTests.test_deliberation_failure_fails_soft) ... ok
 test_discovery_spatial_installer_repairs_stale_class_composition (test_v124_directives_deliberation.V124DirectiveDeliberationTests.test_discovery_spatial_installer_repairs_stale_class_composition) ... ok
@@ -249,6 +252,10 @@ test_registry_and_reference_contract (test_v124_directives_deliberation.V124Dire
 test_source_integration_contracts (test_v124_directives_deliberation.V124DirectiveDeliberationTests.test_source_integration_contracts) ... ok
 test_typed_dialogue_directive (test_v124_directives_deliberation.V124DirectiveDeliberationTests.test_typed_dialogue_directive) ... ok
 test_unresolved_reference_abstains_without_fake_id (test_v124_directives_deliberation.V124DirectiveDeliberationTests.test_unresolved_reference_abstains_without_fake_id) ... ok
+test_command_center_is_loaded_and_exposes_first_class_surfaces (test_v125_command_center.V125CommandCenterTests.test_command_center_is_loaded_and_exposes_first_class_surfaces) ... FAIL
+test_command_runtime_composes_modifiers_and_operation (test_v125_command_center.V125CommandCenterTests.test_command_runtime_composes_modifiers_and_operation) ... ok
+test_custom_recipe_guardrails_exist (test_v125_command_center.V125CommandCenterTests.test_custom_recipe_guardrails_exist) ... ok
+test_dialogue_execution_profile_reaches_context_planner (test_v125_command_center.V125CommandCenterTests.test_dialogue_execution_profile_reaches_context_planner) ... ok
 test_command_center_has_first_class_navigation_and_sections (test_v125_command_center_ui.V125CommandCenterUITests.test_command_center_has_first_class_navigation_and_sections) ... ok
 test_command_center_is_loaded_after_runtime (test_v125_command_center_ui.V125CommandCenterUITests.test_command_center_is_loaded_after_runtime) ... ok
 test_custom_commands_compile_before_generation (test_v125_command_center_ui.V125CommandCenterUITests.test_custom_commands_compile_before_generation) ... ok
@@ -263,127 +270,100 @@ test_native_aware_foundation_deduplicates_media_and_refcounts_blob (test_v125_na
 test_python_blob_store_is_content_addressed_and_deduplicates (test_v125_native_storage.V125NativeStorageTests.test_python_blob_store_is_content_addressed_and_deduplicates) ... ok
 test_rust_crate_declares_pyo3_abi3_and_storage_contract (test_v125_native_storage.V125NativeStorageTests.test_rust_crate_declares_pyo3_abi3_and_storage_contract) ... ok
 
+======================================================================
+FAIL: test_package_and_source_versions_are_one_contract (test_architecture_hardening.ArchitectureHardeningTests.test_package_and_source_versions_are_one_contract)
 ----------------------------------------------------------------------
-Ran 218 tests in 27.467s
+Traceback (most recent call last):
+  File "/home/runner/work/Arline-Studio/Arline-Studio/tests/test_architecture_hardening.py", line 192, in test_package_and_source_versions_are_one_contract
+    self.assertEqual(__version__, "1.2.4a1")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '1.2.5a1' != '1.2.4a1'
+- 1.2.5a1
+?     ^
++ 1.2.4a1
+?     ^
 
-OK
-exit=0
+
+======================================================================
+FAIL: test_memory_status_reports_context_intelligence_version (test_v123_context_intelligence.V123ContextIntelligenceTests.test_memory_status_reports_context_intelligence_version)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/runner/work/Arline-Studio/Arline-Studio/tests/test_v123_context_intelligence.py", line 208, in test_memory_status_reports_context_intelligence_version
+    self.assertEqual(fx.memory.status()["context_intelligence_version"], "1.2.4a1")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '1.2.5a1' != '1.2.4a1'
+- 1.2.5a1
+?     ^
++ 1.2.4a1
+?     ^
+
+
+======================================================================
+FAIL: test_workspace_context_exposes_exact_context_plan (test_v123_context_intelligence.V123ContextIntelligenceTests.test_workspace_context_exposes_exact_context_plan)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/runner/work/Arline-Studio/Arline-Studio/tests/test_v123_context_intelligence.py", line 201, in test_workspace_context_exposes_exact_context_plan
+    self.assertEqual(augmented.scope["context_intelligence"]["version"], "1.2.4a1")
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: '1.2.5a1' != '1.2.4a1'
+- 1.2.5a1
+?     ^
++ 1.2.4a1
+?     ^
+
+
+======================================================================
+FAIL: test_command_center_is_loaded_and_exposes_first_class_surfaces (test_v125_command_center.V125CommandCenterTests.test_command_center_is_loaded_and_exposes_first_class_surfaces)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/runner/work/Arline-Studio/Arline-Studio/tests/test_v125_command_center.py", line 68, in test_command_center_is_loaded_and_exposes_first_class_surfaces
+    self.assertNotIn("command-center.js", stream)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: 'command-center.js' unexpectedly found in '"use strict";\n\n(function () {\n  async function consume(response, onEvent) {\n    if (!response.ok) {\n      let message = `${response.status} ${response.statusText}`;\n      try {\n        const payload = await response.json();\n        message = payload.detail || payload.message || message;\n      } catch (_) {}\n      throw new Error(message);\n    }\n    if (!response.body) throw new Error("Streaming response body is unavailable");\n\n    const reader = response.body.getReader();\n    const decoder = new TextDecoder();\n    let buffer = "";\n\n    const dispatchFrame = async (frame) => {\n      if (!frame.trim()) return;\n      let eventName = "message";\n      const dataLines = [];\n      for (const rawLine of frame.split(/\\r?\\n/)) {\n        if (rawLine.startsWith("event:")) eventName = rawLine.slice(6).trim() || "message";\n        else if (rawLine.startsWith("data:")) dataLines.push(rawLine.slice(5).trimStart());\n      }\n      if (!dataLines.length) return;\n      const raw = dataLines.join("\\n");\n      let data = raw;\n      try { data = JSON.parse(raw); } catch (_) {}\n      await onEvent({ type: eventName, data });\n    };\n\n    while (true) {\n      const { value, done } = await reader.read();\n      if (done) break;\n      buffer += decoder.decode(value, { stream: true });\n      let boundary;\n      while ((boundary = buffer.search(/\\r?\\n\\r?\\n/)) >= 0) {\n        const frame = buffer.slice(0, boundary);\n        const match = buffer.slice(boundary).match(/^\\r?\\n\\r?\\n/);\n        buffer = buffer.slice(boundary + (match ? match[0].length : 2));\n        await dispatchFrame(frame);\n      }\n    }\n    buffer += decoder.decode();\n    if (buffer.trim()) await dispatchFrame(buffer);\n  }\n\n  window.ArlineStream = { consume };\n})();\n\n// Browser-only progressive feature loader. The guard deliberately keeps this\n// module executable in the standalone Node transport smoke used by CI.\nif (typeof document !== "undefined" && typeof window.addEventListener === "function") {\n  window.addEventListener("load", () => {\n    if (document.querySelector(\'script[data-arline-command-center]\')) return;\n    const script = document.createElement("script");\n    script.src = "/static/js/command-center.js?v=1.2.5-command-center";\n    script.async = false;\n    script.dataset.arlineCommandCenter = "1";\n    document.head.appendChild(script);\n  }, { once: true });\n}\n'
+
+----------------------------------------------------------------------
+Ran 222 tests in 27.654s
+
+FAILED (failures=4)
+exit=1
 
 ===== python compile =====
 exit=0
 
-===== node check src/interface/web/static/js/commands.js =====
+===== commands syntax =====
 exit=0
 
-===== node check src/interface/web/static/js/command-center.js =====
+===== command center syntax =====
 exit=0
 
-===== node check src/interface/web/static/js/stream.js =====
+===== stream syntax =====
 exit=0
 
-===== node check src/interface/web/static/js/quick-create.js =====
+===== quick create syntax =====
 exit=0
 
-===== node check src/interface/web/static/js/memory.js =====
+===== discovery sheets syntax =====
 exit=0
 
-===== node check src/interface/web/static/js/discovery-sheets.js =====
+===== memory syntax =====
 exit=0
 
-===== node check src/interface/web/static/arline.js =====
+===== main frontend syntax =====
+exit=0
+
+===== browser smoke syntax =====
 exit=0
 
 ===== memory runtime smoke =====
 memory runtime scope bridge: ok
 exit=0
 
-===== git diff check =====
-exit=0
-
 ===== install maturin =====
-Collecting maturin<2,>=1.8
-  Downloading maturin-1.14.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl.metadata (16 kB)
-Downloading maturin-1.14.1-py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.musllinux_1_1_x86_64.whl (10.6 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.6/10.6 MB 42.6 MB/s  0:00:00
-Installing collected packages: maturin
-Successfully installed maturin-1.14.1
-exit=0
+/home/runner/work/Arline-Studio/Arline-Studio/.venv/bin/python3: No module named pip
+exit=1
 
 ===== build native wheel =====
-[1m[92m    Updating[0m crates.io index
-[1m[92m     Locking[0m 28 packages to latest compatible versions
-[1m[92m      Adding[0m generic-array v0.14.7 [1m[33m(available: v0.14.9)[0m
-[1m[92m      Adding[0m pyo3 v0.26.0 [1m[33m(available: v0.29.2)[0m
-[1m[92m      Adding[0m sha2 v0.10.9 [1m[33m(available: v0.11.0)[0m
-[1m[92m Downloading[0m crates ...
-[1m[92m  Downloaded[0m crypto-common v0.1.7
-[1m[92m  Downloaded[0m autocfg v1.5.1
-[1m[92m  Downloaded[0m block-buffer v0.10.4
-[1m[92m  Downloaded[0m pyo3-macros v0.26.0
-[1m[92m  Downloaded[0m memoffset v0.9.1
-[1m[92m  Downloaded[0m version_check v0.9.5
-[1m[92m  Downloaded[0m digest v0.10.7
-[1m[92m  Downloaded[0m pyo3-ffi v0.26.0
-[1m[92m  Downloaded[0m unindent v0.2.4
-[1m[92m  Downloaded[0m typenum v1.20.1
-[1m[92m  Downloaded[0m indoc v2.0.7
-[1m[92m  Downloaded[0m proc-macro2 v1.0.107
-[1m[92m  Downloaded[0m sha2 v0.10.9
-[1m[92m  Downloaded[0m syn v2.0.119
-[1m[92m  Downloaded[0m cfg-if v1.0.4
-[1m[92m  Downloaded[0m heck v0.5.0
-[1m[92m  Downloaded[0m target-lexicon v0.13.5
-[1m[92m  Downloaded[0m once_cell v1.21.4
-[1m[92m  Downloaded[0m pyo3-macros-backend v0.26.0
-[1m[92m  Downloaded[0m pyo3 v0.26.0
-[1m[92m  Downloaded[0m quote v1.0.47
-[1m[92m  Downloaded[0m cpufeatures v0.2.17
-[1m[92m  Downloaded[0m unicode-ident v1.0.24
-[1m[92m  Downloaded[0m libc v0.2.189
-[1m[92m  Downloaded[0m portable-atomic v1.15.0
-[1m[92m  Downloaded[0m generic-array v0.14.7
-[1m[92m  Downloaded[0m pyo3-build-config v0.26.0
-[1m[92m  Downloaded[0m rustversion v1.0.23
-🐍 Found CPython 3.11 at /opt/hostedtoolcache/Python/3.11.16/x64/bin/python3
-🔗 Found pyo3 bindings with abi3-py3.11 support
-[1m[92m   Compiling[0m target-lexicon v0.13.5
-[1m[92m   Compiling[0m proc-macro2 v1.0.107
-[1m[92m   Compiling[0m version_check v0.9.5
-[1m[92m   Compiling[0m quote v1.0.47
-[1m[92m   Compiling[0m unicode-ident v1.0.24
-[1m[92m   Compiling[0m generic-array v0.14.7
-[1m[92m   Compiling[0m typenum v1.20.1
-[1m[92m   Compiling[0m autocfg v1.5.1
-[1m[92m   Compiling[0m pyo3-build-config v0.26.0
-[1m[92m   Compiling[0m libc v0.2.189
-[1m[92m   Compiling[0m syn v2.0.119
-[1m[92m   Compiling[0m memoffset v0.9.1
-[1m[92m   Compiling[0m heck v0.5.0
-[1m[92m   Compiling[0m block-buffer v0.10.4
-[1m[92m   Compiling[0m crypto-common v0.1.7
-[1m[92m   Compiling[0m digest v0.10.7
-[1m[92m   Compiling[0m cpufeatures v0.2.17
-[1m[92m   Compiling[0m cfg-if v1.0.4
-[1m[92m   Compiling[0m unindent v0.2.4
-[1m[92m   Compiling[0m pyo3-macros-backend v0.26.0
-[1m[92m   Compiling[0m pyo3-ffi v0.26.0
-[1m[92m   Compiling[0m pyo3 v0.26.0
-[1m[92m   Compiling[0m indoc v2.0.7
-[1m[92m   Compiling[0m once_cell v1.21.4
-[1m[92m   Compiling[0m sha2 v0.10.9
-[1m[92m   Compiling[0m pyo3-macros v0.26.0
-[1m[92m   Compiling[0m arline-native v0.1.0 (/home/runner/work/Arline-Studio/Arline-Studio/crates/arline-native)
-[1m[92m    Finished[0m `release` profile [optimized] target(s) in 11.66s
-📦 Built wheel for abi3 Python ≥ 3.11 to /tmp/native-wheel/arline_native-0.1.0-cp311-abi3-manylinux_2_34_x86_64.whl
-exit=0
+error: Failed to spawn: `maturin`
+  Caused by: No such file or directory (os error 2)
+exit=2
 
-===== install native wheel =====
-Resolved 1 package in 1ms
-Prepared 1 package in 3ms
-Installed 1 package in 0.79ms
- + arline-native==0.1.0 (from file:///tmp/native-wheel/arline_native-0.1.0-cp311-abi3-manylinux_2_34_x86_64.whl)
-exit=0
-
-===== strict rust smoke =====
-strict Rust storage backend: ok
-exit=0
