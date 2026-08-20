@@ -8,9 +8,11 @@ ROOT = Path(__file__).resolve().parents[1]
 class V125CommandCenterUITests(unittest.TestCase):
     def test_command_center_is_loaded_after_runtime(self):
         stream = (ROOT / "src/interface/web/static/js/stream.js").read_text(encoding="utf-8")
-        self.assertIn("command-center.js?v=1.2.5-command-center", stream)
-        self.assertIn('window.addEventListener("load"', stream)
-        self.assertIn("data-arline-command-center", stream)
+        commands = (ROOT / "src/interface/web/static/js/commands.js").read_text(encoding="utf-8")
+        self.assertNotIn("command-center.js", stream)
+        self.assertIn("command-center.js?v=1.2.5-command-center", commands)
+        self.assertIn('window.addEventListener("load"', commands)
+        self.assertIn("data-arline-command-center", commands)
 
     def test_command_center_has_first_class_navigation_and_sections(self):
         center = (ROOT / "src/interface/web/static/js/command-center.js").read_text(encoding="utf-8")
