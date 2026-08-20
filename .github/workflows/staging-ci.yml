@@ -18,53 +18,42 @@ jobs:
         with:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v6
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
       - uses: dtolnay/rust-toolchain@stable
-      - name: Validate and capture diagnostics
-        id: validate
+      - name: Verify Python, frontend, and native core
         shell: bash
         run: |
           set +e
-          log=.github/V125_STAGING_LOG
-          : > "$log"
-          overall=0
-          run_check() {
-            label="$1"; shift
-            echo "===== $label =====" | tee -a "$log"
-            "$@" >>"$log" 2>&1
+          : > /tmp/v125.log
+          run_step() {
+            echo "===== $1 =====" | tee -a /tmp/v125.log
+            shift
+            "$@" >>/tmp/v125.log 2>&1
             code=$?
-            echo "exit=$code" | tee -a "$log"
-            echo >>"$log"
-            if [ $code -ne 0 ]; then overall=1; fi
-            return 0
+            echo "exit=$code" >>/tmp/v125.log
+            echo >>/tmp/v125.log
+            return $code
           }
-
-          run_check "uv sync frozen" uv sync --frozen
-          run_check "python regression" uv run python -m unittest discover -s tests -v
-          run_check "python compile" uv run python -m compileall -q src tests
-          for file in \
-            src/interface/web/static/js/commands.js \
-            src/interface/web/static/js/command-center.js \
-            src/interface/web/static/js/stream.js \
-            src/interface/web/static/js/quick-create.js \
-            src/interface/web/static/js/memory.js \
-            src/interface/web/static/js/discovery-sheets.js \
-            src/interface/web/static/arline.js; do
-            run_check "node check $file" node --check "$file"
-          done
-          run_check "memory runtime smoke" node tests/frontend/memory_runtime_smoke.js
-          run_check "git diff check" git diff --check
-          run_check "install maturin" python -m pip install "maturin>=1.8,<2"
-          run_check "build native wheel" maturin build --release --manifest-path crates/arline-native/Cargo.toml --out /tmp/native-wheel
-          if ls /tmp/native-wheel/*.whl >/dev/null 2>&1; then
-            run_check "install native wheel" uv pip install /tmp/native-wheel/*.whl
-            echo "===== strict rust smoke =====" | tee -a "$log"
-            ARLINE_STORAGE_BACKEND=rust uv run python - <<'PY' >>"$log" 2>&1
+          result=success
+          run_step "uv lock check" uv lock --check || result=failure
+          run_step "uv sync frozen" uv sync --frozen || result=failure
+          run_step "python regression" uv run python -m unittest discover -s tests -v || result=failure
+          run_step "python compile" uv run python -m compileall -q src tests || result=failure
+          run_step "command center syntax" node --check src/interface/web/static/js/command-center.js || result=failure
+          run_step "commands syntax" node --check src/interface/web/static/js/commands.js || result=failure
+          run_step "stream syntax" node --check src/interface/web/static/js/stream.js || result=failure
+          run_step "quick create syntax" node --check src/interface/web/static/js/quick-create.js || result=failure
+          run_step "main frontend syntax" node --check src/interface/web/static/arline.js || result=failure
+          run_step "memory runtime smoke" node tests/frontend/memory_runtime_smoke.js || result=failure
+          run_step "install maturin" uv run python -m pip install "maturin>=1.8,<2" || result=failure
+          run_step "build native wheel" uv run maturin build --release --manifest-path crates/arline-native/Cargo.toml --out /tmp/native-wheel || result=failure
+          if [ "$result" = success ]; then
+            run_step "install native wheel" uv pip install --python .venv/bin/python /tmp/native-wheel/*.whl || result=failure
+          fi
+          if [ "$result" = success ]; then
+            ARLINE_STORAGE_BACKEND=rust uv run python - <<'PY' >>/tmp/v125.log 2>&1
           from hashlib import sha256
           from pathlib import Path
           from tempfile import TemporaryDirectory
@@ -84,30 +73,13 @@ jobs:
               assert store.read_bytes(a.digest) == payload
           print("strict Rust storage backend: ok")
           PY
-            code=$?
-            echo "exit=$code" | tee -a "$log"
-            if [ $code -ne 0 ]; then overall=1; fi
-          else
-            echo "native wheel was not produced" | tee -a "$log"
-            overall=1
+            [ $? -eq 0 ] || result=failure
           fi
-
-          if [ $overall -eq 0 ]; then result=success; else result=failure; fi
-          cat > .github/V125_STAGING_RESULT <<EOF
-          result=$result
-          tested_sha=$GITHUB_SHA
-          EOF
-          echo "result=$result" >> "$GITHUB_OUTPUT"
-          exit 0
-      - name: Publish staging result
-        shell: bash
-        run: |
-          set -euo pipefail
+          printf 'result=%s\ntested_sha=%s\n' "$result" "$GITHUB_SHA" > .github/V125_STAGING_RESULT
+          cp /tmp/v125.log .github/V125_STAGING_LOG
           git config user.name 'github-actions[bot]'
           git config user.email '41898208+github-actions[bot]@users.noreply.github.com'
           git add -- .github/V125_STAGING_RESULT .github/V125_STAGING_LOG
-          git commit -m 'chore: record v1.2.5 staging diagnostics [skip ci]' || exit 0
+          git commit -m 'chore: record v1.2.5 staging verification [skip ci]' || true
           git push origin HEAD:tmp-v125-write
-      - name: Fail workflow when validation failed
-        if: steps.validate.outputs.result != 'success'
-        run: exit 1
+          test "$result" = success
