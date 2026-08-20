@@ -70,7 +70,7 @@ class V125CommandCenterTests(unittest.TestCase):
         self.assertIn('button.dataset.view = "commands"', center)
         self.assertIn('"overview", "builtin", "custom", "profiles", "references", "history"', center)
         self.assertIn("Custom command", center)
-        self.assertIn("Dry Run", center)
+        self.assertIn("Dry run", center)
         self.assertIn("Generation orchestration only", center)
 
     def test_custom_recipe_guardrails_exist(self):
