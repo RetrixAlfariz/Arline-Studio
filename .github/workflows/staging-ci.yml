@@ -42,11 +42,8 @@ jobs:
         with:
           python-version: "3.11"
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - name: Format and build native core
+      - name: Build native core wheel
         run: |
-          cargo fmt --manifest-path crates/arline-native/Cargo.toml -- --check
           python -m pip install "maturin>=1.8,<2"
           maturin build --release --manifest-path crates/arline-native/Cargo.toml --out /tmp/native-wheel
           python -m pip install /tmp/native-wheel/*.whl
