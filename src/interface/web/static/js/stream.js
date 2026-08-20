@@ -49,16 +49,3 @@
 
   window.ArlineStream = { consume };
 })();
-
-// Browser-only progressive feature loader. The guard deliberately keeps this
-// module executable in the standalone Node transport smoke used by CI.
-if (typeof document !== "undefined" && typeof window.addEventListener === "function") {
-  window.addEventListener("load", () => {
-    if (document.querySelector('script[data-arline-command-center]')) return;
-    const script = document.createElement("script");
-    script.src = "/static/js/command-center.js?v=1.2.5-command-center";
-    script.async = false;
-    script.dataset.arlineCommandCenter = "1";
-    document.head.appendChild(script);
-  }, { once: true });
-}
