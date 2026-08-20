@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 
-CONTEXT_INTELLIGENCE_VERSION = "1.2.4a1"
+CONTEXT_INTELLIGENCE_VERSION = "1.2.5a1"
 
 
 class NarrativeIntent(StrEnum):
@@ -185,6 +185,16 @@ class NarrativeContextPlanner:
         focus, anchors = self._focus_resources(scope, workspace_context)
         lens = str(getattr(getattr(scope, "context_lens", "scene"), "value", getattr(scope, "context_lens", "scene")) or "scene")
         dimensions = self._base_dimensions(intent)
+
+        execution_contract = dict(directive.get("execution_contract") or {})
+        contract_weights = dict(execution_contract.get("retrieval_weights") or {})
+        for key in dimensions:
+            if key in contract_weights:
+                try:
+                    dimensions[key] = max(0.0, min(1.0, float(contract_weights[key])))
+                except (TypeError, ValueError):
+                    pass
+
         if anchors.get("pov_variant_id"):
             dimensions["pov"] = max(dimensions["pov"], 1.0 if lens == "pov" else .84)
         elif lens == "pov":
@@ -245,6 +255,8 @@ class NarrativeContextPlanner:
             diagnostics.append("POV lens requested without an active POV variant; epistemic retrieval stays conservative.")
         if not focus:
             diagnostics.append("No explicit or active-scene entity anchors; retrieval may rely on scoped text evidence.")
+        if contract_weights:
+            diagnostics.append("Applied v1.2.5 command execution retrieval profile before selector and scope safety adjustments.")
 
         return NarrativeContextPlan(
             version=self.VERSION,
@@ -267,6 +279,8 @@ class NarrativeContextPlanner:
                 "future_knowledge": "allowed" if bool(getattr(scope, "allow_future_author_knowledge", False)) else "blocked",
                 "fuzzy_identity_merge": False,
                 "directive_version": directive.get("version"),
+                "command_runtime_version": directive.get("runtime_version"),
+                "retrieval_profile": execution_contract.get("retrieval_profile"),
                 "reference_selectors": sorted(selectors),
                 "dynamic_scopes": list(directive.get("dynamic_scopes") or []),
             },
