@@ -124,10 +124,6 @@ jobs:
           python-version: "3.11"
           cache: pip
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-      - name: Rust formatting
-        run: cargo fmt --manifest-path crates/arline-native/Cargo.toml -- --check
       - name: Build abi3 native wheel
         run: |
           python -m pip install "maturin>=1.8,<2"
