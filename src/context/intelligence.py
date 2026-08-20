@@ -45,12 +45,7 @@ class NarrativeContextPlan:
 
 
 class NarrativeContextPlanner:
-    """Deterministic narrative-context planner.
-
-    This layer does not create truth. It tells existing Workspace/Memory/
-    Continuity systems which dimensions matter for the current request and how
-    much budget they may consume. ScopeGate and Canon authority remain below it.
-    """
+    """Deterministic narrative-context planner."""
 
     VERSION = CONTEXT_INTELLIGENCE_VERSION
 
@@ -75,32 +70,20 @@ class NarrativeContextPlanner:
         return str(getattr(route, "value", route or "TEXT_RECALL"))
 
     def _intent(self, prompt: str, route: str) -> NarrativeIntent:
-        if route == "WHY_CAUSAL":
-            return NarrativeIntent.CAUSAL
-        if route == "CONTINUITY_CHECK":
-            return NarrativeIntent.CONTINUITY_REVIEW
-        if route == "BRANCH_COMPARE":
-            return NarrativeIntent.BRANCH_COMPARE
-        if route == "GLOBAL_SUMMARY":
-            return NarrativeIntent.SUMMARY
+        if route == "WHY_CAUSAL": return NarrativeIntent.CAUSAL
+        if route == "CONTINUITY_CHECK": return NarrativeIntent.CONTINUITY_REVIEW
+        if route == "BRANCH_COMPARE": return NarrativeIntent.BRANCH_COMPARE
+        if route == "GLOBAL_SUMMARY": return NarrativeIntent.SUMMARY
         if route in {"TEMPORAL_STATE", "EVENT_LOOKUP", "TEXT_RECALL"}:
-            if self.TRANSITION.search(prompt):
-                return NarrativeIntent.TRANSITION
-            if self.DIALOGUE.search(prompt):
-                return NarrativeIntent.DIALOGUE
-            if self.ACTION.search(prompt):
-                return NarrativeIntent.ACTION
-            if self.DESCRIPTION.search(prompt):
-                return NarrativeIntent.DESCRIPTION
+            if self.TRANSITION.search(prompt): return NarrativeIntent.TRANSITION
+            if self.DIALOGUE.search(prompt): return NarrativeIntent.DIALOGUE
+            if self.ACTION.search(prompt): return NarrativeIntent.ACTION
+            if self.DESCRIPTION.search(prompt): return NarrativeIntent.DESCRIPTION
             return NarrativeIntent.RECALL
-        if self.DIALOGUE.search(prompt):
-            return NarrativeIntent.DIALOGUE
-        if self.ACTION.search(prompt):
-            return NarrativeIntent.ACTION
-        if self.DESCRIPTION.search(prompt):
-            return NarrativeIntent.DESCRIPTION
-        if self.TRANSITION.search(prompt):
-            return NarrativeIntent.TRANSITION
+        if self.DIALOGUE.search(prompt): return NarrativeIntent.DIALOGUE
+        if self.ACTION.search(prompt): return NarrativeIntent.ACTION
+        if self.DESCRIPTION.search(prompt): return NarrativeIntent.DESCRIPTION
+        if self.TRANSITION.search(prompt): return NarrativeIntent.TRANSITION
         return NarrativeIntent.CONTINUE
 
     @staticmethod
@@ -113,47 +96,23 @@ class NarrativeContextPlanner:
         labels: dict[tuple[str, str], str] = {}
         for row in list(getattr(workspace_context, "auto_selected", []) or []) + list(getattr(workspace_context, "explicit_references", []) or []):
             typ, rid = str(row.get("type") or ""), str(row.get("id") or "")
-            if typ and rid:
-                labels[(typ, rid)] = str(row.get("label") or rid)
-
+            if typ and rid: labels[(typ, rid)] = str(row.get("label") or rid)
         output: list[dict[str, Any]] = []
         seen: set[tuple[str, str]] = set()
-
         def add(typ: str, rid: Any, reason: str, label: str | None = None, selector: str | None = None) -> None:
             rid = str(rid or "").strip()
-            if not typ or not rid or (typ, rid) in seen:
-                return
+            if not typ or not rid or (typ, rid) in seen: return
             seen.add((typ, rid))
-            output.append({
-                "type": typ,
-                "id": rid,
-                "label": label or labels.get((typ, rid), rid),
-                "reason": reason,
-                "method": "context_plan",
-                "confidence": 1.0,
-                **({"selector": selector} if selector else {}),
-            })
-
+            output.append({"type": typ, "id": rid, "label": label or labels.get((typ, rid), rid), "reason": reason, "method": "context_plan", "confidence": 1.0, **({"selector": selector} if selector else {})})
         for ref in list(getattr(scope, "explicit_references", []) or []):
             add(str(ref.get("type") or ""), ref.get("id"), "explicit reference", str(ref.get("label") or "") or None, str(ref.get("selector") or "") or None)
         directive = dict(ws_scope.get("directive") or {})
         for ref in list(directive.get("resolved_references") or []):
             add(str(ref.get("type") or ""), ref.get("id"), "directive grounding", str(ref.get("label") or "") or None, str(ref.get("selector") or "") or None)
-        if active.get("pov_variant_id"):
-            add("entity_variant", active["pov_variant_id"], "active scene POV")
-        if active.get("location_variant_id"):
-            add("entity_variant", active["location_variant_id"], "active scene location")
-        for variant_id in (active.get("participants") or [])[:16]:
-            add("entity_variant", variant_id, "present in active scene")
-
-        anchors = {
-            "document_id": active.get("document_id"),
-            "pov_variant_id": getattr(scope, "pov_variant_id", None) or active.get("pov_variant_id"),
-            "location_variant_id": active.get("location_variant_id"),
-            "participants": list(active.get("participants") or [])[:16],
-            "world_time": getattr(scope, "world_time", None) or active.get("narrative_time"),
-            "story_order": getattr(scope, "story_order", None),
-        }
+        if active.get("pov_variant_id"): add("entity_variant", active["pov_variant_id"], "active scene POV")
+        if active.get("location_variant_id"): add("entity_variant", active["location_variant_id"], "active scene location")
+        for variant_id in (active.get("participants") or [])[:16]: add("entity_variant", variant_id, "present in active scene")
+        anchors = {"document_id": active.get("document_id"), "pov_variant_id": getattr(scope, "pov_variant_id", None) or active.get("pov_variant_id"), "location_variant_id": active.get("location_variant_id"), "participants": list(active.get("participants") or [])[:16], "world_time": getattr(scope, "world_time", None) or active.get("narrative_time"), "story_order": getattr(scope, "story_order", None)}
         return output[:24], anchors
 
     @staticmethod
@@ -178,111 +137,48 @@ class NarrativeContextPlanner:
         ws_scope = self._workspace_scope(workspace_context)
         directive = dict(ws_scope.get("directive") or {})
         directive_intent = str(directive.get("planner_intent") or "").strip()
-        try:
-            intent = NarrativeIntent(directive_intent) if directive_intent else self._intent(prompt, route_value)
-        except ValueError:
-            intent = self._intent(prompt, route_value)
+        try: intent = NarrativeIntent(directive_intent) if directive_intent else self._intent(prompt, route_value)
+        except ValueError: intent = self._intent(prompt, route_value)
         focus, anchors = self._focus_resources(scope, workspace_context)
         lens = str(getattr(getattr(scope, "context_lens", "scene"), "value", getattr(scope, "context_lens", "scene")) or "scene")
         dimensions = self._base_dimensions(intent)
-
         execution_contract = dict(directive.get("execution_contract") or {})
         contract_weights = dict(execution_contract.get("retrieval_weights") or {})
         for key in dimensions:
             if key in contract_weights:
-                try:
-                    dimensions[key] = max(0.0, min(1.0, float(contract_weights[key])))
-                except (TypeError, ValueError):
-                    pass
-
-        if anchors.get("pov_variant_id"):
-            dimensions["pov"] = max(dimensions["pov"], 1.0 if lens == "pov" else .84)
-        elif lens == "pov":
-            dimensions["pov"] = .35
-        if not anchors.get("location_variant_id"):
-            dimensions["spatial"] *= .72
-        if not anchors.get("participants") and len([x for x in focus if x["type"] == "entity_variant"]) < 2:
-            dimensions["relationships"] *= .74
-
+                try: dimensions[key] = max(0.0, min(1.0, float(contract_weights[key])))
+                except (TypeError, ValueError): pass
+        if anchors.get("pov_variant_id"): dimensions["pov"] = max(dimensions["pov"], 1.0 if lens == "pov" else .84)
+        elif lens == "pov": dimensions["pov"] = .35
+        if not anchors.get("location_variant_id"): dimensions["spatial"] *= .72
+        if not anchors.get("participants") and len([x for x in focus if x["type"] == "entity_variant"]) < 2: dimensions["relationships"] *= .74
         selectors = {str(item.get("selector") or "").casefold() for item in focus if item.get("selector")}
         if "voice" in selectors:
-            dimensions["pov"] = max(dimensions["pov"], .92)
-            dimensions["relationships"] = max(dimensions["relationships"], .84)
-            dimensions["state"] = max(dimensions["state"], .78)
-        if selectors & {"state", "appearance"}:
-            dimensions["state"] = max(dimensions["state"], 1.0)
-        if selectors & {"knowledge", "beliefs"}:
-            dimensions["pov"] = max(dimensions["pov"], 1.0)
-        if "relationships" in selectors:
-            dimensions["relationships"] = 1.0
-        if "timeline" in selectors:
-            dimensions["events"] = max(dimensions["events"], 1.0)
-            dimensions["continuity"] = max(dimensions["continuity"], .92)
-        if "evidence" in selectors:
-            dimensions["source"] = 1.0
-        if "conflicts" in selectors:
-            dimensions["continuity"] = 1.0
-
+            dimensions["pov"] = max(dimensions["pov"], .92); dimensions["relationships"] = max(dimensions["relationships"], .84); dimensions["state"] = max(dimensions["state"], .78)
+        if selectors & {"state", "appearance"}: dimensions["state"] = max(dimensions["state"], 1.0)
+        if selectors & {"knowledge", "beliefs"}: dimensions["pov"] = max(dimensions["pov"], 1.0)
+        if "relationships" in selectors: dimensions["relationships"] = 1.0
+        if "timeline" in selectors: dimensions["events"] = max(dimensions["events"], 1.0); dimensions["continuity"] = max(dimensions["continuity"], .92)
+        if "evidence" in selectors: dimensions["source"] = 1.0
+        if "conflicts" in selectors: dimensions["continuity"] = 1.0
         dynamic_scopes = {str(item).casefold() for item in (directive.get("dynamic_scopes") or [])}
-        if "threads" in dynamic_scopes:
-            dimensions["threads"] = 1.0
-        if "recent" in dynamic_scopes:
-            dimensions["source"] = 1.0
-            dimensions["events"] = max(dimensions["events"], .72)
-
+        if "threads" in dynamic_scopes: dimensions["threads"] = 1.0
+        if "recent" in dynamic_scopes: dimensions["source"] = 1.0; dimensions["events"] = max(dimensions["events"], .72)
         lane_weights: dict[str, float] = {}
         lane_factor = {"fts_manuscript": .80, "fts_chat": .55, "dense": .70}
         for dimension, weight in dimensions.items():
-            for lane in self.DIMENSION_LANES[dimension]:
-                lane_weights[lane] = max(lane_weights.get(lane, 0.0), round(weight * lane_factor.get(lane, 1.0), 3))
-
-        optional_lanes = [lane for lane, _ in sorted(lane_weights.items(), key=lambda item: (-item[1], item[0])) if _ >= .18]
+            for lane in self.DIMENSION_LANES[dimension]: lane_weights[lane] = max(lane_weights.get(lane, 0.0), round(weight * lane_factor.get(lane, 1.0), 3))
+        optional_lanes = [lane for lane, weight in sorted(lane_weights.items(), key=lambda item: (-item[1], item[0])) if weight >= .18]
         required_lanes: list[str] = ["continuity"] if route_value == "CONTINUITY_CHECK" else []
         preserve_order = ["continuity", "epistemic", "structured_state", "relationships", "events", "spatial", "threads"]
         preserve_lanes = [lane for lane in preserve_order if lane_weights.get(lane, 0.0) >= .55][:6]
-
         token_budget = max(0, int(getattr(scope, "token_budget", 0) or 0))
         lane_token_budget: dict[str, int] = {}
         if token_budget and optional_lanes:
-            total_weight = sum(max(.05, lane_weights.get(lane, .05)) for lane in optional_lanes)
-            distributable = max(0, token_budget - 96)
-            for lane in optional_lanes:
-                share = max(.05, lane_weights.get(lane, .05)) / total_weight
-                lane_token_budget[lane] = max(96, int(distributable * share))
-
+            total_weight = sum(max(.05, lane_weights.get(lane, .05)) for lane in optional_lanes); distributable = max(0, token_budget - 96)
+            for lane in optional_lanes: lane_token_budget[lane] = max(96, int(distributable * (max(.05, lane_weights.get(lane, .05)) / total_weight)))
         diagnostics: list[str] = []
-        if lens == "pov" and not anchors.get("pov_variant_id"):
-            diagnostics.append("POV lens requested without an active POV variant; epistemic retrieval stays conservative.")
-        if not focus:
-            diagnostics.append("No explicit or active-scene entity anchors; retrieval may rely on scoped text evidence.")
-        if contract_weights:
-            diagnostics.append("Applied v1.2.5 command execution retrieval profile before selector and scope safety adjustments.")
-
-        return NarrativeContextPlan(
-            version=self.VERSION,
-            route=route_value,
-            intent=intent.value,
-            lens=lens,
-            focus_resources=focus,
-            scene_anchors=anchors,
-            dimensions={k: round(v, 3) for k, v in dimensions.items()},
-            required_lanes=required_lanes,
-            optional_lanes=optional_lanes,
-            preserve_lanes=preserve_lanes,
-            lane_weights=lane_weights,
-            lane_token_budget=lane_token_budget,
-            policies={
-                "canon_precedence": True,
-                "derived_continuity_is_non_authoritative": True,
-                "ambiguity_policy": "abstain_and_surface",
-                "pov_boundary": "enforce_scope_gate" if lens in {"scene", "pov"} else "author_lens",
-                "future_knowledge": "allowed" if bool(getattr(scope, "allow_future_author_knowledge", False)) else "blocked",
-                "fuzzy_identity_merge": False,
-                "directive_version": directive.get("version"),
-                "command_runtime_version": directive.get("runtime_version"),
-                "retrieval_profile": execution_contract.get("retrieval_profile"),
-                "reference_selectors": sorted(selectors),
-                "dynamic_scopes": list(directive.get("dynamic_scopes") or []),
-            },
-            diagnostics=diagnostics,
-        )
+        if lens == "pov" and not anchors.get("pov_variant_id"): diagnostics.append("POV lens requested without an active POV variant; epistemic retrieval stays conservative.")
+        if not focus: diagnostics.append("No explicit or active-scene entity anchors; retrieval may rely on scoped text evidence.")
+        if contract_weights: diagnostics.append("Applied v1.2.5 command execution retrieval profile before selector and scope safety adjustments.")
+        return NarrativeContextPlan(version=self.VERSION, route=route_value, intent=intent.value, lens=lens, focus_resources=focus, scene_anchors=anchors, dimensions={k: round(v, 3) for k, v in dimensions.items()}, required_lanes=required_lanes, optional_lanes=optional_lanes, preserve_lanes=preserve_lanes, lane_weights=lane_weights, lane_token_budget=lane_token_budget, policies={"canon_precedence": True, "derived_continuity_is_non_authoritative": True, "ambiguity_policy": "abstain_and_surface", "pov_boundary": "enforce_scope_gate" if lens in {"scene", "pov"} else "author_lens", "future_knowledge": "allowed" if bool(getattr(scope, "allow_future_author_knowledge", False)) else "blocked", "fuzzy_identity_merge": False, "directive_version": directive.get("version"), "command_runtime_version": directive.get("runtime_version"), "retrieval_profile": execution_contract.get("retrieval_profile"), "reference_selectors": sorted(selectors), "dynamic_scopes": list(directive.get("dynamic_scopes") or [])}, diagnostics=diagnostics)
