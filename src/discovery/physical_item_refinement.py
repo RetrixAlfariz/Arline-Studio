@@ -78,9 +78,20 @@ def _target_label(service, subject_key: str) -> str:
     return str(row["subject_label"]) if row else subject_key
 
 
-def _retire_subject_family(service, subject_key: str) -> None:
-    if service.foundation is None:
-        return
+def _retire_subject_family(
+    service,
+    subject_key: str,
+    *,
+    merged_into_subject_key: str | None = None,
+) -> None:
+    """Retire a provisional physical sheet that was only an anaphoric duplicate.
+
+    Discovery used to archive the duplicate through Foundation only. Raw
+    WorkspaceStore readers still saw the old ``physical_item_id`` and therefore
+    counted it as a second real garment. Keep the historical sheet for lineage,
+    but remove its *active* physical identity marker and record where it merged.
+    This is derived cleanup; no Canon fact is deleted or promoted here.
+    """
     with service.store.connection() as con:
         active = con.execute(
             "SELECT COUNT(*) FROM discovery_instances i JOIN discovery_propositions p ON p.id=i.proposition_id "
@@ -98,8 +109,30 @@ def _retire_subject_family(service, subject_key: str) -> None:
         family = service.workspace.get_entity_family(link["resource_id"])
     except Exception:
         return
-    discovery = (family.get("shared_core") or {}).get("_discovery") or {}
-    if discovery.get("provisional") and discovery.get("physical_item_id"):
+
+    core = dict(family.get("shared_core") or {})
+    discovery = dict(core.get("_discovery") or {})
+    physical_item_id = discovery.get("physical_item_id")
+    if not (discovery.get("provisional") and physical_item_id):
+        return
+
+    discovery.pop("physical_item_id", None)
+    discovery["retired_physical_item_id"] = physical_item_id
+    discovery["identity_state"] = "merged_anaphora"
+    if merged_into_subject_key:
+        discovery["merged_into_subject_key"] = merged_into_subject_key
+    core["_discovery"] = discovery
+
+    try:
+        service.workspace.update_entity_family(
+            family["id"],
+            shared_core=core,
+            note="discovery: retire merged anaphoric physical item",
+        )
+    except Exception:
+        return
+
+    if service.foundation is not None:
         try:
             service.foundation.archive("entity_family", family["id"], True)
         except Exception:
@@ -151,7 +184,7 @@ def _merge_turn_subject(service, *, from_key: str, to_key: str, turn_id: str,
                 f"WHERE id IN ({marks})",
                 [utc_now(), *source_instance_ids],
             )
-    _retire_subject_family(service, from_key)
+    _retire_subject_family(service, from_key, merged_into_subject_key=to_key)
     return moved
 
 
