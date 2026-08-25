@@ -569,6 +569,40 @@ class HistoryStore:
         root = self.get_session_meta(root_id)
         return {"root": root, "sessions": [root, *descendants], "active_id": session_id}
 
+    def delete_turn(self, turn_id: str) -> dict[str, Any]:
+        """Delete one conversation turn without damaging fork provenance.
+
+        Forks copy their historical turns, but the parent source turn remains the
+        lineage anchor used to explain where the fork came from. Deleting such an
+        anchor is therefore rejected instead of silently producing dangling
+        provenance. Derived Memory/Discovery cleanup is handled by subscribers to
+        ``history.turn_deleted``.
+        """
+        with self._lock, self._connection() as con:
+            row = con.execute("SELECT * FROM turns WHERE id=?", (turn_id,)).fetchone()
+            if row is None:
+                raise KeyError(turn_id)
+            fork_rows = con.execute(
+                "SELECT id,title FROM sessions WHERE forked_from_turn_id=? ORDER BY created_at",
+                (turn_id,),
+            ).fetchall()
+            if fork_rows:
+                labels = ", ".join(str(item["title"] or item["id"]) for item in fork_rows[:3])
+                extra = "" if len(fork_rows) <= 3 else f" (+{len(fork_rows) - 3} more)"
+                raise ValueError(
+                    f"Turn is a fork lineage anchor for {labels}{extra}; delete or rebase those forks first"
+                )
+            deleted = self._turn_row(row, include_context=True)
+            session_id = str(row["session_id"])
+            con.execute("DELETE FROM turns WHERE id=?", (turn_id,))
+            con.execute("UPDATE sessions SET updated_at=? WHERE id=?", (utc_now(), session_id))
+        emit_domain_event(
+            self.path,
+            "history.turn_deleted",
+            {"turn_id": turn_id, "session_id": deleted["session_id"]},
+        )
+        return deleted
+
     def delete_session(self, session_id: str) -> None:
         with self._lock, self._connection() as con:
             cur = con.execute("DELETE FROM sessions WHERE id=?", (session_id,))

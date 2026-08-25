@@ -134,6 +134,10 @@ class MemoryService:
         self.cancel_session_refreshes(session_id)
         return self.store.mark_session_status(session_id, "deleted")
 
+    def forget_turn(self, turn_id: str) -> int:
+        self._cancel(f"turn:{turn_id}")
+        return self.store.mark_source_status("chat_window", turn_id, "deleted")
+
     def _enrich_context(self, context: MemoryQueryContext) -> MemoryQueryContext:
         if not context.project_id:
             return context

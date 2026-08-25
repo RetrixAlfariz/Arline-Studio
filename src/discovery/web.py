@@ -170,6 +170,20 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
         except Exception as exc:
             report_failure(f"feedback:{turn_id}", exc)
 
+    def turn_deleted(event):
+        turn_id = event.payload.get("turn_id")
+        if not turn_id:
+            return
+        try:
+            with discovery.store._lock, discovery.store.connection() as con:
+                con.execute(
+                    "UPDATE discovery_instances SET active=0,invalidation_reason='source_deleted',updated_at=datetime('now') "
+                    "WHERE source_turn_id=? AND active=1",
+                    (turn_id,),
+                )
+        except Exception as exc:
+            report_failure(f"turn-delete:{turn_id}", exc)
+
     def session_deleted(event):
         session_id = event.payload.get("session_id")
         if not session_id:
@@ -220,6 +234,7 @@ def attach_discovery(router, *, memory_service, foundation=None) -> DiscoverySer
     for name, handler, key in (
         ("history.turn_created", turn_created, "discovery.turn"),
         ("history.feedback_changed", feedback_changed, "discovery.feedback"),
+        ("history.turn_deleted", turn_deleted, "discovery.turn-delete"),
         ("history.session_deleted", session_deleted, "discovery.delete"),
         ("history.scope_deleted", scope_deleted, "discovery.scope"),
     ):

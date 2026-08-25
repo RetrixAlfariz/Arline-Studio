@@ -2738,6 +2738,20 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         except KeyError as exc:
             raise HTTPException(404, "Turn not found") from exc
 
+    @app.delete("/api/turns/{turn_id}")
+    def delete_turn(turn_id: str):
+        try:
+            deleted = history.delete_turn(turn_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Turn not found") from exc
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        try:
+            memory_service.forget_turn(turn_id)
+        except Exception as exc:
+            memory_service._report_refresh_failure(f"turn-delete:{turn_id}", exc)
+        return {"ok": True, "turn_id": turn_id, "session_id": deleted.get("session_id")}
+
     @app.post("/api/turns/{turn_id}/feedback")
     def set_turn_feedback(turn_id: str, payload: FeedbackPayload):
         if payload.status not in VALID_FEEDBACK:

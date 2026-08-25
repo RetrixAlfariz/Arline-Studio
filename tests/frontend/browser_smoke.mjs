@@ -86,6 +86,47 @@ try {
   await page.waitForFunction(() => document.getElementById("chatView")?.classList.contains("active"));
   await page.waitForFunction(() => window.ArlineRuntime?.getState?.().commandRegistryVersion === "1.2.4a1");
   if (!(await page.locator("#deliberationOutput").count())) throw new Error("Intuition inspector panel is missing");
+  await page.waitForFunction(() => Boolean(window.ArlineChatViewport?.initialized && window.ArlineMessageRuntime));
+
+  const scrollContract = await page.evaluate(async () => {
+    const controller = window.ArlineChatViewport;
+    const feed = document.getElementById("conversationFeed");
+    const section = document.getElementById("conversationSection");
+    const landing = document.getElementById("chatLanding");
+    const wasLandingHidden = landing.classList.contains("hidden");
+    const wasSectionHidden = section.classList.contains("hidden");
+    landing.classList.add("hidden");
+    section.classList.remove("hidden");
+    const token = controller.beginSession("SCROLL-SMOKE");
+    feed.innerHTML = Array.from({ length: 24 }, (_, index) => (
+      `<article class="turn" data-turn-id="SMOKE-${index}" data-message-id="SMOKE-${index}" style="min-height:140px"><div class="turn-assistant">smoke ${index}</div></article>`
+    )).join("");
+    await controller.finishSessionRender(token, { defaultToBottom: true });
+    controller.renderRail();
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    const viewport = document.getElementById("chatViewport");
+    viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: -500, bubbles: true }));
+    viewport.scrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight - 620);
+    viewport.dispatchEvent(new Event("scroll"));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    const before = controller.captureAnchor();
+    const readingMode = controller.debugState().mode;
+    const removal = feed.querySelector('[data-message-id="SMOKE-1"]');
+    await controller.withMutation(() => removal?.remove(), { reason: "browser-smoke-delete" });
+    const after = controller.captureAnchor(before?.anchorMessageId);
+    const drift = before && after ? Math.abs(Number(after.offset) - Number(before.offset)) : 999;
+    const railMarkers = document.querySelectorAll("#chatScrollRail .chat-scroll-marker").length;
+    const jumpVisible = !document.getElementById("jumpToLatestBtn").classList.contains("hidden");
+    feed.innerHTML = "";
+    if (!wasLandingHidden) landing.classList.remove("hidden");
+    if (wasSectionHidden) section.classList.add("hidden");
+    controller.beginSession(null);
+    return { readingMode, drift, railMarkers, jumpVisible, state: controller.debugState() };
+  });
+  if (scrollContract.readingMode !== "reading") throw new Error(`Scroll controller did not enter reading mode: ${JSON.stringify(scrollContract)}`);
+  if (scrollContract.drift > 2) throw new Error(`Anchor drifted during mutation: ${JSON.stringify(scrollContract)}`);
+  if (scrollContract.railMarkers < 20) throw new Error(`Scroll rail markers missing: ${JSON.stringify(scrollContract)}`);
+  if (!scrollContract.jumpVisible) throw new Error(`Jump-to-latest did not appear in reading mode: ${JSON.stringify(scrollContract)}`);
 
   await page.fill("#promptInput", "/intu");
   await page.waitForFunction(() => !document.getElementById("slashPopup")?.classList.contains("hidden"));
