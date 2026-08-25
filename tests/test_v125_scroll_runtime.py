@@ -64,6 +64,42 @@ class V125ScrollRuntimeTests(unittest.TestCase):
         self.assertIn("chat-scroll-rail", css)
         self.assertIn("grid-template-rows:minmax(0,1fr) auto", css)
 
+    def test_composer_uses_compact_chat_shell_without_losing_arline_controls(self):
+        js = (STATIC / "js/chat/message-runtime.js").read_text(encoding="utf-8")
+        css = (STATIC / "chat-runtime-v125.css").read_text(encoding="utf-8")
+        html = (STATIC / "index.html").read_text(encoding="utf-8")
+
+        for token in (
+            "composer-chatgpt-shell",
+            "Message Arline…",
+            "Generation",
+            "Run profile",
+            "setComposerSettingsOpen",
+            "makeComposerSettingRow",
+        ):
+            self.assertIn(token, js)
+        for token in (
+            "ChatGPT-inspired composer shell",
+            ".composer-setting-row",
+            "#composerAdvanced",
+            "#composerProfileBtn",
+            "#generateBtn",
+        ):
+            self.assertIn(token, css)
+        for control_id in (
+            "composerAttachBtn",
+            "composerAddContextBtn",
+            "runProfileSelect",
+            "modelSelect",
+            "reasoningSelect",
+            "contextRecipeSelect",
+            "modeSelect",
+            "lengthSlider",
+            "composerBudgetButton",
+            "generateBtn",
+        ):
+            self.assertIn(f'id="{control_id}"', html)
+
     def test_turn_delete_preserves_fork_anchor_integrity(self):
         with tempfile.TemporaryDirectory() as td:
             history = HistoryStore(Path(td) / "history.db", backup_before_migration=False)
