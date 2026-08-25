@@ -5,6 +5,7 @@ on:
     branches: [develop/v1.2]
     paths:
       - 'scripts/apply_v125_scroll_rework.py'
+      - 'scripts/apply_physical_item_cache_isolation.py'
       - '.github/workflows/apply-scroll-rework.yml'
       - 'src/interface/web/static/js/core/events.js'
       - 'src/interface/web/static/js/chat/**'
@@ -24,11 +25,12 @@ jobs:
       - name: Apply deterministic integration patch
         run: |
           python scripts/apply_v125_scroll_rework.py
+          python scripts/apply_physical_item_cache_isolation.py
           git checkout -- .github/workflows/ci.yml
       - name: Verify patch hygiene
         run: |
           git diff --check
-          python -m py_compile scripts/apply_v125_scroll_rework.py
+          python -m py_compile scripts/apply_v125_scroll_rework.py scripts/apply_physical_item_cache_isolation.py
       - name: Commit integrated runtime
         run: |
           if git diff --quiet; then
@@ -38,5 +40,5 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -- .
-          git commit -m 'feat(frontend): install stateful chat viewport runtime'
+          git commit -m 'fix(discovery): isolate physical item performance caches'
           git push origin HEAD:develop/v1.2
