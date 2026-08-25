@@ -1,0 +1,152 @@
+/* Arline Studio v1.2.5 stateful viewport runtime.
+   Scrolling is a first-class UI state; the composer is not part of chat flow. */
+
+body[data-active-view="chat"]{overflow:hidden}
+#chatView.chat-scroll-runtime-ready{
+  width:100%!important;
+  max-width:none!important;
+  height:calc(100vh - var(--topbar-h));
+  min-height:0!important;
+  margin:0!important;
+  padding:0!important;
+  display:none;
+  grid-template-rows:minmax(0,1fr) auto;
+  overflow:hidden;
+  position:relative;
+}
+#chatView.chat-scroll-runtime-ready.active{display:grid!important}
+
+.chat-viewport{
+  min-width:0;
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+  scroll-behavior:auto;
+  padding:34px max(24px,calc((100% - 1040px)/2)) 32px;
+  position:relative;
+  outline:0;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(142,163,155,.52) rgba(30,33,32,.28);
+}
+.chat-viewport::-webkit-scrollbar{width:10px}
+.chat-viewport::-webkit-scrollbar-track{background:rgba(30,33,32,.28)}
+.chat-viewport::-webkit-scrollbar-thumb{
+  background:rgba(142,163,155,.45);
+  border:3px solid transparent;
+  background-clip:padding-box;
+  border-radius:999px;
+}
+.chat-viewport::-webkit-scrollbar-thumb:hover{background:var(--brand-flow);background-clip:padding-box}
+.chat-viewport[data-scroll-mode="reading"]::-webkit-scrollbar-thumb{background:rgba(69,185,155,.62);background-clip:padding-box}
+
+.chat-scroll-runtime-ready #chatLanding,
+.chat-scroll-runtime-ready #conversationSection,
+.chat-scroll-runtime-ready #analysisStrip{width:min(960px,100%);margin-inline:auto}
+.chat-scroll-runtime-ready #chatLanding{min-height:min(620px,calc(100vh - var(--topbar-h) - 190px));display:grid;align-content:center}
+.chat-scroll-runtime-ready #conversationSection{padding-bottom:18px}
+.chat-scroll-runtime-ready #analysisStrip{margin-top:14px;margin-bottom:10px}
+.chat-bottom-sentinel{height:1px;width:100%;pointer-events:none}
+
+#chatView.chat-scroll-runtime-ready #composerDock{
+  width:100%!important;
+  max-width:none!important;
+  margin:0!important;
+  padding:10px max(24px,calc((100% - 930px)/2)) 16px!important;
+  position:relative!important;
+  inset:auto!important;
+  z-index:15;
+  background:linear-gradient(to bottom,rgba(30,33,32,0),rgba(30,33,32,.94) 28%,var(--brand-charcoal) 62%);
+  border-top:1px solid rgba(142,163,155,.08);
+}
+#chatView.chat-scroll-runtime-ready #composerDock .composer-card{width:100%;margin:0 auto;box-shadow:0 18px 55px rgba(0,0,0,.18)}
+
+.jump-to-latest{
+  position:absolute;
+  right:max(34px,calc((100% - 930px)/2 + 12px));
+  bottom:calc(116px + env(safe-area-inset-bottom,0px));
+  z-index:31;
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  min-height:34px;
+  padding:6px 11px;
+  border:1px solid var(--border-strong);
+  border-radius:999px;
+  background:rgba(41,45,43,.94);
+  color:var(--text-soft);
+  box-shadow:0 12px 34px rgba(0,0,0,.28);
+  backdrop-filter:blur(16px);
+  font-size:10px;
+  font-weight:650;
+  transition:opacity .14s ease,transform .14s ease,background .14s ease;
+}
+.jump-to-latest.hidden{display:none!important}
+.jump-to-latest:hover{background:var(--panel-2);color:var(--brand-white);transform:translateY(-1px)}
+.jump-arrow{color:var(--brand-flow);font-size:14px;line-height:1}
+.jump-generation-dot{width:6px;height:6px;border-radius:50%;background:transparent}
+.jump-to-latest.generating .jump-generation-dot{background:var(--brand-flow);box-shadow:0 0 0 4px rgba(69,185,155,.09);animation:arline-scroll-pulse 1.4s ease-in-out infinite}
+@keyframes arline-scroll-pulse{50%{opacity:.35;transform:scale(.82)}}
+
+.chat-scroll-rail{
+  position:absolute;
+  top:72px;
+  right:9px;
+  bottom:126px;
+  width:14px;
+  z-index:18;
+  pointer-events:none;
+  opacity:.44;
+  transition:opacity .14s ease;
+}
+#chatView:hover .chat-scroll-rail{opacity:.78}
+.chat-scroll-rail::before{content:"";position:absolute;left:6px;top:0;bottom:0;width:1px;background:rgba(142,163,155,.11)}
+.chat-scroll-marker{
+  position:absolute;
+  left:3px;
+  width:7px;
+  height:7px;
+  padding:0;
+  border:0;
+  border-radius:50%;
+  transform:translateY(-50%);
+  background:rgba(142,163,155,.48);
+  pointer-events:auto;
+  cursor:pointer;
+}
+.chat-scroll-marker:hover{background:var(--brand-flow);transform:translateY(-50%) scale(1.35)}
+.chat-scroll-marker.live{background:var(--brand-flow);box-shadow:0 0 0 3px rgba(69,185,155,.11)}
+.chat-scroll-viewport-indicator{position:absolute;left:5px;width:3px;min-height:8px;border-radius:999px;background:rgba(69,185,155,.54);pointer-events:none}
+
+.turn[data-message-id]{scroll-margin-block:22px}
+.turn.scroll-target-flash{animation:arline-scroll-target 1.3s ease-out}
+@keyframes arline-scroll-target{
+  0%{box-shadow:0 0 0 1px rgba(69,185,155,.65),0 0 0 8px rgba(69,185,155,.08);border-radius:14px}
+  100%{box-shadow:0 0 0 1px rgba(69,185,155,0),0 0 0 18px rgba(69,185,155,0);border-radius:14px}
+}
+
+.turn .delete-turn{opacity:.62;color:#d69292;border-color:transparent;background:transparent}
+.turn:hover .delete-turn,.turn:focus-within .delete-turn{opacity:1}
+.turn .delete-turn:hover{background:rgba(223,114,114,.08);color:#f0a4a4;border-color:rgba(223,114,114,.15)}
+
+/* Reading mode deliberately removes any visual implication that generation owns
+   the viewport. New prose can continue below without moving the reader. */
+.chat-viewport[data-scroll-mode="reading"] .live-stage-dot{box-shadow:0 0 0 4px rgba(69,185,155,.06)}
+
+@media(max-width:900px){
+  .chat-viewport{padding-inline:18px}
+  #chatView.chat-scroll-runtime-ready #composerDock{padding-inline:16px!important}
+  .chat-scroll-rail{display:none}
+  .jump-to-latest{right:22px}
+}
+@media(max-width:620px){
+  .chat-viewport{padding:18px 12px 20px}
+  #chatView.chat-scroll-runtime-ready #composerDock{padding:8px 10px 12px!important}
+  .jump-to-latest{right:16px;bottom:108px}
+  .jump-label{max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}
+
+@media(prefers-reduced-motion:reduce){
+  .jump-to-latest,.chat-scroll-marker,.turn.scroll-target-flash{animation:none!important;transition:none!important}
+}
