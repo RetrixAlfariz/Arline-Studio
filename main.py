@@ -86,7 +86,7 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.ui:
-        from src.interface.web import launch_ui
+        from src.interface.react_app import launch_ui
 
         launch_ui(args.config)
         return 0
