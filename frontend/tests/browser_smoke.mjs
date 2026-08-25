@@ -38,12 +38,14 @@ try {
 
   await page.locator(".global-command").click();
   await page.waitForSelector(".command-view", { state: "visible" });
-  const commandText = await page.locator(".command-view").innerText();
-  if (!commandText.includes("Command Center")) throw new Error("Command Center did not render");
+  const commandHeading = page.getByRole("heading", { name: "Direct Arline explicitly", exact: true });
+  if ((await commandHeading.count()) !== 1 || !(await commandHeading.isVisible())) {
+    throw new Error("Command Center heading did not render");
+  }
 
   await page.locator(".topbar-tools .icon-control").last().click();
   await page.waitForSelector(".settings-drawer", { state: "visible" });
-  if (!(await page.locator(".settings-drawer").innerText()).includes("Models & Runtime")) {
+  if (!(await page.locator(".settings-drawer").innerText()).toLowerCase().includes("models & runtime")) {
     throw new Error("Settings runtime panel is missing");
   }
   await page.locator(".settings-drawer > header .icon-control").click();
@@ -51,7 +53,7 @@ try {
 
   await page.getByRole("button", { name: "Quick create", exact: true }).click();
   await page.waitForSelector(".quick-modal", { state: "visible" });
-  if (!(await page.locator(".quick-modal").innerText()).includes("Describe it naturally")) {
+  if (!(await page.locator(".quick-modal").innerText()).toLowerCase().includes("describe it naturally")) {
     throw new Error("Quick Create did not render");
   }
   await page.locator(".quick-modal .modal-close").click();
