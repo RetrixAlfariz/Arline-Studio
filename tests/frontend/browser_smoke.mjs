@@ -87,6 +87,34 @@ try {
   await page.waitForFunction(() => window.ArlineRuntime?.getState?.().commandRegistryVersion === "1.2.4a1");
   if (!(await page.locator("#deliberationOutput").count())) throw new Error("Intuition inspector panel is missing");
   await page.waitForFunction(() => Boolean(window.ArlineChatViewport?.initialized && window.ArlineMessageRuntime));
+  await page.waitForFunction(() => document.querySelector("#composerDock .composer-card")?.classList.contains("composer-chatgpt-shell"));
+
+  const composerContract = await page.evaluate(() => ({
+    placeholder: document.getElementById("promptInput")?.placeholder,
+    chrome: document.querySelector("#composerDock .composer-card")?.dataset.composerChrome,
+    profileInActions: Boolean(document.querySelector("#composerDock .composer-actions #composerProfileBtn")),
+    contextOnLeft: Boolean(document.querySelector("#composerDock .composer-profile-controls #analyzeBtn")),
+    runProfileInPopover: Boolean(document.querySelector("#composerAdvanced #runProfileSelect")),
+    modelInPopover: Boolean(document.querySelector("#composerAdvanced #modelSelect")),
+    reasoningInPopover: Boolean(document.querySelector("#composerAdvanced #reasoningSelect")),
+    hidden: document.getElementById("composerAdvanced")?.classList.contains("hidden"),
+  }));
+  if (composerContract.placeholder !== "Message Arline…") throw new Error(`Composer placeholder mismatch: ${JSON.stringify(composerContract)}`);
+  if (composerContract.chrome !== "chatgpt-v1") throw new Error(`Composer chrome did not initialize: ${JSON.stringify(composerContract)}`);
+  if (!composerContract.profileInActions || !composerContract.contextOnLeft) throw new Error(`Composer actions were not reorganized: ${JSON.stringify(composerContract)}`);
+  if (!composerContract.runProfileInPopover || !composerContract.modelInPopover || !composerContract.reasoningInPopover) {
+    throw new Error(`Composer settings were not moved into the popover: ${JSON.stringify(composerContract)}`);
+  }
+  if (!composerContract.hidden) throw new Error(`Composer settings should start closed: ${JSON.stringify(composerContract)}`);
+
+  await page.click("#composerProfileBtn");
+  await page.waitForFunction(() => !document.getElementById("composerAdvanced")?.classList.contains("hidden"));
+  const composerPopoverText = await page.locator("#composerAdvanced").innerText();
+  for (const label of ["Generation", "Model", "Effort", "Run profile", "Advanced"]) {
+    if (!composerPopoverText.includes(label)) throw new Error(`Composer popover missing ${label}: ${composerPopoverText}`);
+  }
+  await page.keyboard.press("Escape");
+  await page.waitForFunction(() => document.getElementById("composerAdvanced")?.classList.contains("hidden"));
 
   const scrollContract = await page.evaluate(async () => {
     const controller = window.ArlineChatViewport;
