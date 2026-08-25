@@ -37,6 +37,9 @@ jobs:
         run: |
           node --check src/interface/web/static/js/commands.js
           node --check src/interface/web/static/js/command-center.js
+          node --check src/interface/web/static/js/core/events.js
+          node --check src/interface/web/static/js/chat/scroll-controller.js
+          node --check src/interface/web/static/js/chat/message-runtime.js
           node --check src/interface/web/static/js/stream.js
           node --check src/interface/web/static/js/quick-create.js
           node --check src/interface/web/static/js/memory.js
@@ -66,6 +69,8 @@ jobs:
           test ! -e tools/apply_quick_create_request_boundary.py
           test ! -e tools/apply_workspace_discovery_events.py
           test ! -e tools/apply_secret_persistence_hardening.py
+          test ! -e scripts/apply_v125_scroll_rework.py
+          test ! -e scripts/apply_physical_item_cache_isolation.py
           test ! -e .github/workflows/apply-hardening.yml
           test ! -e .github/workflows/apply-v11-final.yml
           test ! -e .github/workflows/apply-v1-1-hardening.yml
@@ -75,6 +80,7 @@ jobs:
           test ! -e .github/workflows/apply-quick-create-boundary.yml
           test ! -e .github/workflows/apply-workspace-discovery-events.yml
           test ! -e .github/workflows/apply-secret-persistence-hardening.yml
+          test ! -e .github/workflows/apply-scroll-rework.yml
           if [ -d tools ] && find tools -maxdepth 1 -type f \( -iname '*v12*' -o -iname '*v1_2*' -o -iname '*v120*' \) | grep -q .; then
             echo 'Temporary v1.2 applicator/tooling is tracked in the repository.' >&2
             exit 1
@@ -105,6 +111,9 @@ jobs:
         run: |
           node --check src/interface/web/static/js/commands.js
           node --check src/interface/web/static/js/command-center.js
+          node --check src/interface/web/static/js/core/events.js
+          node --check src/interface/web/static/js/chat/scroll-controller.js
+          node --check src/interface/web/static/js/chat/message-runtime.js
           node --check src/interface/web/static/js/stream.js
           node --check src/interface/web/static/js/quick-create.js
           node --check src/interface/web/static/js/memory.js
