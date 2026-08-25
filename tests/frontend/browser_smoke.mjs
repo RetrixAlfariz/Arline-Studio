@@ -131,12 +131,23 @@ try {
     )).join("");
     await controller.finishSessionRender(token, { defaultToBottom: true });
     controller.renderRail();
-    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    // ResizeObserver and scrollToLatest intentionally finish over animation
+    // frames. Exercise a real user scroll only after those render callbacks have
+    // had a chance to settle, then keep asserting that the controller reaches
+    // READING rather than papering over the state transition.
+    const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    await nextFrame();
+    await nextFrame();
     const viewport = document.getElementById("chatViewport");
-    viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: -500, bubbles: true }));
-    viewport.scrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight - 620);
-    viewport.dispatchEvent(new Event("scroll"));
-    await new Promise((resolve) => setTimeout(resolve, 40));
+    const targetTop = () => Math.max(0, viewport.scrollHeight - viewport.clientHeight - 620);
+    for (let attempt = 0; attempt < 12 && controller.debugState().mode !== "reading"; attempt += 1) {
+      viewport.dispatchEvent(new WheelEvent("wheel", { deltaY: -500, bubbles: true }));
+      viewport.scrollTop = targetTop();
+      viewport.dispatchEvent(new Event("scroll"));
+      await nextFrame();
+      await nextFrame();
+    }
     const before = controller.captureAnchor();
     const readingMode = controller.debugState().mode;
     const streamBefore = viewport.scrollTop;

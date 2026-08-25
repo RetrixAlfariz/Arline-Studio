@@ -1,0 +1,92 @@
+name: Frontend
+
+on:
+  push:
+    branches:
+      - main
+      - "feat/**"
+      - "fix/**"
+      - "develop/**"
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  react:
+    name: React + TypeScript + Chromium
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: astral-sh/setup-uv@v6
+
+      - name: Install Python environment
+        run: uv sync --frozen
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck and build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Install browser harness
+        working-directory: frontend
+        run: |
+          npm install --no-save --no-audit --no-fund playwright@1.55.0
+          npx playwright install --with-deps chromium
+
+      - name: Prepare isolated Studio config
+        run: |
+          uv run python - <<'PY'
+          from pathlib import Path
+          import tomlkit
+
+          root = Path.cwd()
+          runtime = Path('/tmp/arline-react-browser')
+          runtime.mkdir(parents=True, exist_ok=True)
+          doc = tomlkit.parse((root / 'config/arline.toml').read_text(encoding='utf-8'))
+          doc['lmstudio']['auto_load'] = False
+          doc['lmstudio']['api_key'] = ''
+          doc['writer']['system_prompt_file'] = (root / 'config/writer_system.txt').as_posix()
+          doc['reasoning_runtime']['guard_prompt_file'] = (root / 'config/reasoning_guard.txt').as_posix()
+          doc['history']['database_path'] = (runtime / 'arline.db').as_posix()
+          doc['history']['dataset_root'] = (runtime / 'datasets').as_posix()
+          doc['workspace']['database_path'] = (runtime / 'arline.db').as_posix()
+          doc['artifacts']['output_root'] = (runtime / 'output').as_posix()
+          doc['artifacts']['saved_root'] = (runtime / 'saved').as_posix()
+          doc['ui']['host'] = '127.0.0.1'
+          doc['ui']['port'] = 7860
+          Path('/tmp/arline-react-browser.toml').write_text(tomlkit.dumps(doc), encoding='utf-8')
+          PY
+
+      - name: Start integrated React Studio
+        run: |
+          uv run python app.py --config /tmp/arline-react-browser.toml >/tmp/arline-react-browser.log 2>&1 &
+          echo $! >/tmp/arline-react-browser.pid
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:7860/api/frontend | grep -q '"mode":"react"'; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+          cat /tmp/arline-react-browser.log
+          exit 1
+
+      - name: Exercise React UI
+        working-directory: frontend
+        env:
+          ARLINE_BROWSER_URL: http://127.0.0.1:7860
+        run: node tests/browser_smoke.mjs
+
+      - name: Frontend diagnostics
+        if: always()
+        run: |
+          cat /tmp/arline-react-browser.log || true
+          if [ -f /tmp/arline-react-browser.pid ]; then
+            kill "$(cat /tmp/arline-react-browser.pid)" 2>/dev/null || true
+          fi
