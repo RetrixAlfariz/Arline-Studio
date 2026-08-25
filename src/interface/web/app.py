@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from contextlib import ExitStack
 import asyncio
 import base64
 import binascii
@@ -33,6 +34,7 @@ from src.service import ArlineService, ArtifactStore, make_run_id
 from src.service.streaming import StreamingArlineService
 from src.writer.quality import ProseQualityAnalyzer
 from src.storage_backup import backup_sqlite_before_migrations
+from src.storage_reset import reset_storage
 from src.memory import MemoryConfig, MemoryQueryContext, MemoryService, MemoryStore
 from src.discovery.store import DiscoveryStore
 from src.version import __version__
@@ -139,6 +141,11 @@ class AblationPayload(PromptPayload):
 
 class ContractPayload(BaseModel):
     content: str
+
+
+class StorageResetPayload(BaseModel):
+    mode: str
+    confirmation: str
 
 
 class SessionPatchPayload(BaseModel):
@@ -690,6 +697,10 @@ class RunCache:
                 self._items.move_to_end(run_id)
             return item
 
+    def clear(self) -> None:
+        with self._lock:
+            self._items.clear()
+
 
 class AnalysisCache:
     def __init__(self, max_items: int = 20):
@@ -710,6 +721,10 @@ class AnalysisCache:
             if value:
                 self._items.move_to_end(key)
             return value
+
+    def clear(self) -> None:
+        with self._lock:
+            self._items.clear()
 
 
 def _apply_payload(cfg: RuntimeConfig, payload: RuntimePayload) -> RuntimeConfig:
@@ -874,6 +889,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     static_dir = base_dir / "static"
     saved_cache = RunCache(max_items=20)
     analysis_cache = AnalysisCache(max_items=20)
+    storage_reset_lock = RLock()
     initial_cfg = RuntimeConfig.load(config_path)
     migration_targets: dict[Path, dict[str, int]] = {}
     history_path = Path(initial_cfg.history.database_path).resolve()
@@ -1053,6 +1069,45 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             "database_bytes": database_path.stat().st_size if database_path.exists() else 0,
             "backups": rows,
         }
+
+    @app.post("/api/storage/reset")
+    def reset_local_storage(payload: StorageResetPayload):
+        expected = {
+            "database": "RESET DATABASE",
+            "complete": "DELETE EVERYTHING",
+        }
+        if payload.mode not in expected:
+            raise HTTPException(400, "Reset mode must be 'database' or 'complete'")
+        if payload.confirmation.strip() != expected[payload.mode]:
+            raise HTTPException(400, f"Type {expected[payload.mode]} exactly to confirm")
+
+        with memory_service._refresh_lock:
+            for timer in memory_service._refresh_timers.values():
+                timer.cancel()
+            memory_service._refresh_timers.clear()
+
+        discovery = getattr(memory_service, "discovery", None)
+        materialization_lock = getattr(discovery, "_provisional_materialization_lock", None)
+        stores = [history, workspace, foundation, memory_store]
+        if discovery is not None:
+            stores.append(discovery.store)
+
+        try:
+            with storage_reset_lock, ExitStack() as stack:
+                if materialization_lock is not None:
+                    stack.enter_context(materialization_lock)
+                locks = {id(store._lock): store._lock for store in stores if hasattr(store, "_lock")}
+                for lock in sorted(locks.values(), key=id):
+                    stack.enter_context(lock)
+                report = reset_storage(
+                    RuntimeConfig.load(config_path),
+                    complete=payload.mode == "complete",
+                )
+                saved_cache.clear()
+                analysis_cache.clear()
+        except (OSError, ValueError) as exc:
+            raise HTTPException(409, f"Storage reset failed: {exc}") from exc
+        return report.to_dict()
 
     @app.get("/api/models")
     def get_models(server_url: str = Query("http://127.0.0.1:1234")):

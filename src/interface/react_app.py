@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import mimetypes
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -16,6 +17,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 FRONTEND_ROOT = REPO_ROOT / "frontend"
 FRONTEND_DIST = FRONTEND_ROOT / "dist"
 FRONTEND_INDEX = FRONTEND_DIST / "index.html"
+
+
+def _register_frontend_mime_types() -> None:
+    """Override unreliable Windows registry MIME mappings for web assets."""
+    for strict in (True, False):
+        mimetypes.add_type("text/javascript", ".js", strict=strict)
+        mimetypes.add_type("text/css", ".css", strict=strict)
+        mimetypes.add_type("application/json", ".map", strict=strict)
+        mimetypes.add_type("application/wasm", ".wasm", strict=strict)
 
 
 def _frontend_built() -> bool:
@@ -40,6 +50,7 @@ def _remove_legacy_root(app: FastAPI) -> None:
 
 
 def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
+    _register_frontend_mime_types()
     app = create_backend_app(config_path)
     react_ready = _frontend_built()
 

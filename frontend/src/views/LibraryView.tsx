@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
-import { Boxes, GitBranch, Search, Sparkles, Waypoints } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Archive, Boxes, Camera, Check, GitBranch, Grid2X2, Image, List, Search, Sparkles, Waypoints, WandSparkles } from "lucide-react";
 import { studioApi } from "../api";
-import type { EntityFamily, EntityVariant, Relationship, Selection, WorldBible } from "../types";
+import type { EntityFamily, EntityVariant, JsonMap, MediaItem, Relationship, Selection, WorldBible } from "../types";
 
 interface LibraryViewProps {
   projectId: string;
@@ -21,13 +21,26 @@ export function LibraryView({ projectId, worldId, branchId, bible, entityTypes, 
   const [quickKind, setQuickKind] = useState("");
   const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
   const [busy, setBusy] = useState(false);
+  const [layout, setLayout] = useState<"grid" | "list" | "gallery">("grid");
+  const [selected, setSelected] = useState<string[]>([]);
+  const [media, setMedia] = useState<MediaItem[]>([]);
+  const [timeline, setTimeline] = useState<JsonMap[]>([]);
+  const [notice, setNotice] = useState("");
 
   const families = bible?.families || [];
   const variants = bible?.variants || [];
   const relationships = bible?.relationships || [];
 
+  useEffect(() => {
+    if (!worldId) return;
+    void Promise.all([
+      studioApi.media({ coverOnly: true }).catch(() => ({ items: [] })),
+      studioApi.timeline(worldId, branchId).catch(() => ({ items: [] })),
+    ]).then(([mediaResult, timelineResult]) => { setMedia(mediaResult.items || []); setTimeline(timelineResult.items || []); });
+  }, [worldId, branchId]);
+
   const filteredFamilies = useMemo(() => families.filter((family) => {
-    if (tab !== "all" && tab !== "relationships" && family.entity_type !== tab) return false;
+    if (tab !== "all" && tab !== "relationships" && tab !== "canon" && tab !== "timeline" && tab !== "worlds" && family.entity_type !== tab) return false;
     const needle = query.trim().toLowerCase();
     return !needle || family.name.toLowerCase().includes(needle) || family.description?.toLowerCase().includes(needle);
   }), [families, tab, query]);
@@ -94,20 +107,39 @@ export function LibraryView({ projectId, worldId, branchId, bible, entityTypes, 
     }
   };
 
+  const toggleSelected = (id: string) => setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  const runLibraryAction = async (label: string, action: () => Promise<unknown>) => {
+    setBusy(true); setNotice("");
+    try { await action(); setNotice(`${label} complete`); await onChanged(); }
+    catch (error) { setNotice((error as Error).message); }
+    finally { setBusy(false); }
+  };
+  const coverFor = (family: EntityFamily) => media.find((item) => item.resource_type === "entity_family" && item.resource_id === family.id);
+
   return (
     <div className="library-layout">
+      <aside className="library-rail">
+        <div className="pane-heading"><div><span className="eyebrow">Library</span><h2>Organize</h2></div><button className="icon-control" onClick={() => setNotice("Use Quick create to add a new Library entry.")}><Sparkles size={13} /></button></div>
+        <button className="library-rail-root active" onClick={() => { setTab("all"); setQuery(""); }}>◇ All entries</button>
+        <RailGroup title="Folders" items={(bible?.folder_tree || bible?.folders || []).map((item) => String(item.name || "Folder"))} empty="No Library folders yet." />
+        <RailGroup title="Collections" items={(bible?.collections || []).map((item) => String(item.name || item.title || "Collection"))} empty="No collections yet." />
+        <RailGroup title="Saved views" items={(bible?.saved_views || []).map((item) => String(item.name || item.title || "Saved view"))} empty="No saved views yet." />
+      </aside>
       <section className="library-main">
         <div className="library-header">
           <div><span className="eyebrow">Shared knowledge</span><h1>Library</h1><p>Navigation and AI context stay separate. Opening a sheet does not silently inject it into generation.</p></div>
-          <button className="primary-action" onClick={() => setQuickOpen(true)}><Sparkles size={14} />Quick create</button>
+          <div className="library-actions"><button className="secondary-action" onClick={() => runLibraryAction("Continuity check", () => studioApi.continuity({ project_id: projectId, world_id: worldId, branch_id: branchId }))}><WandSparkles size={14} />Continuity</button><button className="secondary-action" onClick={() => runLibraryAction("Snapshot", () => studioApi.snapshot({ project_id: projectId, world_id: worldId, branch_id: branchId }))}><Camera size={14} />Snapshot</button><button className="primary-action" onClick={() => setQuickOpen(true)}><Sparkles size={14} />Quick create</button></div>
         </div>
 
         <div className="library-toolbar">
           <div className="library-tabs">
-            {["all", "character", "location", "item", "organization", "lore", "relationships"].map((value) => <button key={value} className={tab === value ? "active" : ""} onClick={() => setTab(value)}>{value}</button>)}
+            {["all", "character", "location", "item", "organization", "lore", "relationships", "canon", "timeline", "worlds"].map((value) => <button key={value} className={tab === value ? "active" : ""} onClick={() => setTab(value)}>{value === "worlds" ? "worlds & branches" : value}</button>)}
           </div>
-          <label className="library-search"><Search size={13} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Library" /></label>
+          <div className="library-tools"><label className="library-search"><Search size={13} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Library" /></label><div className="view-toggle"><button className={layout === "list" ? "active" : ""} onClick={() => setLayout("list")} title="List view"><List size={14} /></button><button className={layout === "grid" ? "active" : ""} onClick={() => setLayout("grid")} title="Grid view"><Grid2X2 size={14} /></button><button className={layout === "gallery" ? "active" : ""} onClick={() => setLayout("gallery")} title="Gallery view"><Image size={14} /></button></div></div>
         </div>
+
+        {notice && <div className="library-notice">{notice}</div>}
+        {selected.length > 0 && <div className="bulk-bar"><strong>{selected.length} selected</strong><button disabled={busy} onClick={() => runLibraryAction("Archived", () => Promise.all(selected.map((id) => studioApi.lifecycle("archive", "entity_family", id))))}><Archive size={13} />Archive</button><button onClick={() => setSelected([])}>Clear</button></div>}
 
         {tab === "relationships" ? (
           <div className="relation-list">
@@ -120,12 +152,19 @@ export function LibraryView({ projectId, worldId, branchId, bible, entityTypes, 
             ))}
             {!relationships.length && <div className="center-empty"><Waypoints size={26} /><h2>No relationships yet</h2></div>}
           </div>
+        ) : tab === "timeline" ? (
+          <div className="timeline-list">{timeline.map((event, index) => <article key={String(event.id || index)}><span>{String(event.time_label || `Event ${index + 1}`)}</span><strong>{String(event.summary || event.title || "Untitled event")}</strong><small>{String(event.event_type || "event")}</small></article>)}{!timeline.length && <div className="center-empty grid-empty"><Waypoints size={26} /><h2>No timeline events</h2><p>Timeline events will appear here for the active world and branch.</p></div>}</div>
+        ) : tab === "worlds" ? (
+          <div className="world-branch-list">{(bible?.worlds || []).map((world) => <article key={world.id}><div><strong>{world.name}</strong><p>{world.description || "No description"}</p></div><span>{world.branches?.length || 0} branches</span></article>)}</div>
         ) : (
-          <div className="entity-grid">
+          <div className={`entity-grid view-${layout}`}>
             {filteredFamilies.map((family) => {
               const variant = variantFor(family);
+              const cover = coverFor(family);
               return (
-                <button key={family.id} onClick={() => inspectEntity(family)}>
+                <button key={family.id} className={selected.includes(family.id) ? "selected" : ""} onClick={() => inspectEntity(family)} onContextMenu={(event) => { event.preventDefault(); toggleSelected(family.id); }}>
+                  {layout === "gallery" && cover?.content_url ? <img className="entity-cover" src={cover.content_url} alt={cover.caption || family.name} /> : null}
+                  <span className="entity-select" onClick={(event) => { event.stopPropagation(); toggleSelected(family.id); }}>{selected.includes(family.id) ? <Check size={12} /> : ""}</span>
                   <span className={`entity-type-mark ${family.entity_type || "entity"}`}><Boxes size={16} /></span>
                   <span className="entity-kind">{family.entity_type || "entity"}</span>
                   <strong>{variant?.display_name || family.name}</strong>
@@ -152,4 +191,8 @@ export function LibraryView({ projectId, worldId, branchId, bible, entityTypes, 
       )}
     </div>
   );
+}
+
+function RailGroup({ title, items, empty }: { title: string; items: string[]; empty: string }) {
+  return <section className="library-rail-group"><div className="library-rail-title"><span>{title}</span><button title={`Add ${title.toLowerCase()}`}>＋</button></div>{items.length ? items.slice(0, 8).map((item) => <button key={item} className="library-rail-item">{item}</button>) : <p>{empty}</p>}</section>;
 }

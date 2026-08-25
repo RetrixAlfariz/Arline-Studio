@@ -130,6 +130,18 @@ export interface WorldBible extends JsonMap {
   folder_tree?: FolderNode[];
   collections?: JsonMap[];
   saved_views?: JsonMap[];
+  canon_facts?: JsonMap[];
+}
+
+export interface MediaItem extends JsonMap {
+  id: string;
+  content_url?: string;
+  caption?: string;
+  description?: string;
+  kind?: string;
+  resource_type?: string;
+  resource_id?: string;
+  is_cover?: boolean;
 }
 
 export interface Turn extends JsonMap {

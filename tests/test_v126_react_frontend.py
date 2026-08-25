@@ -1,6 +1,13 @@
 from pathlib import Path
 import json
+import re
 import unittest
+
+from fastapi.testclient import TestClient
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+
+from src.interface.react_app import _register_frontend_mime_types
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -69,6 +76,28 @@ class V126ReactFrontendTests(unittest.TestCase):
         self.assertIn("studioApi.bootstrap", app)
         self.assertIn("streamGeneration", chat)
         self.assertNotIn("const mock", app.lower())
+
+    def test_storage_reset_is_guarded_in_the_react_settings_ui(self):
+        settings = (FRONTEND / "src" / "components" / "SettingsDrawer.tsx").read_text(encoding="utf-8")
+        api = (FRONTEND / "src" / "api.ts").read_text(encoding="utf-8")
+        self.assertIn('resetStorage: (mode: "database" | "complete"', api)
+        self.assertIn("/api/storage/reset", api)
+        self.assertIn("RESET DATABASE", settings)
+        self.assertIn("DELETE EVERYTHING", settings)
+        self.assertIn("Complete reset", settings)
+
+    def test_integrated_build_serves_es_modules_with_javascript_mime(self):
+        index = FRONTEND / "dist" / "index.html"
+        if not index.is_file():
+            self.skipTest("frontend production build is not present")
+        match = re.search(r'src="(/assets/[^"]+\.js)"', index.read_text(encoding="utf-8"))
+        self.assertIsNotNone(match)
+        _register_frontend_mime_types()
+        app = FastAPI()
+        app.mount("/assets", StaticFiles(directory=FRONTEND / "dist" / "assets"))
+        response = TestClient(app).get(match.group(1))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("javascript", response.headers.get("content-type", ""))
 
 
 if __name__ == "__main__":

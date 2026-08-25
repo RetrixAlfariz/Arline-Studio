@@ -1,5 +1,6 @@
 import type {
   CommandPayload,
+  JsonMap,
   DocumentItem,
   GenerationResult,
   ModelInfo,
@@ -10,6 +11,7 @@ import type {
   Session,
   WorkspaceBootstrap,
   WorldBible,
+  MediaItem,
 } from "./types";
 
 type RequestInitJson = Omit<RequestInit, "body"> & { body?: unknown };
@@ -49,6 +51,13 @@ export async function api<T>(path: string, options: RequestInitJson = {}): Promi
 
 export const studioApi = {
   config: () => api<RuntimeConfig>("/api/config"),
+  resetStorage: (mode: "database" | "complete", confirmation: string) => api<{
+    ok: boolean;
+    mode: string;
+    backups: string[];
+    removed_directories: string[];
+    restart_required: boolean;
+  }>("/api/storage/reset", { method: "POST", body: { mode, confirmation } }),
   saveSettings: (payload: Record<string, unknown>) => api<Record<string, unknown>>("/api/settings", { method: "POST", body: payload }),
   models: (serverUrl: string, apiKey?: string) => api<{ models: ModelInfo[] }>("/api/models/query", {
     method: "POST",
@@ -103,6 +112,21 @@ export const studioApi = {
   }),
   quickCreatePreview: (payload: Record<string, unknown>) => api<Record<string, unknown>>("/api/quick-create/preview", { method: "POST", body: payload }),
   quickCreate: (payload: Record<string, unknown>) => api<Record<string, unknown>>("/api/quick-create", { method: "POST", body: payload }),
+  media: (params: { resourceType?: string; resourceId?: string; coverOnly?: boolean } = {}) => {
+    const query = new URLSearchParams();
+    if (params.resourceType) query.set("resource_type", params.resourceType);
+    if (params.resourceId) query.set("resource_id", params.resourceId);
+    if (params.coverOnly) query.set("cover_only", "true");
+    return api<{ items: MediaItem[] }>(`/api/media?${query}`);
+  },
+  timeline: (worldId: string, branchId?: string) => {
+    const query = new URLSearchParams({ world_id: worldId });
+    if (branchId) query.set("branch_id", branchId);
+    return api<{ items: JsonMap[] }>(`/api/timeline?${query}`);
+  },
+  continuity: (payload: Record<string, unknown>) => api<Record<string, unknown>>("/api/analyze", { method: "POST", body: { ...payload, analysis_mode: "continuity" } }),
+  snapshot: (payload: Record<string, unknown>) => api<Record<string, unknown>>("/api/snapshots", { method: "POST", body: payload }),
+  lifecycle: (action: "archive" | "restore", resourceType: string, resourceId: string) => api<Record<string, unknown>>(`/api/lifecycle/${action}`, { method: "POST", body: { resource_type: resourceType, resource_id: resourceId } }),
 };
 
 export function runtimePayload(

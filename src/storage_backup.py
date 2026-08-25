@@ -57,3 +57,27 @@ def backup_sqlite_before_migrations(database_path: Path | str, targets: Mapping[
         return backup
     finally:
         source.close()
+
+
+def create_sqlite_recovery_backup(
+    database_path: Path | str,
+    *,
+    reason: str = "reset",
+) -> Path | None:
+    """Create a consistent, user-initiated recovery backup."""
+    path = Path(database_path).resolve()
+    if not path.is_file():
+        return None
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    backup_dir = path.parent / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    suffix = path.suffix or ".db"
+    backup = backup_dir / f"{path.stem}.{reason}-{stamp}{suffix}"
+    source = sqlite3.connect(path, timeout=30)
+    target = sqlite3.connect(backup, timeout=30)
+    try:
+        source.backup(target)
+    finally:
+        target.close()
+        source.close()
+    return backup

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Cpu, Database, RefreshCcw, Save, SlidersHorizontal, X } from "lucide-react";
+import { AlertTriangle, Cpu, Database, RefreshCcw, Save, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { studioApi } from "../api";
+import { browserStorage } from "../browserStorage";
 import type { ModelInfo, RuntimeConfig } from "../types";
 
 interface SettingsDrawerProps {
@@ -11,6 +12,7 @@ interface SettingsDrawerProps {
 }
 
 type SettingsTab = "runtime" | "generation" | "context" | "storage";
+type ResetMode = "database" | "complete";
 
 export function SettingsDrawer({ open, config, onConfig, onClose }: SettingsDrawerProps) {
   const [tab, setTab] = useState<SettingsTab>("runtime");
@@ -18,6 +20,9 @@ export function SettingsDrawer({ open, config, onConfig, onClose }: SettingsDraw
   const [apiKey, setApiKey] = useState("");
   const [status, setStatus] = useState("");
   const [loadingModels, setLoadingModels] = useState(false);
+  const [resetMode, setResetMode] = useState<ResetMode | null>(null);
+  const [resetConfirmation, setResetConfirmation] = useState("");
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     if (!open) setStatus("");
@@ -68,6 +73,26 @@ export function SettingsDrawer({ open, config, onConfig, onClose }: SettingsDraw
       setStatus("Settings saved. API keys remain session-only.");
     } catch (error) {
       setStatus((error as Error).message);
+    }
+  };
+
+  const closeReset = () => {
+    if (resetting) return;
+    setResetMode(null);
+    setResetConfirmation("");
+  };
+
+  const performReset = async () => {
+    if (!resetMode) return;
+    setResetting(true);
+    setStatus("Resetting local data…");
+    try {
+      await studioApi.resetStorage(resetMode, resetConfirmation);
+      browserStorage.clearArline();
+      location.reload();
+    } catch (error) {
+      setStatus((error as Error).message);
+      setResetting(false);
     }
   };
 
@@ -123,11 +148,39 @@ export function SettingsDrawer({ open, config, onConfig, onClose }: SettingsDraw
               <div className="settings-info"><strong>Canonical storage</strong><span>Python WorkspaceStore / SQLite</span></div>
               <div className="settings-info"><strong>Native acceleration</strong><span>Rust adapter remains available</span></div>
               <p className="settings-copy">The TSX migration deliberately does not duplicate canonical state into browser storage. That would be convenient right until two sources of truth start fencing.</p>
+              <section className="danger-zone">
+                <div className="danger-zone-heading"><AlertTriangle size={15} /><div><strong>Danger zone</strong><span>These actions cannot be undone from the active database.</span></div></div>
+                <div className="danger-action">
+                  <div><strong>Reset database</strong><p>Remove projects, chats, Library/canon, memory, and discovery data. A timestamped recovery backup is kept.</p></div>
+                  <button className="danger-button" onClick={() => setResetMode("database")}><RefreshCcw size={13} />Reset</button>
+                </div>
+                <div className="danger-action destructive">
+                  <div><strong>Complete reset</strong><p>Also remove media, datasets, generated output, backups, and local UI state. Configuration and models are preserved.</p></div>
+                  <button className="danger-button solid" onClick={() => setResetMode("complete")}><Trash2 size={13} />Delete all</button>
+                </div>
+              </section>
             </>}
           </section>
         </div>
         <footer><span>{status}</span><button className="primary-action small" onClick={() => void save()}><Save size={13} />Save settings</button></footer>
       </aside>
+      {resetMode && <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeReset(); }}>
+        <section className="modal reset-modal" role="dialog" aria-modal="true" aria-labelledby="reset-title">
+          <button className="icon-control modal-close" onClick={closeReset} disabled={resetting}><X size={15} /></button>
+          <AlertTriangle className="reset-warning-icon" size={24} />
+          <h2 id="reset-title">{resetMode === "complete" ? "Completely reset Arline?" : "Reset the database?"}</h2>
+          <p>{resetMode === "complete"
+            ? "All canonical data, chats, media, exports, generated output, backups, and UI-local state will be permanently removed. Runtime configuration and installed models remain untouched."
+            : "All canonical data, chats, memory, and discovery state will be removed. A recovery backup of each database will be created first."}</p>
+          <label><span>Type <strong>{resetMode === "complete" ? "DELETE EVERYTHING" : "RESET DATABASE"}</strong> to continue</span><input autoFocus value={resetConfirmation} onChange={(event) => setResetConfirmation(event.target.value)} disabled={resetting} /></label>
+          <div className="modal-actions">
+            <button onClick={closeReset} disabled={resetting}>Cancel</button>
+            <button className="danger-button solid" onClick={() => void performReset()} disabled={resetting || resetConfirmation !== (resetMode === "complete" ? "DELETE EVERYTHING" : "RESET DATABASE")}>
+              {resetting ? <RefreshCcw className="spin" size={13} /> : <Trash2 size={13} />}{resetting ? "Resetting…" : "Confirm reset"}
+            </button>
+          </div>
+        </section>
+      </div>}
     </>
   );
 }

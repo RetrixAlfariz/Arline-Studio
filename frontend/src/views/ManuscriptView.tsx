@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FilePlus2, FileText, Save, Trash2 } from "lucide-react";
 import { studioApi } from "../api";
+import { browserStorage } from "../browserStorage";
 import type { DocumentItem } from "../types";
 
 interface ManuscriptViewProps {
@@ -40,7 +41,7 @@ export function ManuscriptView({ projectId, documents, initialDocumentId, docume
       return;
     }
     void studioApi.document(selectedId).then((loaded) => {
-      const recovery = localStorage.getItem(`arline:react:draft:${loaded.id}`);
+      const recovery = browserStorage.get(`arline:react:draft:${loaded.id}`);
       setDoc(loaded);
       setTitle(loaded.title || "Untitled");
       setContent(recovery ?? loaded.content ?? "");
@@ -53,7 +54,7 @@ export function ManuscriptView({ projectId, documents, initialDocumentId, docume
     if (!doc) return;
     if (recoveryTimer.current) window.clearTimeout(recoveryTimer.current);
     recoveryTimer.current = window.setTimeout(() => {
-      localStorage.setItem(`arline:react:draft:${doc.id}`, content);
+      browserStorage.set(`arline:react:draft:${doc.id}`, content);
       setSaveLabel("Local recovery saved");
     }, 650);
     return () => {
@@ -72,7 +73,7 @@ export function ManuscriptView({ projectId, documents, initialDocumentId, docume
     try {
       const updated = await studioApi.updateDocument(doc.id, { title, content, status, note: "react checkpoint" });
       setDoc(updated);
-      localStorage.removeItem(`arline:react:draft:${doc.id}`);
+      browserStorage.remove(`arline:react:draft:${doc.id}`);
       setSaveLabel("Checkpoint saved");
       await onDocumentsChanged();
     } catch (error) {
@@ -101,7 +102,7 @@ export function ManuscriptView({ projectId, documents, initialDocumentId, docume
   const trash = async () => {
     if (!doc || !window.confirm(`Move “${doc.title}” to Trash?`)) return;
     await studioApi.trash("document", doc.id);
-    localStorage.removeItem(`arline:react:draft:${doc.id}`);
+    browserStorage.remove(`arline:react:draft:${doc.id}`);
     setSelectedId("");
     setDoc(null);
     await onDocumentsChanged();

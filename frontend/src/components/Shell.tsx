@@ -12,6 +12,7 @@ import {
   Search,
   Settings2,
   Sun,
+  Clock3,
 } from "lucide-react";
 import type { AppView, Project, Session, ThemeMode, World, WorldBible } from "../types";
 
@@ -150,6 +151,8 @@ export function Shell({
           <button className="metric-nav" onClick={() => onView("library")}><span>Locations</span><em>{locationCount}</em></button>
           <button className="metric-nav" onClick={() => onView("library")}><span>Items</span><em>{itemCount}</em></button>
           <button className="metric-nav" onClick={() => onView("library")}><span>Relationships</span><em>{bible?.relationships?.length || 0}</em></button>
+          <button className="metric-nav" onClick={() => onView("library")}><span>Lore & rules</span><em>{families.filter((item) => item.entity_type === "lore").length}</em></button>
+          <button className="metric-nav" onClick={() => onView("library")}><span>Timeline</span><em><Clock3 size={12} /></em></button>
         </section>
 
         <section className="sidebar-section recent-section">

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, LoaderCircle } from "lucide-react";
 import { studioApi } from "./api";
+import { browserStorage, createClientId } from "./browserStorage";
 import { InspectorDrawer } from "./components/InspectorDrawer";
 import { QuickCreateDialog } from "./components/QuickCreateDialog";
 import { SettingsDrawer } from "./components/SettingsDrawer";
@@ -22,7 +23,7 @@ import type {
   WorldBible,
 } from "./types";
 
-const STACK_ID = `react-${crypto.randomUUID()}`;
+const STACK_ID = createClientId("react");
 
 const DEFAULT_CONFIG: RuntimeConfig = {
   studio_version: "unknown",
@@ -47,8 +48,8 @@ const DEFAULT_CONFIG: RuntimeConfig = {
 };
 
 export default function App() {
-  const [theme, setTheme] = useState<ThemeMode>(() => (localStorage.getItem("arline:theme") === "light" ? "light" : "dark"));
-  const [view, setView] = useState<AppView>(() => (localStorage.getItem("arline:react:view") as AppView) || "home");
+  const [theme, setTheme] = useState<ThemeMode>(() => (browserStorage.get("arline:theme") === "light" ? "light" : "dark"));
+  const [view, setView] = useState<AppView>(() => (browserStorage.get("arline:react:view") as AppView) || "home");
   const [config, setConfig] = useState<RuntimeConfig>(DEFAULT_CONFIG);
   const [bootstrap, setBootstrap] = useState<WorkspaceBootstrap | null>(null);
   const [commands, setCommands] = useState<CommandPayload>({ commands: [] });
@@ -74,12 +75,12 @@ export default function App() {
 
   const setThemeAndPersist = () => {
     const next = theme === "dark" ? "light" : "dark";
-    localStorage.setItem("arline:theme", next);
+    browserStorage.set("arline:theme", next);
     setTheme(next);
   };
 
   const setViewAndPersist = (next: AppView) => {
-    localStorage.setItem("arline:react:view", next);
+    browserStorage.set("arline:react:view", next);
     setView(next);
   };
 
@@ -126,17 +127,17 @@ export default function App() {
         setConfig(runtime);
         setBootstrap(boot);
         setCommands(commandPayload);
-        const rememberedProject = localStorage.getItem("arline:react:project");
+        const rememberedProject = browserStorage.get("arline:react:project");
         const project = boot.projects.find((item) => item.id === rememberedProject) || boot.projects[0];
         if (project) {
           setActiveProjectId(project.id);
-          const rememberedWorld = localStorage.getItem("arline:react:world");
+          const rememberedWorld = browserStorage.get("arline:react:world");
           const world = boot.worlds.find((item) => item.id === rememberedWorld)
             || boot.worlds.find((item) => item.id === project.default_world_id)
             || boot.worlds[0];
           if (world) {
             setActiveWorldId(world.id);
-            const rememberedBranch = localStorage.getItem("arline:react:branch");
+            const rememberedBranch = browserStorage.get("arline:react:branch");
             const branch = world.branches?.find((item) => item.id === rememberedBranch)
               || world.branches?.find((item) => item.kind === "main")
               || world.branches?.[0];
@@ -153,7 +154,7 @@ export default function App() {
 
   useEffect(() => {
     if (!activeProjectId) return;
-    localStorage.setItem("arline:react:project", activeProjectId);
+    browserStorage.set("arline:react:project", activeProjectId);
     void refreshScope();
   }, [activeProjectId, activeWorldId, activeBranchId, refreshScope]);
 
@@ -167,7 +168,7 @@ export default function App() {
   };
 
   const chooseWorld = (worldId: string) => {
-    localStorage.setItem("arline:react:world", worldId);
+    browserStorage.set("arline:react:world", worldId);
     setActiveWorldId(worldId);
     const world = worlds.find((item) => item.id === worldId);
     setActiveBranchId(world?.branches?.find((item) => item.kind === "main")?.id || world?.branches?.[0]?.id || "");
@@ -175,7 +176,7 @@ export default function App() {
   };
 
   const chooseBranch = (branchId: string) => {
-    localStorage.setItem("arline:react:branch", branchId);
+    browserStorage.set("arline:react:branch", branchId);
     setActiveBranchId(branchId);
     setActiveSession(null);
   };
