@@ -22,7 +22,9 @@ jobs:
         with:
           fetch-depth: 0
       - name: Apply deterministic integration patch
-        run: python scripts/apply_v125_scroll_rework.py
+        run: |
+          python scripts/apply_v125_scroll_rework.py
+          git checkout -- .github/workflows/ci.yml
       - name: Verify patch hygiene
         run: |
           git diff --check
