@@ -1,5 +1,5 @@
 name: v1.2.5 Staging Validation
-# Final staging pass after the v1.2.5 lockfile refresh.
+# Final staging pass for the v1.2.5 command, native storage, and brand reform.
 
 on:
   push:
@@ -24,25 +24,42 @@ jobs:
           node-version: "22"
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Refresh lockfile when package metadata changed
-        id: lock
+      - name: Prepare v1.2.5 generated wiring
+        id: prep
         shell: bash
         run: |
           set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/interface/web/static/index.html')
+          text = path.read_text(encoding='utf-8')
+          text = text.replace('content="#202220"', 'content="#1E2120"')
+          text = text.replace('Studio v1.2 α', 'Studio v1.2.5 α')
+          text = text.replace('?v=1.2.4-directives', '?v=1.2.5-brand')
+          base = '<link rel="stylesheet" href="/static/arline.css?v=1.2.5-brand" />'
+          brand = '<link rel="stylesheet" href="/static/brand-v125.css?v=1.2.5-brand" />'
+          icon = '<link rel="icon" type="image/svg+xml" href="/static/assets/brand/arline-primary.svg" />'
+          if brand not in text:
+              if base not in text:
+                  raise SystemExit('Base stylesheet link not found; refusing blind brand injection')
+              text = text.replace(base, base + '\n  ' + brand + '\n  ' + icon, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
           uv lock
-          if git diff --quiet -- uv.lock; then
+          git add -- src/interface/web/static/index.html uv.lock
+          if git diff --cached --quiet; then
             echo "updated=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add -- uv.lock
-          git commit -m 'chore: refresh uv.lock for v1.2.5'
+          git commit -m 'chore: finalize v1.2.5 brand and lock wiring'
           git push origin HEAD:tmp-v125-write
           echo "updated=true" >> "$GITHUB_OUTPUT"
 
       - name: Verify complete v1.2.5 staging contract
-        if: steps.lock.outputs.updated != 'true'
+        if: steps.prep.outputs.updated != 'true'
         shell: bash
         run: |
           set +e
