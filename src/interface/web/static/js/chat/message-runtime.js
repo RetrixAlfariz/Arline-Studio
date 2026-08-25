@@ -226,10 +226,189 @@
   const feed = byId("conversationFeed");
   if (feed) mutationObserver.observe(feed, { childList: true, subtree: false });
 
+  function effortLabel(value) {
+    const raw = String(value || "off").trim().toLowerCase();
+    if (!raw || raw === "off") return "Standard";
+    if (raw === "on") return "Thinking";
+    return raw
+      .replace(/^thinking[_\s-]*/i, "")
+      .split(/[_\s-]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ") || "Thinking";
+  }
+
+  function makeComposerSettingRow(label, description, control) {
+    if (!control) return null;
+    const row = document.createElement("label");
+    row.className = "composer-setting-row";
+    const copy = document.createElement("span");
+    copy.className = "composer-setting-copy";
+    const title = document.createElement("b");
+    title.textContent = label;
+    const note = document.createElement("small");
+    note.textContent = description;
+    copy.append(title, note);
+    row.append(copy, control);
+    return row;
+  }
+
+  function setComposerSettingsOpen(open) {
+    const advanced = byId("composerAdvanced");
+    const card = qs("#composerDock .composer-card");
+    const button = byId("composerProfileBtn");
+    if (!advanced || !card || !button) return;
+    advanced.classList.toggle("hidden", !open);
+    card.classList.toggle("details-open", open);
+    button.setAttribute("aria-expanded", String(open));
+    window.resizeComposerInput?.();
+  }
+
+  function syncComposerChrome() {
+    const summary = byId("composerProfileSummary");
+    const button = byId("composerProfileBtn");
+    const reasoning = byId("reasoningSelect");
+    const model = byId("modelSelect");
+    const profile = byId("runProfileSelect");
+    if (!summary || !button) return;
+    const effort = effortLabel(reasoning?.value);
+    if (summary.textContent !== effort) summary.textContent = effort;
+    const modelName = model?.selectedOptions?.[0]?.textContent?.replace(/\s+·\s+loaded\b/i, "") || "Choose model";
+    const profileName = profile?.selectedOptions?.[0]?.textContent || "Story Writing";
+    button.title = `${modelName} · ${effort} · ${profileName}`;
+    button.setAttribute("aria-expanded", String(!byId("composerAdvanced")?.classList.contains("hidden")));
+  }
+
+  function installComposerChrome() {
+    const card = qs("#composerDock .composer-card");
+    const input = byId("promptInput");
+    const advanced = byId("composerAdvanced");
+    const profileControls = qs("#composerDock .composer-profile-controls");
+    const actions = qs("#composerDock .composer-actions");
+    const profileButton = byId("composerProfileBtn");
+    const generateButton = byId("generateBtn");
+    if (!card || !input || !advanced || !profileControls || !actions || !profileButton || !generateButton) return;
+    if (card.dataset.composerChrome === "chatgpt-v1") return;
+    card.dataset.composerChrome = "chatgpt-v1";
+    card.classList.add("composer-chatgpt-shell");
+
+    input.placeholder = "Message Arline…";
+    input.setAttribute("aria-label", "Message Arline");
+
+    const attach = byId("composerAttachBtn");
+    const addContext = byId("composerAddContextBtn");
+    const analyze = byId("analyzeBtn");
+    const runProfile = byId("runProfileSelect");
+    const model = byId("modelSelect");
+    const reasoning = byId("reasoningSelect");
+    const contextRecipe = byId("contextRecipeSelect");
+    const inputMode = byId("modeSelect");
+    const saveProfile = byId("saveRunProfileBtn");
+    const lengthControl = qs("#composerDock .length-control");
+    const budgetButton = byId("composerBudgetButton");
+    const notes = qs("#composerDock .composer-notes");
+    const reasoningNote = byId("reasoningNote");
+
+    if (attach) {
+      attach.title = "Add or attach";
+      attach.setAttribute("aria-label", "Add or attach");
+      profileControls.insertBefore(attach, profileControls.firstChild);
+    }
+    if (addContext) {
+      addContext.title = "Reference context with @";
+      addContext.setAttribute("aria-label", "Reference context");
+      if (attach?.nextSibling !== addContext) profileControls.insertBefore(addContext, attach?.nextSibling || profileControls.firstChild);
+    }
+    if (analyze) {
+      analyze.classList.add("composer-context-pill");
+      analyze.textContent = "Context";
+      analyze.title = "Inspect assembled context";
+      profileControls.appendChild(analyze);
+    }
+    actions.insertBefore(profileButton, generateButton);
+    profileButton.setAttribute("aria-controls", "composerAdvanced");
+    profileButton.setAttribute("aria-haspopup", "dialog");
+    profileButton.setAttribute("aria-expanded", "false");
+
+    const header = document.createElement("div");
+    header.className = "composer-settings-header";
+    header.innerHTML = "<b>Generation</b><small>Request-scoped</small>";
+
+    const details = document.createElement("details");
+    details.className = "composer-advanced-details";
+    const detailSummary = document.createElement("summary");
+    detailSummary.textContent = "Advanced";
+    const detailBody = document.createElement("div");
+    detailBody.className = "composer-advanced-body";
+
+    const modelRow = makeComposerSettingRow("Model", "Local generation model", model);
+    const effortRow = makeComposerSettingRow("Effort", "Native reasoning effort", reasoning);
+    const profileRow = makeComposerSettingRow("Run profile", "Reusable generation defaults", runProfile);
+    const recipeRow = makeComposerSettingRow("Context recipe", "Retrieval and context preset", contextRecipe);
+    const modeRow = makeComposerSettingRow("Input mode", "Context serialization", inputMode);
+
+    if (recipeRow) detailBody.appendChild(recipeRow);
+    if (modeRow) detailBody.appendChild(modeRow);
+    if (lengthControl) detailBody.appendChild(lengthControl);
+    if (budgetButton) detailBody.appendChild(budgetButton);
+    if (saveProfile) detailBody.appendChild(saveProfile);
+    if (notes) detailBody.appendChild(notes);
+    if (reasoningNote) detailBody.appendChild(reasoningNote);
+    details.append(detailSummary, detailBody);
+
+    advanced.replaceChildren(header);
+    if (modelRow) advanced.appendChild(modelRow);
+    if (effortRow) advanced.appendChild(effortRow);
+    if (profileRow) advanced.appendChild(profileRow);
+    advanced.appendChild(details);
+    advanced.setAttribute("role", "dialog");
+    advanced.setAttribute("aria-label", "Generation settings");
+
+    profileButton.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setComposerSettingsOpen(advanced.classList.contains("hidden"));
+      syncComposerChrome();
+    }, { capture: true });
+
+    document.addEventListener("pointerdown", (event) => {
+      if (advanced.classList.contains("hidden")) return;
+      if (advanced.contains(event.target) || profileButton.contains(event.target)) return;
+      setComposerSettingsOpen(false);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !advanced.classList.contains("hidden")) {
+        setComposerSettingsOpen(false);
+        profileButton.focus();
+      }
+    });
+    generateButton.addEventListener("click", () => setComposerSettingsOpen(false), { capture: true });
+
+    for (const control of [model, reasoning, runProfile, contextRecipe, inputMode]) {
+      control?.addEventListener("change", () => requestAnimationFrame(syncComposerChrome));
+    }
+    const summary = byId("composerProfileSummary");
+    if (summary) {
+      const observer = new MutationObserver(() => syncComposerChrome());
+      observer.observe(summary, { childList: true, characterData: true, subtree: true });
+    }
+    for (const select of [model, reasoning, runProfile]) {
+      if (!select) continue;
+      const observer = new MutationObserver(() => syncComposerChrome());
+      observer.observe(select, { childList: true, subtree: true, attributes: true });
+    }
+    syncComposerChrome();
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", installComposerChrome, { once: true });
+  else installComposerChrome();
+
   window.ArlineMessageRuntime = Object.freeze({
     deleteTurnMessage,
     bindDeleteActions,
     saveDraftScroll,
     restoreDraftScroll,
+    installComposerChrome,
+    setComposerSettingsOpen,
   });
 })();
