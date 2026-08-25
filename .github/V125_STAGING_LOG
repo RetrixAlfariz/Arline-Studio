@@ -1,6 +1,6 @@
 ===== uv lock check =====
 Using CPython 3.13.15
-Resolved 23 packages in 0.83ms
+Resolved 23 packages in 0.92ms
 exit=0
 
 ===== uv sync frozen =====
@@ -9,8 +9,8 @@ Creating virtual environment at: .venv
 warning: Skipping installation of entry points (`project.scripts`) for package `arline-studio` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
 Downloading pydantic-core (2.0MiB)
  Downloaded pydantic-core
-Prepared 21 packages in 167ms
-Installed 21 packages in 5ms
+Prepared 21 packages in 296ms
+Installed 21 packages in 380ms
  + annotated-doc==0.0.5
  + annotated-types==0.8.0
  + anyio==4.14.2
@@ -76,7 +76,7 @@ test_history_emits_only_after_authoritative_turn_and_feedback_commit (test_archi
 test_model_discovery_never_accepts_api_key_in_get_query (test_architecture_hardening.ArchitectureHardeningTests.test_model_discovery_never_accepts_api_key_in_get_query) ... ok
 test_package_and_source_versions_are_one_contract (test_architecture_hardening.ArchitectureHardeningTests.test_package_and_source_versions_are_one_contract) ... ok
 test_remote_ui_bind_requires_explicit_override (test_architecture_hardening.ArchitectureHardeningTests.test_remote_ui_bind_requires_explicit_override) ... ok
-test_saved_runtime_config_never_persists_api_key (test_architecture_hardening.ArchitectureHardeningTests.test_saved_runtime_config_never_persists_api_key) ... <frozen importlib._bootstrap>:488: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f41345f0b80>
+test_saved_runtime_config_never_persists_api_key (test_architecture_hardening.ArchitectureHardeningTests.test_saved_runtime_config_never_persists_api_key) ... <frozen importlib._bootstrap>:488: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f11dd6f0b80>
 ResourceWarning: Enable tracemalloc to get the object allocation traceback
 ok
 test_feedback_lab_is_not_a_main_workspace_view (test_settings_stack_layout.SettingsStackLayoutTests.test_feedback_lab_is_not_a_main_workspace_view) ... ok
@@ -169,7 +169,7 @@ test_existing_discovery_navigation_remains_explicit (test_v121_performance_front
 test_stream_and_feature_modules_are_loaded_explicitly (test_v121_performance_frontend.V121PerformanceFrontendTests.test_stream_and_feature_modules_are_loaded_explicitly) ... ok
 test_stream_transport_does_not_patch_or_boot_feature_modules (test_v121_performance_frontend.V121PerformanceFrontendTests.test_stream_transport_does_not_patch_or_boot_feature_modules) ... ok
 test_ambiguous_reference_abstains_without_generic_or_new_item (test_v121_physical_item_identity.V121PhysicalItemIdentityTests.test_ambiguous_reference_abstains_without_generic_or_new_item) ... ok
-test_explicit_anaphora_keeps_same_item_and_records_change (test_v121_physical_item_identity.V121PhysicalItemIdentityTests.test_explicit_anaphora_keeps_same_item_and_records_change) ... FAIL
+test_explicit_anaphora_keeps_same_item_and_records_change (test_v121_physical_item_identity.V121PhysicalItemIdentityTests.test_explicit_anaphora_keeps_same_item_and_records_change) ... ok
 test_explicit_quantity_creates_multiple_identical_physical_items (test_v121_physical_item_identity.V121PhysicalItemIdentityTests.test_explicit_quantity_creates_multiple_identical_physical_items) ... ok
 test_new_purchase_gets_new_item_but_later_unique_reference_reuses_it (test_v121_physical_item_identity.V121PhysicalItemIdentityTests.test_new_purchase_gets_new_item_but_later_unique_reference_reuses_it) ... ok
 test_two_dresses_are_two_physical_items_not_one_type_sheet (test_v121_physical_item_identity.V121PhysicalItemIdentityTests.test_two_dresses_are_two_physical_items_not_one_type_sheet) ... ok
@@ -270,20 +270,11 @@ test_native_aware_foundation_deduplicates_media_and_refcounts_blob (test_v125_na
 test_python_blob_store_is_content_addressed_and_deduplicates (test_v125_native_storage.V125NativeStorageTests.test_python_blob_store_is_content_addressed_and_deduplicates) ... ok
 test_rust_crate_declares_pyo3_abi3_and_storage_contract (test_v125_native_storage.V125NativeStorageTests.test_rust_crate_declares_pyo3_abi3_and_storage_contract) ... ok
 
-======================================================================
-FAIL: test_explicit_anaphora_keeps_same_item_and_records_change (test_v121_physical_item_identity.V121PhysicalItemIdentityTests.test_explicit_anaphora_keeps_same_item_and_records_change)
 ----------------------------------------------------------------------
-Traceback (most recent call last):
-  File "/home/runner/work/Arline-Studio/Arline-Studio/tests/test_v121_physical_item_identity.py", line 113, in test_explicit_anaphora_keeps_same_item_and_records_change
-    self.assertEqual(len(garments), 1)
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
-AssertionError: 2 != 1
+Ran 222 tests in 44.354s
 
-----------------------------------------------------------------------
-Ran 222 tests in 74.127s
-
-FAILED (failures=1)
-exit=1
+OK
+exit=0
 
 ===== python compile =====
 exit=0
