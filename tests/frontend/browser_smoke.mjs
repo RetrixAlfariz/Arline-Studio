@@ -111,6 +111,17 @@ try {
     await new Promise((resolve) => setTimeout(resolve, 40));
     const before = controller.captureAnchor();
     const readingMode = controller.debugState().mode;
+    const streamBefore = viewport.scrollTop;
+    const live = window.createLiveTurn({ prompt: "streaming smoke", model: "fixture" });
+    const liveOutput = live.node.querySelector(".live-output");
+    for (let index = 0; index < 8; index += 1) {
+      live.answer += ` token-${index}`;
+      liveOutput.textContent = live.answer;
+      live.node.scrollIntoView({ block: "end" });
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+    const streamDrift = Math.abs(viewport.scrollTop - streamBefore);
+    live.node.remove();
     const removal = feed.querySelector('[data-message-id="SMOKE-1"]');
     await controller.withMutation(() => removal?.remove(), { reason: "browser-smoke-delete" });
     const after = controller.captureAnchor(before?.anchorMessageId);
@@ -121,9 +132,10 @@ try {
     if (!wasLandingHidden) landing.classList.remove("hidden");
     if (wasSectionHidden) section.classList.add("hidden");
     controller.beginSession(null);
-    return { readingMode, drift, railMarkers, jumpVisible, state: controller.debugState() };
+    return { readingMode, streamDrift, drift, railMarkers, jumpVisible, state: controller.debugState() };
   });
   if (scrollContract.readingMode !== "reading") throw new Error(`Scroll controller did not enter reading mode: ${JSON.stringify(scrollContract)}`);
+  if (scrollContract.streamDrift > 2) throw new Error(`Streaming stole the reading position: ${JSON.stringify(scrollContract)}`);
   if (scrollContract.drift > 2) throw new Error(`Anchor drifted during mutation: ${JSON.stringify(scrollContract)}`);
   if (scrollContract.railMarkers < 20) throw new Error(`Scroll rail markers missing: ${JSON.stringify(scrollContract)}`);
   if (!scrollContract.jumpVisible) throw new Error(`Jump-to-latest did not appear in reading mode: ${JSON.stringify(scrollContract)}`);
