@@ -30,10 +30,10 @@ class V125ScrollRuntimeTests(unittest.TestCase):
             'RESTORING: "restoring"',
             "IntersectionObserver",
             "ResizeObserver",
-            "scrollbar-gutter",
             "captureAnchor",
             "restoreAnchor",
             "withMutation",
+            "preserveLayoutChange",
             "beginSession",
             "finishSessionRender",
             "revealMessage",
@@ -52,6 +52,7 @@ class V125ScrollRuntimeTests(unittest.TestCase):
         self.assertIn("data-message-id", source)
         self.assertIn("arline:manuscript-scroll:v1", source)
         self.assertIn("chat:reveal-message", source)
+        self.assertIn("window.setGenerateRunning =", source)
 
     def test_native_scrollbar_remains_visible_and_styled(self):
         css = (STATIC / "chat-runtime-v125.css").read_text(encoding="utf-8")
@@ -61,6 +62,7 @@ class V125ScrollRuntimeTests(unittest.TestCase):
         self.assertNotIn("scrollbar-width:none", css.replace(" ", ""))
         self.assertIn("jump-to-latest", css)
         self.assertIn("chat-scroll-rail", css)
+        self.assertIn("grid-template-rows:minmax(0,1fr) auto", css)
 
     def test_turn_delete_preserves_fork_anchor_integrity(self):
         with tempfile.TemporaryDirectory() as td:
