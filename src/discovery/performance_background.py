@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from threading import Lock, Timer
+from time import monotonic
 from typing import Any, Callable
 
 
@@ -36,6 +37,11 @@ def install_background_materialization(service) -> None:
     expensive on a large SQLite file because it still has to build/join the
     candidate set. The first check is delayed until after the HTTP application is
     already usable.
+
+    Foreground projection owns priority. If a user turn just materialized, the
+    historical daemon waits for a short quiet window and shares the service's
+    re-entrant materialization guard. This prevents old-residue repair from
+    racing a fresh turn for the same subject link/sheet.
     """
 
     if getattr(service, "_background_materialization_installed", False):
@@ -76,6 +82,12 @@ def install_background_materialization(service) -> None:
             timer.daemon = True
             timer.start()
 
+    def defer_after_foreground(delay: float) -> None:
+        with lock:
+            state.running = False
+            publish()
+        schedule(max(0.05, delay))
+
     def run_batch() -> None:
         with lock:
             state.scheduled = False
@@ -84,7 +96,23 @@ def install_background_materialization(service) -> None:
             state.running = True
             state.rounds += 1
             publish()
+
+        guard = getattr(service, "_provisional_materialization_lock", None)
+        acquired = False
         try:
+            if guard is not None:
+                guard.acquire()
+                acquired = True
+                last_turn = float(getattr(service, "_provisional_last_turn_materialized_at", 0.0) or 0.0)
+                quiet_remaining = interval_seconds - max(0.0, monotonic() - last_turn)
+                if last_turn > 0.0 and quiet_remaining > 0.0:
+                    # Release before rescheduling. A foreground turn that caused
+                    # this delay has already done the user-visible projection.
+                    guard.release()
+                    acquired = False
+                    defer_after_foreground(quiet_remaining)
+                    return
+
             report = original(limit=batch_limit)
             branch_report = report.get("branch_repair") if isinstance(report.get("branch_repair"), dict) else {}
             processed = int(report.get("processed") or report.get("claims") or 0) + int(branch_report.get("processed") or 0)
@@ -99,17 +127,28 @@ def install_background_materialization(service) -> None:
                 state.last_error = str(exc)
                 state.completed = state.rounds >= max_rounds
         finally:
+            if acquired:
+                guard.release()
             with lock:
-                state.running = False
-                done = state.completed
-                publish()
-            if not done:
+                # defer_after_foreground already cleared running before return.
+                if state.running:
+                    state.running = False
+                    done = state.completed
+                    publish()
+                else:
+                    done = state.completed
+            if not done and not state.scheduled:
                 schedule()
 
     def materialize_existing_with_schedule(*, limit: int = 5000):
         # Explicit callers (backfill/repair) asked for work now, so run one
         # bounded pass synchronously and leave any residue to the daemon.
-        report = original(limit=limit)
+        guard = getattr(service, "_provisional_materialization_lock", None)
+        if guard is None:
+            report = original(limit=limit)
+        else:
+            with guard:
+                report = original(limit=limit)
         pending = int(bool(report.get("pending")))
         with lock:
             state.pending = pending

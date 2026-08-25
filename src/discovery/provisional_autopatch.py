@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from threading import RLock
+from time import monotonic
+
 from . import garment as garment_module
 from . import performance as performance_module
 from . import physical_item_refinement as physical_refinement_module
@@ -36,6 +39,52 @@ from .startup import (
 install_spatial_v2(spatial_module)
 install_garment_materialization(provisional)
 install_safe_anaphora_merge(physical_refinement_module)
+
+
+def _materialization_guard(service):
+    guard = getattr(service, "_provisional_materialization_lock", None)
+    if guard is None:
+        guard = RLock()
+        service._provisional_materialization_lock = guard
+    return guard
+
+
+def _install_materialization_serialization() -> None:
+    """Serialize provisional projection per DiscoveryService.
+
+    The historical daemon and foreground turn projection can otherwise observe
+    the same missing subject link and both create a provisional sheet before
+    either thread publishes the link. The wrappers remain module-global but
+    look up the lock from the service argument, so separate test/app services
+    never share a captured lock or cache.
+    """
+    if getattr(provisional, "_MATERIALIZATION_SERIALIZED", False):
+        return
+
+    original_proposition = provisional._materialize_proposition
+    original_turn = provisional.materialize_turn
+    original_existing = provisional.materialize_existing
+
+    def serialized_proposition(service, proposition_id: str):
+        with _materialization_guard(service):
+            return original_proposition(service, proposition_id)
+
+    def serialized_turn(service, turn_id: str):
+        with _materialization_guard(service):
+            result = original_turn(service, turn_id)
+            # The maintenance daemon uses this timestamp to yield briefly after
+            # user-facing projection instead of competing with fresh work.
+            service._provisional_last_turn_materialized_at = monotonic()
+            return result
+
+    def serialized_existing(service, *, limit: int = 5000):
+        with _materialization_guard(service):
+            return original_existing(service, limit=limit)
+
+    provisional._materialize_proposition = serialized_proposition
+    provisional.materialize_turn = serialized_turn
+    provisional.materialize_existing = serialized_existing
+    provisional._MATERIALIZATION_SERIALIZED = True
 
 
 if not getattr(provisional, "_RUNTIME_FIX_WRAPPED", False):
@@ -75,7 +124,13 @@ if not getattr(provisional, "_RUNTIME_FIX_WRAPPED", False):
         install_incremental_branch_repair(provisional_runtime_module, service)
 
         # New/changed propositions are branch-aware from their first projection.
-        provisional._materialize_proposition = materialize_proposition_branch_aware
+        # Install the global serializer once, after the branch-aware/performance
+        # functions are final. Later services only get their own lock; they must
+        # not overwrite or recursively wrap the module-global adapters.
+        _materialization_guard(service)
+        if not getattr(provisional, "_MATERIALIZATION_SERIALIZED", False):
+            provisional._materialize_proposition = materialize_proposition_branch_aware
+            _install_materialization_serialization()
 
         # The original installer historically scanned/materialized every existing
         # Discovery before returning. During initial attach we temporarily replace
