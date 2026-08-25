@@ -1,6 +1,6 @@
 ===== uv lock check =====
 Using CPython 3.13.15
-Resolved 23 packages in 0.92ms
+Resolved 23 packages in 0.84ms
 exit=0
 
 ===== uv sync frozen =====
@@ -9,8 +9,8 @@ Creating virtual environment at: .venv
 warning: Skipping installation of entry points (`project.scripts`) for package `arline-studio` because this project is not packaged; to install entry points, set `tool.uv.package = true` or define a `build-system`
 Downloading pydantic-core (2.0MiB)
  Downloaded pydantic-core
-Prepared 21 packages in 296ms
-Installed 21 packages in 380ms
+Prepared 21 packages in 277ms
+Installed 21 packages in 13ms
  + annotated-doc==0.0.5
  + annotated-types==0.8.0
  + anyio==4.14.2
@@ -76,7 +76,7 @@ test_history_emits_only_after_authoritative_turn_and_feedback_commit (test_archi
 test_model_discovery_never_accepts_api_key_in_get_query (test_architecture_hardening.ArchitectureHardeningTests.test_model_discovery_never_accepts_api_key_in_get_query) ... ok
 test_package_and_source_versions_are_one_contract (test_architecture_hardening.ArchitectureHardeningTests.test_package_and_source_versions_are_one_contract) ... ok
 test_remote_ui_bind_requires_explicit_override (test_architecture_hardening.ArchitectureHardeningTests.test_remote_ui_bind_requires_explicit_override) ... ok
-test_saved_runtime_config_never_persists_api_key (test_architecture_hardening.ArchitectureHardeningTests.test_saved_runtime_config_never_persists_api_key) ... <frozen importlib._bootstrap>:488: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f11dd6f0b80>
+test_saved_runtime_config_never_persists_api_key (test_architecture_hardening.ArchitectureHardeningTests.test_saved_runtime_config_never_persists_api_key) ... <frozen importlib._bootstrap>:488: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x7f63638ecb80>
 ResourceWarning: Enable tracemalloc to get the object allocation traceback
 ok
 test_feedback_lab_is_not_a_main_workspace_view (test_settings_stack_layout.SettingsStackLayoutTests.test_feedback_lab_is_not_a_main_workspace_view) ... ok
@@ -271,7 +271,7 @@ test_python_blob_store_is_content_addressed_and_deduplicates (test_v125_native_s
 test_rust_crate_declares_pyo3_abi3_and_storage_contract (test_v125_native_storage.V125NativeStorageTests.test_rust_crate_declares_pyo3_abi3_and_storage_contract) ... ok
 
 ----------------------------------------------------------------------
-Ran 222 tests in 44.354s
+Ran 222 tests in 26.347s
 
 OK
 exit=0
