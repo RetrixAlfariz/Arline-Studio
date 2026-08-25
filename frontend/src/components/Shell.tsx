@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   BookOpenText,
   Boxes,
@@ -8,9 +8,13 @@ import {
   Home,
   MessageSquareText,
   Moon,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Search,
   Settings2,
+  LayoutDashboard,
   Sun,
   Clock3,
 } from "lucide-react";
@@ -36,6 +40,7 @@ interface ShellProps {
   onNewChat: () => void;
   onQuickCreate: () => void;
   onSettings: () => void;
+  onTools: () => void;
   onTheme: () => void;
 }
 
@@ -67,8 +72,11 @@ export function Shell({
   onNewChat,
   onQuickCreate,
   onSettings,
+  onTools,
   onTheme,
 }: ShellProps) {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const activeProject = projects.find((item) => item.id === activeProjectId);
   const activeWorld = worlds.find((item) => item.id === activeWorldId);
   const branches = activeWorld?.branches || [];
@@ -77,10 +85,21 @@ export function Shell({
   const locationCount = families.filter((item) => item.entity_type === "location").length;
   const itemCount = families.filter((item) => item.entity_type === "item").length;
 
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      if (event.key.toLowerCase() === "k") { event.preventDefault(); onView("commands"); }
+      if (event.key.toLowerCase() === "n") { event.preventDefault(); onQuickCreate(); }
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [onView, onQuickCreate]);
+
   return (
-    <div className="studio-shell" data-theme={theme}>
+    <div className={`studio-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${mobileOpen ? "mobile-sidebar-open" : ""}`} data-theme={theme}>
       <header className="studio-topbar">
         <div className="topbar-brand compact-brand">
+          <button className="mobile-menu-button" onClick={() => setMobileOpen((value) => !value)}><Menu size={16} /></button>
           <img src="/static/assets/brand/arline-primary.svg" alt="" />
           <strong>Arline</strong>
         </div>
@@ -119,6 +138,7 @@ export function Shell({
 
         <div className="topbar-tools">
           <span className="connection-pill"><i />{connectionLabel}</span>
+          <button className="icon-control" onClick={onTools} title="Activity, review, data, and developer tools"><LayoutDashboard size={16} /></button>
           <button className="icon-control" onClick={onTheme} title="Toggle theme">
             {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
           </button>
@@ -130,6 +150,7 @@ export function Shell({
         <div className="sidebar-brand">
           <img src="/static/assets/brand/arline-primary.svg" alt="Arline" />
           <div><strong>Arline Studio</strong><small>React workspace</small></div>
+          <button className="sidebar-collapse" onClick={() => setSidebarCollapsed((value) => !value)}>{sidebarCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}</button>
         </div>
 
         <div className="sidebar-actions">

@@ -1,53 +1,41 @@
-import { useMemo, useState } from "react";
-import { Command, Search, Sparkles } from "lucide-react";
-import type { CommandDefinition } from "../types";
+import { useEffect, useMemo, useState } from "react";
+import { Command, History, Plus, Search, Sparkles, Trash2 } from "lucide-react";
+import { browserStorage, createClientId } from "../browserStorage";
+import { studioApi } from "../api";
+import type { CommandDefinition, JsonMap } from "../types";
 
-interface CommandCenterViewProps {
-  commands: CommandDefinition[];
-  registryVersion?: string;
-  dynamicReferences?: string[];
-  referenceSelectors?: string[];
-  onUse: (command: CommandDefinition) => void;
-}
+interface Props { projectId: string; commands: CommandDefinition[]; registryVersion?: string; dynamicReferences?: string[]; referenceSelectors?: string[]; onUse: (command: CommandDefinition, compiledText?: string) => void; }
+type Tab = "builtin" | "custom" | "profiles" | "references" | "history";
+interface Recipe { id: string; command: string; name: string; description: string; steps: string; scope: string; project_id?: string; version: number; }
+interface Store { recipes: Recipe[]; history: Array<{ id: string; command: string; compiled: string; created_at: string }>; }
+const STORE_KEY = "arline.command-center.v1.2.5";
+const loadStore = (): Store => { try { const parsed = JSON.parse(browserStorage.get(STORE_KEY) || "{}") as Store; return { history: parsed.history || [], recipes: (parsed.recipes || []).map((item) => ({ ...item, steps: Array.isArray(item.steps) ? item.steps.map((step: unknown) => String((step as JsonMap).value || "")).join("\n") : String(item.steps || "{{goal}}") })) }; } catch { return { recipes: [], history: [] }; } };
 
-export function CommandCenterView({ commands, registryVersion, dynamicReferences, referenceSelectors, onUse }: CommandCenterViewProps) {
+export function CommandCenterView({ projectId, commands, registryVersion, dynamicReferences, referenceSelectors, onUse }: Props) {
   const [query, setQuery] = useState("");
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return commands;
-    return commands.filter((command) => [command.id, command.label, command.title, command.description, command.help, command.usage, ...(command.aliases || [])]
-      .filter(Boolean).some((value) => String(value).toLowerCase().includes(needle)));
-  }, [commands, query]);
+  const [tab, setTab] = useState<Tab>("builtin");
+  const [store, setStore] = useState<Store>(loadStore);
+  const [editing, setEditing] = useState<Recipe | null>(null);
+  const [profiles, setProfiles] = useState<JsonMap[]>([]);
+  const [recipes, setRecipes] = useState<JsonMap[]>([]);
+  const filtered = useMemo(() => { const needle = query.trim().toLowerCase(); return needle ? commands.filter((command) => [command.id, command.label, command.title, command.description, command.help, command.usage, ...(command.aliases || [])].filter(Boolean).some((value) => String(value).toLowerCase().includes(needle))) : commands; }, [commands, query]);
+  useEffect(() => { void Promise.all([studioApi.runProfiles(projectId).catch(() => ({ profiles: [] })), studioApi.contextRecipes(projectId).catch(() => ({ recipes: [] }))]).then(([a, b]) => { setProfiles(a.profiles || []); setRecipes(b.recipes || []); }); }, [projectId]);
+  const persist = (next: Store) => { setStore(next); browserStorage.set(STORE_KEY, JSON.stringify(next)); };
+  const saveRecipe = () => { if (!editing?.command.trim()) return; const normalized = { ...editing, command: editing.command.replace(/^\/+/, "").replace(/[^\w-]+/g, "-").toLowerCase(), project_id: editing.scope === "project" ? projectId : undefined }; persist({ ...store, recipes: [...store.recipes.filter((item) => item.id !== normalized.id), normalized] }); setEditing(null); };
+  const compileRecipe = (recipe: Recipe, goal: string, depth = 0, trail: string[] = []): string => {
+    if (depth >= 4 || trail.includes(recipe.id)) throw new Error("Recursive custom command detected");
+    const lines = recipe.steps.split(/\r?\n/).filter(Boolean); if (lines.length > 32) throw new Error("Custom command exceeds 32 steps");
+    return lines.map((line) => { const match = line.trim().match(/^\/([\w-]+)/); const nested = match ? store.recipes.find((item) => item.command === match[1]) : undefined; return nested ? compileRecipe(nested, goal, depth + 1, [...trail, recipe.id]) : line.replaceAll("{{goal}}", goal).replaceAll("{{project_id}}", projectId); }).join("\n");
+  };
+  const useCustom = (recipe: Recipe) => { try { const goal = window.prompt("Goal for this workflow", "") || ""; const compiled = compileRecipe(recipe, goal); persist({ ...store, history: [{ id: createClientId("command"), command: recipe.command, compiled, created_at: new Date().toISOString() }, ...store.history].slice(0, 100) }); onUse({ id: recipe.command, description: recipe.description }, compiled); } catch (error) { window.alert((error as Error).message); } };
 
-  return (
-    <div className="page command-view">
-      <section className="command-hero">
-        <div><span className="eyebrow">Command Center</span><h1>Direct Arline explicitly</h1><p>Commands are typed execution contracts, not magic prompt incantations. Civilization advances one schema at a time.</p></div>
-        <span className="version-chip">registry {registryVersion || "frontend fallback"}</span>
-      </section>
-      <label className="command-search"><Search size={16} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search commands, operations, or references" /><kbd>Ctrl K</kbd></label>
-
-      <div className="command-grid">
-        <section className="panel command-catalog">
-          <div className="panel-heading"><div><span className="eyebrow">Built-in</span><h2>Commands</h2></div><Command size={15} /></div>
-          <div className="command-list">
-            {filtered.map((command) => (
-              <button key={command.id} onClick={() => onUse(command)}>
-                <span className="command-slash">/</span>
-                <span><strong>/{command.id}</strong><small>{command.description || command.help || command.label || "Arline command"}</small>{command.usage ? <code>{command.usage}</code> : null}</span>
-                <Sparkles size={13} />
-              </button>
-            ))}
-            {!filtered.length && <div className="empty-state">No commands match this search.</div>}
-          </div>
-        </section>
-
-        <aside className="command-reference">
-          <section className="panel compact-panel"><div className="panel-heading"><div><span className="eyebrow">Dynamic</span><h2>References</h2></div></div><div className="token-cloud">{(dynamicReferences || []).map((value) => <code key={value}>@{value}</code>)}</div></section>
-          <section className="panel compact-panel"><div className="panel-heading"><div><span className="eyebrow">Selectors</span><h2>Reference depth</h2></div></div><div className="token-cloud">{(referenceSelectors || []).map((value) => <code key={value}>{value}</code>)}</div></section>
-          <section className="panel compact-panel"><div className="panel-heading"><div><span className="eyebrow">How it works</span><h2>Composition</h2></div></div><p className="panel-copy">Multiple compatible directives can compose into one execution contract before generation. Invalid combinations are rejected by the Python directive engine rather than becoming decorative prompt text.</p></section>
-        </aside>
-      </div>
-    </div>
-  );
+  return <div className="page command-view">
+    <section className="command-hero"><div><span className="eyebrow">Command Center</span><h1>Direct Arline explicitly</h1><p>Built-ins and reusable workflows compile into an ordinary generation request; they never grant Canon authority.</p></div><span className="version-chip">registry {registryVersion || "frontend fallback"}</span></section>
+    <nav className="command-tabs">{(["builtin", "custom", "profiles", "references", "history"] as Tab[]).map((value) => <button key={value} className={tab === value ? "active" : ""} onClick={() => setTab(value)}>{value}</button>)}</nav>
+    {tab === "builtin" && <><label className="command-search"><Search size={16} /><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search commands, operations, or references" /><kbd>Ctrl K</kbd></label><section className="panel command-catalog"><div className="panel-heading"><div><span className="eyebrow">Built-in</span><h2>Commands</h2></div><Command size={15} /></div><div className="command-list">{filtered.map((command) => <button key={command.id} onClick={() => onUse(command)}><span className="command-slash">/</span><span><strong>/{command.id}</strong><small>{command.description || command.help || command.label || "Arline command"}</small>{command.usage ? <code>{command.usage}</code> : null}</span><Sparkles size={13} /></button>)}{!filtered.length && <div className="empty-state">No commands match this search.</div>}</div></section></>}
+    {tab === "custom" && <section className="command-parity-panel"><header><div><span className="eyebrow">Reusable workflows</span><h2>Custom commands</h2></div><button className="primary-action small" onClick={() => setEditing({ id: createClientId("recipe"), command: "", name: "", description: "", steps: "{{goal}}", scope: "project", project_id: projectId, version: 1 })}><Plus size={13} />New</button></header>{editing && <div className="command-editor"><label>Name<input value={editing.name} onChange={(event) => setEditing({ ...editing, name: event.target.value })} /></label><label>Command<input value={editing.command} onChange={(event) => setEditing({ ...editing, command: event.target.value })} placeholder="scene-polish" /></label><label className="wide">Description<input value={editing.description} onChange={(event) => setEditing({ ...editing, description: event.target.value })} /></label><label className="wide">Compiled instruction<textarea value={editing.steps} onChange={(event) => setEditing({ ...editing, steps: event.target.value })} placeholder="Use {{goal}} inside a reusable instruction." /></label><div className="wide tools-actions"><button onClick={() => setEditing(null)}>Cancel</button><button className="primary-action small" onClick={saveRecipe}>Save recipe</button></div></div>}<div className="custom-command-list">{store.recipes.filter((item) => !item.project_id || item.project_id === projectId).map((recipe) => <article key={recipe.id}><button onClick={() => useCustom(recipe)}><code>/{recipe.command}</code><span><strong>{recipe.name || recipe.command}</strong><small>{recipe.description || "Custom workflow"}</small></span></button><button onClick={() => setEditing(recipe)}>Edit</button><button onClick={() => persist({ ...store, recipes: store.recipes.filter((item) => item.id !== recipe.id) })}><Trash2 size={12} /></button></article>)}</div></section>}
+    {tab === "profiles" && <section className="command-parity-panel"><header><div><span className="eyebrow">Runtime</span><h2>Profiles & context recipes</h2></div></header><div className="profile-cards">{profiles.map((item) => <article key={String(item.id)}><strong>{String(item.name || item.id)}</strong><small>{String(item.description || "Run profile")}</small><pre>{JSON.stringify(item.profile || {}, null, 2)}</pre></article>)}{recipes.map((item) => <article key={String(item.id)}><strong>{String(item.name || item.id)}</strong><small>{String(item.description || "Context recipe")}</small><pre>{JSON.stringify(item.recipe || {}, null, 2)}</pre></article>)}</div></section>}
+    {tab === "references" && <section className="command-parity-panel"><header><div><span className="eyebrow">Reference language</span><h2>Dynamic references & selectors</h2></div></header><div className="command-reference-grid"><div><h3>References</h3>{(dynamicReferences || []).map((value) => <code key={value}>@{value}</code>)}</div><div><h3>Selectors</h3>{(referenceSelectors || []).map((value) => <code key={value}>{value}</code>)}</div></div></section>}
+    {tab === "history" && <section className="command-parity-panel"><header><div><span className="eyebrow"><History size={12} /> Local history</span><h2>Compiled workflows</h2></div></header><div className="history-list">{store.history.map((item) => <button key={item.id} onClick={() => onUse({ id: item.command }, item.compiled)}><strong>/{item.command}</strong><small>{item.created_at}</small><pre>{item.compiled}</pre></button>)}</div></section>}
+  </div>;
 }

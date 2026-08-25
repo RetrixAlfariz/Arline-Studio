@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AtSign,
+  Check,
+  Pin,
+  Pencil,
+  Ban,
   BrainCircuit,
   ChevronDown,
   Copy,
@@ -21,6 +25,7 @@ import type {
   RuntimeConfig,
   Session,
   Turn,
+  JsonMap,
 } from "../types";
 
 interface ChatViewProps {
@@ -67,6 +72,10 @@ export function ChatView({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mentions, setMentions] = useState<Array<Record<string, unknown>>>([]);
   const [commandMatches, setCommandMatches] = useState<CommandDefinition[]>([]);
+  const [scratchMode, setScratchMode] = useState(Boolean(activeSession?.scratch_mode));
+  const [runProfiles, setRunProfiles] = useState<JsonMap[]>([]);
+  const [recipes, setRecipes] = useState<JsonMap[]>([]);
+  const [selectedRecipeId, setSelectedRecipeId] = useState("");
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
@@ -84,7 +93,14 @@ export function ChatView({
     setError("");
     setAnalysis(null);
     setReferences((activeSession?.workspace_refs as ReferenceItem[] | undefined) || []);
+    setScratchMode(Boolean(activeSession?.scratch_mode));
   }, [activeSession?.id]);
+
+  useEffect(() => {
+    if (!activeProjectId) return;
+    void Promise.all([studioApi.runProfiles(activeProjectId).catch(() => ({ profiles: [] })), studioApi.contextRecipes(activeProjectId).catch(() => ({ recipes: [] }))])
+      .then(([profilesResult, recipesResult]) => { setRunProfiles(profilesResult.profiles || []); setRecipes(recipesResult.recipes || []); });
+  }, [activeProjectId]);
 
   useEffect(() => {
     if (!generating) return;
@@ -159,6 +175,8 @@ export function ChatView({
       branchId: activeBranchId,
       sessionId: activeSession?.id,
     }, prompt.trim(), references);
+    payload.scratch_mode = scratchMode;
+    payload.context_recipe_id = selectedRecipeId || null;
     const sentPrompt = prompt.trim();
     setPrompt("");
 
@@ -237,6 +255,41 @@ export function ChatView({
     await onSessionsChanged();
   };
 
+  const patchActiveSession = async (payload: Record<string, unknown>) => {
+    if (!activeSession) return;
+    onSession(await studioApi.updateSession(activeSession.id, payload));
+    await onSessionsChanged();
+  };
+
+  const renameSession = async () => {
+    if (!activeSession) return;
+    const title = window.prompt("Chat title", activeSession.title);
+    if (title?.trim()) await patchActiveSession({ title: title.trim() });
+  };
+
+  const toggleScratch = async () => {
+    const next = !scratchMode; setScratchMode(next);
+    if (activeSession) await patchActiveSession({ scratch_mode: next });
+  };
+
+  const showReferencePicker = async () => {
+    const result = await studioApi.mentions("", activeProjectId, activeWorldId, activeBranchId);
+    setMentions(result.results || []);
+    setPrompt((value) => `${value}${value && !value.endsWith(" ") ? " " : ""}@`);
+  };
+
+  const reviewTurn = async (turn: Turn, status: "accepted" | "rejected") => {
+    await studioApi.feedback(turn.id, { status, issues: [], note: "Reviewed in React chat", edited_story: "" });
+    await refreshSession(activeSession?.id);
+  };
+
+  const stageTurn = async (turn: Turn) => {
+    const path = window.prompt("Canon semantic path", "current_state.note");
+    if (!path || !activeProjectId) return;
+    const ownerId = window.prompt("Owner resource ID", activeWorldId) || activeWorldId;
+    await studioApi.createFact({ project_id: activeProjectId, world_id: activeWorldId || null, branch_id: branchIdForCanon(activeBranchId), owner_type: ownerId === activeWorldId ? "world" : "entity_family", owner_id: ownerId, path, value: turn.story || "", status: "draft", authority: "user_explicit", source_type: "turn", source_id: turn.id });
+  };
+
   return (
     <div className="chat-workspace">
       <section className="chat-header">
@@ -246,7 +299,10 @@ export function ChatView({
           <small>{activeSession?.parent_session_id ? "Forked conversation" : "Project-scoped conversation"}</small>
         </div>
         <div className="chat-header-actions">
+          <button className={scratchMode ? "active" : ""} onClick={() => void toggleScratch()}><Ban size={14} />{scratchMode ? "Scratch on" : "Scratch"}</button>
           {analysis && <button onClick={() => onInspect("Last analysis", analysis)}><BrainCircuit size={14} />Context</button>}
+          {activeSession && <button onClick={() => void renameSession()}><Pencil size={14} />Rename</button>}
+          {activeSession && <button onClick={() => void patchActiveSession({ pinned: !activeSession.pinned })}><Pin size={14} />{activeSession.pinned ? "Unpin" : "Pin"}</button>}
           {activeSession && <button onClick={fork}><GitFork size={14} />Fork</button>}
           {activeSession && <button className="danger" onClick={removeSession}><Trash2 size={14} />Trash</button>}
         </div>
@@ -275,6 +331,9 @@ export function ChatView({
                   <div className="turn-actions">
                     <button onClick={() => void navigator.clipboard.writeText(turn.story || "")}><Copy size={13} />Copy</button>
                     <button onClick={() => onInspect("Turn data", turn)}><CornerUpRight size={13} />Inspect</button>
+                    <button onClick={() => void reviewTurn(turn, "accepted")}><Check size={13} />Accept</button>
+                    <button onClick={() => void reviewTurn(turn, "rejected")}><Ban size={13} />Reject</button>
+                    <button onClick={() => void stageTurn(turn)}><Sparkles size={13} />Stage canon</button>
                   </div>
                 </div>
               </article>
@@ -336,8 +395,8 @@ export function ChatView({
 
           <div className="composer-toolbar">
             <div className="composer-left">
-              <button title="Attach/reference"><Paperclip size={15} /></button>
-              <button title="Reference canon"><AtSign size={15} /></button>
+              <button title="Attach/reference" onClick={() => void showReferencePicker()}><Paperclip size={15} /></button>
+              <button title="Reference canon" onClick={() => void showReferencePicker()}><AtSign size={15} /></button>
               <button className="profile-button" onClick={() => setSettingsOpen((value) => !value)}>
                 <Sparkles size={13} /><span>{config.input_mode === "smart_hybrid" ? "Smart Hybrid" : config.input_mode} · {Math.round((config.visible_output_tokens || 4096) / 1024)}K</span><ChevronDown size={12} />
               </button>
@@ -358,6 +417,9 @@ export function ChatView({
               <label><span>Reasoning</span><select value={config.reasoning} onChange={(event) => onConfig({ ...config, reasoning: event.target.value })}>{(config.reasoning_modes || ["off", "on", "low", "medium", "high"]).map((value) => <option key={value}>{value}</option>)}</select></label>
               <label><span>Response</span><select value={config.visible_output_tokens} onChange={(event) => onConfig({ ...config, visible_output_tokens: Number(event.target.value) })}><option value={1024}>Short · 1K</option><option value={2048}>Medium · 2K</option><option value={4096}>Long · 4K</option><option value={8192}>Extended · 8K</option><option value={16384}>Max · 16K</option></select></label>
               <label className="wide"><span>Model</span><input value={config.model || ""} onChange={(event) => onConfig({ ...config, model: event.target.value })} placeholder="LM Studio model key" /></label>
+              <label><span>Run profile</span><select defaultValue="" onChange={(event) => { const profile = runProfiles.find((item) => String(item.id) === event.target.value); const values = (profile?.profile || {}) as Partial<RuntimeConfig>; if (profile) onConfig({ ...config, ...values }); }}><option value="">Current settings</option>{runProfiles.map((item) => <option key={String(item.id)} value={String(item.id)}>{String(item.name || item.id)}</option>)}</select></label>
+              <label><span>Context recipe</span><select value={selectedRecipeId} onChange={(event) => setSelectedRecipeId(event.target.value)}><option value="">Default recipe</option>{recipes.map((item) => <option key={String(item.id)} value={String(item.id)}>{String(item.name || item.id)}</option>)}</select></label>
+              <button className="wide" onClick={async () => { const name = window.prompt("Run profile name"); if (name) { await studioApi.saveRunProfile({ name, project_id: activeProjectId, profile: config }); const result = await studioApi.runProfiles(activeProjectId); setRunProfiles(result.profiles || []); } }}>Save current run profile</button>
             </div>
           )}
         </div>
@@ -365,6 +427,8 @@ export function ChatView({
     </div>
   );
 }
+
+function branchIdForCanon(branchId: string) { return branchId || null; }
 
 function StoryText({ text }: { text: string }) {
   return (

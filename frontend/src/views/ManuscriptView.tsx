@@ -1,19 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FilePlus2, FileText, Save, Trash2 } from "lucide-react";
+import { FilePlus2, FileText, Focus, History, Link2, Save, Target, Trash2 } from "lucide-react";
 import { studioApi } from "../api";
 import { browserStorage } from "../browserStorage";
-import type { DocumentItem } from "../types";
+import type { DocumentItem, FolderNode, JsonMap } from "../types";
 
 interface ManuscriptViewProps {
   projectId: string;
+  worldId: string;
+  branchId: string;
   documents: DocumentItem[];
+  folders: FolderNode[];
   initialDocumentId?: string;
   documentTypes: string[];
   onDocumentsChanged: () => Promise<void> | void;
   onInspect: (title: string, data: unknown) => void;
 }
 
-export function ManuscriptView({ projectId, documents, initialDocumentId, documentTypes, onDocumentsChanged, onInspect }: ManuscriptViewProps) {
+export function ManuscriptView({ projectId, worldId, branchId, documents, folders, initialDocumentId, documentTypes, onDocumentsChanged, onInspect }: ManuscriptViewProps) {
   const [selectedId, setSelectedId] = useState(initialDocumentId || documents[0]?.id || "");
   const [doc, setDoc] = useState<DocumentItem | null>(null);
   const [title, setTitle] = useState("");
@@ -25,6 +28,9 @@ export function ManuscriptView({ projectId, documents, initialDocumentId, docume
   const [creating, setCreating] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newType, setNewType] = useState("scene");
+  const [revisions, setRevisions] = useState<JsonMap[]>([]);
+  const [dependencies, setDependencies] = useState<JsonMap[]>([]);
+  const [focusMode, setFocusMode] = useState(false);
   const recoveryTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -40,13 +46,15 @@ export function ManuscriptView({ projectId, documents, initialDocumentId, docume
       setDoc(null);
       return;
     }
-    void studioApi.document(selectedId).then((loaded) => {
+    void Promise.all([studioApi.document(selectedId), studioApi.revisions("document", selectedId).catch(() => ({ revisions: [] })), studioApi.sceneDependencies(selectedId).catch(() => ({ dependencies: [] }))]).then(([loaded, revisionResult, dependencyResult]) => {
       const recovery = browserStorage.get(`arline:react:draft:${loaded.id}`);
       setDoc(loaded);
       setTitle(loaded.title || "Untitled");
       setContent(recovery ?? loaded.content ?? "");
       setStatus(loaded.status || "planned");
       setSaveLabel(recovery ? "Recovered local draft" : "Loaded");
+      setRevisions(revisionResult.revisions || []);
+      setDependencies(dependencyResult.dependencies || []);
     }).catch((error: Error) => setSaveLabel(error.message));
   }, [selectedId]);
 
@@ -110,8 +118,28 @@ export function ManuscriptView({ projectId, documents, initialDocumentId, docume
 
   const wordCount = content.trim() ? content.trim().split(/\s+/).length : 0;
 
+  const setActiveScene = async () => {
+    if (!doc) return;
+    await studioApi.setActiveScene(projectId, { document_id: doc.id, world_id: worldId || null, branch_id: branchId || null });
+    setSaveLabel("Active scene updated");
+  };
+
+  const restoreRevision = async (revision: JsonMap) => {
+    if (!doc || !window.confirm("Restore this revision as a new checkpoint?")) return;
+    await studioApi.restoreRevision(String(revision.id));
+    setSelectedId(""); setTimeout(() => setSelectedId(doc.id), 0); await onDocumentsChanged();
+  };
+
+  const addDependency = async () => {
+    if (!doc) return;
+    const targetId = window.prompt("Required target resource ID");
+    if (!targetId) return;
+    const created = await studioApi.createSceneDependency({ project_id: projectId, scene_document_id: doc.id, requirement_type: "requires", target_type: "document", target_id: targetId, world_id: worldId || null, branch_id: branchId || null, condition: {} });
+    setDependencies((items) => [...items, created]);
+  };
+
   return (
-    <div className="manuscript-layout">
+    <div className={`manuscript-layout ${focusMode ? "focus-mode" : ""}`}>
       <aside className="manuscript-rail">
         <div className="pane-heading"><div><span className="eyebrow">Manuscript</span><h2>Binder</h2></div><button className="icon-control" onClick={() => setCreating(true)}><FilePlus2 size={15} /></button></div>
         <div className="filter-strip">
@@ -135,7 +163,10 @@ export function ManuscriptView({ projectId, documents, initialDocumentId, docume
               <input className="document-title-input" value={title} onChange={(event) => setTitle(event.target.value)} />
               <div>
                 <select value={status} onChange={(event) => setStatus(event.target.value)}><option>planned</option><option>writing</option><option>revising</option><option>final</option></select>
+                <select value={doc.folder_id || ""} onChange={async (event) => { const updated = await studioApi.updateDocument(doc.id, { folder_id: event.target.value || null }); setDoc(updated); await onDocumentsChanged(); }} title="Move document"><option value="">No folder</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select>
                 <button onClick={() => onInspect("Document metadata", doc)}>Inspect</button>
+                <button onClick={() => void setActiveScene()}><Target size={13} />Set active</button>
+                <button onClick={() => setFocusMode((value) => !value)}><Focus size={13} />Focus</button>
                 <button className="danger" onClick={() => void trash()}><Trash2 size={13} />Trash</button>
                 <button className="primary-action small" disabled={saving} onClick={() => void save()}><Save size={13} />{saving ? "Saving" : "Checkpoint"}</button>
               </div>
@@ -155,6 +186,8 @@ export function ManuscriptView({ projectId, documents, initialDocumentId, docume
           <Property label="Status" value={status} />
           <Property label="Words" value={String(wordCount)} />
           <Property label="ID" value={doc.id} mono />
+          <section className="inspector-note"><strong><History size={12} /> Checkpoints</strong>{revisions.slice(0, 8).map((revision) => <button className="inspector-row-action" key={String(revision.id)} onClick={() => void restoreRevision(revision)}><span>{String(revision.note || revision.created_at || "Revision")}</span><em>Restore</em></button>)}{!revisions.length && <p>No durable revisions yet.</p>}</section>
+          <section className="inspector-note"><strong><Link2 size={12} /> Scene dependencies</strong>{dependencies.map((dependency) => <button className="inspector-row-action" key={String(dependency.id)} onClick={async () => { await studioApi.deleteSceneDependency(String(dependency.id)); setDependencies((items) => items.filter((item) => item.id !== dependency.id)); }}><span>{String(dependency.target_id || dependency.requirement_type || "Dependency")}</span><em>Remove</em></button>)}<button className="inspector-add" onClick={() => void addDependency()}>＋ Add dependency</button></section>
           <section className="inspector-note"><strong>Recovery</strong><p>Typing is saved to browser-local recovery state. Checkpoint writes a durable revision through the Python backend.</p></section>
         </> : <div className="empty-state">Select a document to inspect it.</div>}
       </aside>

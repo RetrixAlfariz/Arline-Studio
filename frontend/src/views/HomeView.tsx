@@ -1,18 +1,19 @@
 import { ArrowRight, BookOpenText, MessageSquareText, PenLine, Sparkles } from "lucide-react";
-import type { DocumentItem, Project, Session, WorldBible } from "../types";
+import type { DocumentItem, Project, ProjectTree, Session, WorldBible } from "../types";
 
 interface HomeViewProps {
   project?: Project;
   documents: DocumentItem[];
   sessions: Session[];
   bible: WorldBible | null;
+  tree: ProjectTree | null;
   onOpenChat: (id?: string) => void;
   onOpenDocument: (id: string) => void;
   onLibrary: () => void;
   onQuickCreate: () => void;
 }
 
-export function HomeView({ project, documents, sessions, bible, onOpenChat, onOpenDocument, onLibrary, onQuickCreate }: HomeViewProps) {
+export function HomeView({ project, documents, sessions, bible, tree, onOpenChat, onOpenDocument, onLibrary, onQuickCreate }: HomeViewProps) {
   const recentDocs = [...documents].sort((a, b) => String(b.updated_at || b.created_at || "").localeCompare(String(a.updated_at || a.created_at || ""))).slice(0, 5);
   const recentSessions = sessions.slice(0, 5);
   const entityCount = bible?.families?.length || 0;
@@ -37,6 +38,15 @@ export function HomeView({ project, documents, sessions, bible, onOpenChat, onOp
       </div>
 
       <div className="home-grid">
+        <section className="panel">
+          <div className="panel-heading"><div><span className="eyebrow">Needs attention</span><h2>Workspace review</h2></div><Sparkles size={15} /></div>
+          <div className="stack-list">{(tree?.conflicts || []).slice(0, 5).map((item, index) => <button className="stack-row" key={String(item.id || index)} onClick={onLibrary}><span className="row-glyph">!</span><span><strong>{String(item.title || item.path || "Canon conflict")}</strong><small>{String(item.conflict_class || "needs review")}</small></span><ArrowRight size={13} /></button>)}{!(tree?.conflicts || []).length && <div className="empty-state">No unresolved workspace conflicts.</div>}</div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-heading"><div><span className="eyebrow">Pinned</span><h2>Fast access</h2></div><MessageSquareText size={15} /></div>
+          <div className="stack-list">{sessions.filter((item) => item.pinned).slice(0, 5).map((session) => <button className="stack-row" key={session.id} onClick={() => onOpenChat(session.id)}><span className="row-glyph"><MessageSquareText size={14} /></span><span><strong>{session.title}</strong><small>Pinned conversation</small></span><ArrowRight size={13} /></button>)}{!sessions.some((item) => item.pinned) && <div className="empty-state">Pin important conversations from Chat.</div>}</div>
+        </section>
         <section className="panel">
           <div className="panel-heading"><div><span className="eyebrow">Continue</span><h2>Recent manuscript</h2></div><PenLine size={15} /></div>
           <div className="stack-list">

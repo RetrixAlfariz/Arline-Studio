@@ -5,6 +5,8 @@ import { browserStorage, createClientId } from "./browserStorage";
 import { InspectorDrawer } from "./components/InspectorDrawer";
 import { QuickCreateDialog } from "./components/QuickCreateDialog";
 import { SettingsDrawer } from "./components/SettingsDrawer";
+import { StudioToolsDrawer } from "./components/StudioToolsDrawer";
+import { WelcomeDialog } from "./components/WelcomeDialog";
 import { Shell } from "./components/Shell";
 import { ChatView } from "./views/ChatView";
 import { CommandCenterView } from "./views/CommandCenterView";
@@ -63,6 +65,8 @@ export default function App() {
   const [activeDocumentId, setActiveDocumentId] = useState("");
   const [selection, setSelection] = useState<Selection | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [welcomeOpen, setWelcomeOpen] = useState(() => browserStorage.get("arline:react:welcomed") !== "yes");
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [seedPrompt, setSeedPrompt] = useState("");
   const [booting, setBooting] = useState(true);
@@ -203,6 +207,7 @@ export default function App() {
   };
 
   const inspect = (title: string, data: unknown) => setSelection({ kind: "analysis", title, data });
+  const closeWelcome = () => { browserStorage.set("arline:react:welcomed", "yes"); setWelcomeOpen(false); };
 
   const connectionLabel = config.model ? `LM Studio · ${config.model}` : "LM Studio · no model";
   const documentTypes = bootstrap?.document_types || ["scene", "chapter", "note", "research", "outline"];
@@ -210,12 +215,12 @@ export default function App() {
   const documents = tree?.documents || [];
 
   const mainContent = useMemo(() => {
-    if (view === "home") return <HomeView project={activeProject} documents={documents} sessions={sessions} bible={bible} onOpenChat={(id) => id ? void openSession(id) : newChat()} onOpenDocument={openDocument} onLibrary={() => setViewAndPersist("library")} onQuickCreate={() => setQuickCreateOpen(true)} />;
+    if (view === "home") return <HomeView project={activeProject} documents={documents} sessions={sessions} bible={bible} tree={tree} onOpenChat={(id) => id ? void openSession(id) : newChat()} onOpenDocument={openDocument} onLibrary={() => setViewAndPersist("library")} onQuickCreate={() => setQuickCreateOpen(true)} />;
     if (view === "chat") return <ChatView config={config} activeProjectId={activeProjectId} activeWorldId={activeWorldId} activeBranchId={activeBranchId} activeSession={activeSession} commands={commands.commands || []} onConfig={setConfig} onSession={setActiveSession} onSessionsChanged={refreshSessions} onInspect={inspect} seedPrompt={seedPrompt} onSeedConsumed={() => setSeedPrompt("")} />;
-    if (view === "manuscript") return <ManuscriptView projectId={activeProjectId} documents={documents} initialDocumentId={activeDocumentId} documentTypes={documentTypes} onDocumentsChanged={refreshScope} onInspect={inspect} />;
+    if (view === "manuscript") return <ManuscriptView projectId={activeProjectId} worldId={activeWorldId} branchId={activeBranchId} documents={documents} folders={tree?.folders || tree?.folder_tree || []} initialDocumentId={activeDocumentId} documentTypes={documentTypes} onDocumentsChanged={refreshScope} onInspect={inspect} />;
     if (view === "library") return <LibraryView projectId={activeProjectId} worldId={activeWorldId} branchId={activeBranchId} bible={bible} entityTypes={entityTypes} onChanged={async () => { await refreshBootstrap(); await refreshScope(); }} onSelect={setSelection} />;
-    return <CommandCenterView commands={commands.commands || []} registryVersion={commands.command_registry_version} dynamicReferences={commands.dynamic_references} referenceSelectors={commands.reference_selectors} onUse={(command) => { setSeedPrompt(`/${command.id} `); setViewAndPersist("chat"); }} />;
-  }, [view, activeProject, documents, sessions, bible, config, activeProjectId, activeWorldId, activeBranchId, activeSession, commands, seedPrompt, activeDocumentId, documentTypes, entityTypes, refreshSessions, refreshScope, refreshBootstrap]);
+    return <CommandCenterView projectId={activeProjectId} commands={commands.commands || []} registryVersion={commands.command_registry_version} dynamicReferences={commands.dynamic_references} referenceSelectors={commands.reference_selectors} onUse={(command, compiledText) => { setSeedPrompt(compiledText || `/${command.id} `); setViewAndPersist("chat"); }} />;
+  }, [view, activeProject, documents, sessions, bible, tree, config, activeProjectId, activeWorldId, activeBranchId, activeSession, commands, seedPrompt, activeDocumentId, documentTypes, entityTypes, refreshSessions, refreshScope, refreshBootstrap]);
 
   if (booting) return <div className="boot-screen"><img src="/static/assets/brand/arline-primary.svg" alt="" /><LoaderCircle className="spin" size={20} /><span>Starting Arline Studio…</span></div>;
 
@@ -244,6 +249,7 @@ export default function App() {
         onNewChat={newChat}
         onQuickCreate={() => setQuickCreateOpen(true)}
         onSettings={() => setSettingsOpen(true)}
+        onTools={() => setToolsOpen(true)}
         onTheme={setThemeAndPersist}
       >
         {scopeLoading ? <div className="scope-progress"><span /></div> : null}
@@ -251,7 +257,9 @@ export default function App() {
         {mainContent}
       </Shell>
       <SettingsDrawer open={settingsOpen} config={config} onConfig={setConfig} onClose={() => setSettingsOpen(false)} />
-      <InspectorDrawer selection={selection} onClose={() => setSelection(null)} />
+      <StudioToolsDrawer open={toolsOpen} projectId={activeProjectId} worldId={activeWorldId} branchId={activeBranchId} config={config} onClose={() => setToolsOpen(false)} onChanged={refreshScope} />
+      <WelcomeDialog open={welcomeOpen && !booting} onClose={closeWelcome} onStory={() => { closeWelcome(); setViewAndPersist("manuscript"); }} onLibrary={() => { closeWelcome(); setViewAndPersist("library"); setQuickCreateOpen(true); }} onImport={() => { closeWelcome(); setToolsOpen(true); }} />
+      <InspectorDrawer selection={selection} projectId={activeProjectId} worldId={activeWorldId} branchId={activeBranchId} onChanged={refreshScope} onClose={() => setSelection(null)} />
       <QuickCreateDialog open={quickCreateOpen} projectId={activeProjectId} worldId={activeWorldId} branchId={activeBranchId} onClose={() => setQuickCreateOpen(false)} onCreated={async () => { await refreshBootstrap(); await refreshScope(); }} />
     </>
   );
