@@ -36,6 +36,7 @@ jobs:
       - name: JavaScript syntax
         run: |
           node --check src/interface/web/static/js/commands.js
+          node --check src/interface/web/static/js/command-center.js
           node --check src/interface/web/static/js/stream.js
           node --check src/interface/web/static/js/quick-create.js
           node --check src/interface/web/static/js/memory.js
@@ -103,6 +104,7 @@ jobs:
       - name: JavaScript/runtime smoke
         run: |
           node --check src/interface/web/static/js/commands.js
+          node --check src/interface/web/static/js/command-center.js
           node --check src/interface/web/static/js/stream.js
           node --check src/interface/web/static/js/quick-create.js
           node --check src/interface/web/static/js/memory.js
@@ -112,9 +114,50 @@ jobs:
           node tests/frontend/memory_runtime_smoke.js
           git diff --check
 
+  native:
+    name: Native storage · Rust + Python 3.11
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build abi3 native wheel
+        run: |
+          python -m pip install "maturin>=1.8,<2"
+          maturin build --release --manifest-path crates/arline-native/Cargo.toml --out /tmp/arline-native-wheel
+          python -m pip install /tmp/arline-native-wheel/*.whl
+      - name: Native storage smoke
+        env:
+          ARLINE_STORAGE_BACKEND: rust
+        run: |
+          python - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+          import _arline_native
+          from src.storage.backend import BlobStore
+
+          assert _arline_native.storage_version() == "0.1.0"
+          with TemporaryDirectory() as td:
+              store = BlobStore(Path(td) / "objects", backend="rust")
+              payload = b"native-ci-smoke"
+              first = store.put_bytes(payload)
+              second = store.put_bytes(payload)
+              assert first.backend == "rust"
+              assert first.digest == sha256(payload).hexdigest()
+              assert first.path == second.path
+              assert first.created is True
+              assert second.created is False
+              assert store.read_bytes(first.digest) == payload
+          print("Arline native storage smoke: ok")
+          PY
+
   browser:
     name: Chromium browser smoke
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/')
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/heads/develop/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

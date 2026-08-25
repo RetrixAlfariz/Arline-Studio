@@ -169,8 +169,6 @@ class V124DirectiveDeliberationTests(unittest.TestCase):
 
         original = DiscoveryService.capture_text
         try:
-            # Simulate a later adapter/test resetting the class capture method
-            # while spatial._INSTALLED remains True from an earlier attach.
             DiscoveryService.capture_text = _capture_text_general
             install_general_discovery()
             install_spatial_discovery()

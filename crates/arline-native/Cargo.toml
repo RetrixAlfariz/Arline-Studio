@@ -1,0 +1,20 @@
+[package]
+name = "arline-native"
+version = "0.1.0"
+edition = "2021"
+description = "Native deterministic storage primitives for Arline Studio"
+license = "MIT"
+publish = false
+
+[lib]
+name = "_arline_native"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.26", features = ["extension-module", "abi3-py311"] }
+sha2 = "0.10"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

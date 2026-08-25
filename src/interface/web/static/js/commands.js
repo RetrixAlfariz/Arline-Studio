@@ -336,5 +336,16 @@ function installCommandHelpUI() {
   enhanceCommandHelpRows();
 }
 
+function loadCommandCenterV125() {
+  if (document.querySelector('script[data-arline-command-center]')) return;
+  const script = document.createElement("script");
+  script.src = "/static/js/command-center.js?v=1.2.5-command-center";
+  script.async = false;
+  script.dataset.arlineCommandCenter = "1";
+  document.head.appendChild(script);
+}
+
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", installCommandHelpUI, { once: true });
 else installCommandHelpUI();
+
+window.addEventListener("load", loadCommandCenterV125, { once: true });

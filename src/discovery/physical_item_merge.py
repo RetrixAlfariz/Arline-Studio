@@ -63,7 +63,11 @@ def install_safe_anaphora_merge(refinement_module) -> None:
                     f"invalidation_reason='explicit_anaphora_merged',updated_at=? WHERE id IN ({marks})",
                     [utc_now(), *source_instance_ids],
                 )
-        refinement_module._retire_subject_family(service, from_key)
+        refinement_module._retire_subject_family(
+            service,
+            from_key,
+            merged_into_subject_key=to_key,
+        )
         return moved
 
     refinement_module._merge_turn_subject = merge_turn_subject
