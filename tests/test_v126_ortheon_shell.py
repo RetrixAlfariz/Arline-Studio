@@ -5,15 +5,21 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 STATIC = ROOT / "src" / "interface" / "web" / "static"
 INDEX = STATIC / "index.html"
-SHELL = STATIC / "chat-runtime-v125.css"
+RUNTIME = STATIC / "chat-runtime-v125.css"
 BASE = STATIC / "chat-runtime-v125-base.css"
+SHELL = STATIC / "ortheon-shell-v126.css"
+SPECIFIC = STATIC / "ortheon-specific-v126.css"
 
 
 class OrtheonShellContractTests(unittest.TestCase):
     def test_ortheon_shell_preserves_existing_runtime_stylesheet(self):
-        shell = SHELL.read_text(encoding="utf-8")
+        runtime = RUNTIME.read_text(encoding="utf-8")
         base = BASE.read_text(encoding="utf-8")
+        shell = SHELL.read_text(encoding="utf-8")
+        specific = SPECIFIC.read_text(encoding="utf-8")
 
+        self.assertIn('/static/ortheon-shell-v126.css?v=1.2.6-shell', runtime)
+        self.assertIn('/static/ortheon-specific-v126.css?v=1.2.6-shell', runtime)
         self.assertTrue(
             shell.lstrip().startswith(
                 '@import url("/static/chat-runtime-v125-base.css?v=1.2.5-scroll");'
@@ -26,12 +32,11 @@ class OrtheonShellContractTests(unittest.TestCase):
         self.assertIn(".composer-card", shell)
         self.assertIn(".inspector", shell)
         self.assertIn(".sheet-panel", shell)
+        self.assertIn("#composerDock .composer-card.composer-chatgpt-shell", specific)
 
     def test_html_keeps_critical_runtime_ids_singleton(self):
         html = INDEX.read_text(encoding="utf-8")
 
-        # These IDs are hard runtime contracts used by the existing vanilla-JS UI.
-        # The shell redesign must never replace them with a parallel React-only DOM.
         critical_ids = (
             "workspaceSidebar",
             "workbench",
@@ -53,7 +58,6 @@ class OrtheonShellContractTests(unittest.TestCase):
         expected = '/static/chat-runtime-v125.css?v=1.2.5-scroll'
         self.assertEqual(html.count(expected), 1)
 
-        # Basic document guards for the brittle monolithic static shell.
         self.assertTrue(html.lstrip().lower().startswith("<!doctype html>"))
         self.assertEqual(html.count("<html"), 1)
         self.assertEqual(html.count("</html>"), 1)
