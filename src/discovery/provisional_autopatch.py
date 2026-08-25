@@ -87,6 +87,30 @@ def _install_materialization_serialization() -> None:
     provisional._MATERIALIZATION_SERIALIZED = True
 
 
+def _install_capture_serialization(service) -> None:
+    """Make extraction + physical-identity refinement atomic to projection.
+
+    Capture is a layered pipeline: the base extractor first emits provisional
+    garment keys, then physical-item/refinement/ambiguity wrappers may rewrite or
+    invalidate those collapsed identities. Historical materialization must never
+    observe the short-lived middle state. Holding the same per-service RLock used
+    by foreground/background materialization makes the final capture result the
+    only state visible to the projection worker.
+    """
+    if getattr(service, "_provisional_capture_serialized", False):
+        return
+
+    original_capture_text = service.capture_text
+    guard = _materialization_guard(service)
+
+    def serialized_capture_text(*args, **kwargs):
+        with guard:
+            return original_capture_text(*args, **kwargs)
+
+    service.capture_text = serialized_capture_text
+    service._provisional_capture_serialized = True
+
+
 if not getattr(provisional, "_RUNTIME_FIX_WRAPPED", False):
     _original_install = provisional.install_provisional_discovery
 
@@ -172,6 +196,11 @@ if not getattr(provisional, "_RUNTIME_FIX_WRAPPED", False):
         install_library_scope_lineage(service)
         install_claim_semantics(service)
         install_promotion_hardening(service)
+
+        # Every correctness/refinement wrapper is installed now. From this point
+        # forward, background projection can only observe a fully refined capture,
+        # never the transient collapsed garment identities emitted underneath it.
+        _install_capture_serialization(service)
 
         # Query/list/resource caches are installed after every correctness and
         # scope wrapper so all fast paths preserve the final authority contract.
