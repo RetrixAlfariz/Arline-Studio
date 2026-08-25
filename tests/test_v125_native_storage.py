@@ -3,6 +3,8 @@ from __future__ import annotations
 from hashlib import sha256
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import subprocess
+import sys
 import unittest
 
 from src.storage.backend import BlobStore, STORAGE_LAYER_VERSION
@@ -41,6 +43,32 @@ class V125NativeStorageTests(unittest.TestCase):
             for bad in ("../secret", "a" * 63, "g" * 64, ""):
                 with self.subTest(bad=bad), self.assertRaises(ValueError):
                     store.resolve(bad)
+
+    def test_storage_import_does_not_require_ai_or_network_stack(self):
+        smoke = r'''
+import builtins
+original_import = builtins.__import__
+
+def guarded_import(name, *args, **kwargs):
+    if name == "httpx" or name.startswith("httpx."):
+        raise RuntimeError("storage import unexpectedly requested httpx")
+    return original_import(name, *args, **kwargs)
+
+builtins.__import__ = guarded_import
+from src.storage.backend import BlobStore, STORAGE_LAYER_VERSION
+assert BlobStore is not None
+assert STORAGE_LAYER_VERSION == "0.1.0"
+print("isolated storage import: ok")
+'''
+        result = subprocess.run(
+            [sys.executable, "-c", smoke],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, msg=result.stderr or result.stdout)
+        self.assertIn("isolated storage import: ok", result.stdout)
 
     def test_native_aware_foundation_deduplicates_media_and_refcounts_blob(self):
         with TemporaryDirectory() as td:
