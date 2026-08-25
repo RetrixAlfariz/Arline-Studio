@@ -764,10 +764,14 @@ def _install_resource_prefetch(service) -> None:
 
 
 def _install_physical_item_index(service, physical_items_module) -> None:
+    # The wrapper is module-global, but cache ownership is service-local. A
+    # captured cache from the first DiscoveryService leaked entries and, more
+    # importantly, could not be invalidated by later services. Python/runtime
+    # timing then made physical-item resolution nondeterministic across fixtures.
+    if not hasattr(service, "_physical_item_scope_cache"):
+        service._physical_item_scope_cache = OrderedDict()
     if getattr(physical_items_module, "_PERFORMANCE_ITEM_INDEX_INSTALLED", False):
         return
-    scope_cache: OrderedDict[tuple[Any, ...], list[Any]] = OrderedDict()
-    service._physical_item_scope_cache = scope_cache
 
     def clone(item):
         return physical_items_module.PhysicalItem(
@@ -781,6 +785,10 @@ def _install_physical_item_index(service, physical_items_module) -> None:
         )
 
     def existing_items(service_obj, context: MemoryQueryContext):
+        scope_cache = getattr(service_obj, "_physical_item_scope_cache", None)
+        if scope_cache is None:
+            scope_cache = OrderedDict()
+            service_obj._physical_item_scope_cache = scope_cache
         revision = _scope_revision(service_obj, context)
         key = (*_context_key(context), revision)
         cached = scope_cache.get(key)
