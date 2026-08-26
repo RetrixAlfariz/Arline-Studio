@@ -185,6 +185,24 @@ export interface CommandDefinition extends JsonMap {
   help?: string;
   usage?: string;
   aliases?: string[];
+  text?: string;
+  category?: string;
+  role?: string;
+  why_use?: string;
+  syntax?: string;
+  deliberation_mode?: string;
+  output_mode?: string;
+  arguments?: Array<{ name?: string; kind?: string; description?: string; required?: boolean; variadic?: boolean }>;
+  options?: Array<{ name?: string; kind?: string; description?: string; choices?: unknown[]; default?: unknown }>;
+  examples?: string[];
+  execution_contract?: {
+    retrieval_profile?: string;
+    retrieval_weights?: Record<string, number>;
+    deliberation_profile?: string;
+    realization_profile?: string;
+    authority?: string;
+    mutates_authority?: boolean;
+  };
 }
 
 export interface CommandPayload extends JsonMap {

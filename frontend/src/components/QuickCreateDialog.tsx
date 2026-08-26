@@ -44,7 +44,7 @@ export function QuickCreateDialog({ open, projectId, worldId, branchId, onClose,
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div className="modal quick-modal" onMouseDown={(event) => event.stopPropagation()}>
         <button className="modal-close icon-control" onClick={onClose}><X size={15} /></button>
-        <span className="eyebrow">Quick create</span><h2>Describe it naturally</h2><p>Schema inference stays in Python. TSX just gives it a less prehistoric interface.</p>
+        <span className="eyebrow">Quick create</span><h2>Describe what you need</h2><p>Write naturally. Arline will organize the details into the right workspace structure.</p>
         <textarea autoFocus value={text} onChange={(event) => { setText(event.target.value); setPreview(null); }} placeholder="A character, place, document, project, world, relationship…" />
         <label><span>Force kind</span><select value={kind} onChange={(event) => setKind(event.target.value)}><option value="">Auto detect</option><option value="entity">Entity</option><option value="document">Document</option><option value="project">Project</option><option value="world">World</option></select></label>
         {preview ? <div className="quick-preview"><span>{String(preview.kind || "resource")}</span><strong>{String(preview.name || text)}</strong><pre>{JSON.stringify(preview, null, 2)}</pre></div> : null}

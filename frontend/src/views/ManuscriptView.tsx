@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FilePlus2, FileText, Focus, History, Link2, Save, Target, Trash2 } from "lucide-react";
+import { FilePlus2, FileText, Focus, History, LayoutGrid, Link2, ListTree, Rows3, Save, Target, Trash2 } from "lucide-react";
 import { studioApi } from "../api";
 import { browserStorage } from "../browserStorage";
 import type { DocumentItem, FolderNode, JsonMap } from "../types";
@@ -16,6 +16,8 @@ interface ManuscriptViewProps {
   onInspect: (title: string, data: unknown) => void;
 }
 
+type ManuscriptMode = "editor" | "corkboard" | "outliner";
+
 export function ManuscriptView({ projectId, worldId, branchId, documents, folders, initialDocumentId, documentTypes, onDocumentsChanged, onInspect }: ManuscriptViewProps) {
   const [selectedId, setSelectedId] = useState(initialDocumentId || documents[0]?.id || "");
   const [doc, setDoc] = useState<DocumentItem | null>(null);
@@ -31,6 +33,9 @@ export function ManuscriptView({ projectId, worldId, branchId, documents, folder
   const [revisions, setRevisions] = useState<JsonMap[]>([]);
   const [dependencies, setDependencies] = useState<JsonMap[]>([]);
   const [focusMode, setFocusMode] = useState(false);
+  const [mode, setMode] = useState<ManuscriptMode>(() => (browserStorage.get("arline:manuscript:mode") as ManuscriptMode) || "editor");
+  const [sceneCards, setSceneCards] = useState<JsonMap[]>([]);
+  const [draggedId, setDraggedId] = useState("");
   const recoveryTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -40,6 +45,11 @@ export function ManuscriptView({ projectId, worldId, branchId, documents, folder
   useEffect(() => {
     if (!selectedId && documents[0]) setSelectedId(documents[0].id);
   }, [documents, selectedId]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    void studioApi.sceneCards(projectId).then((result) => setSceneCards(result.scene_cards || [])).catch(() => setSceneCards([]));
+  }, [projectId, documents]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -74,6 +84,27 @@ export function ManuscriptView({ projectId, worldId, branchId, documents, folder
     if (filter === "all") return documents;
     return documents.filter((item) => item.document_type === filter);
   }, [documents, filter]);
+
+  const cardByDocument = useMemo(() => new Map(sceneCards.map((card) => [String(card.document_id), card])), [sceneCards]);
+  const planningDocuments = useMemo(() => filtered.filter((item) => item.document_type === "scene").sort((a, b) => {
+    const aOrder = Number(cardByDocument.get(a.id)?.sort_order ?? a.sort_order ?? 0);
+    const bOrder = Number(cardByDocument.get(b.id)?.sort_order ?? b.sort_order ?? 0);
+    return aOrder - bOrder || a.title.localeCompare(b.title);
+  }), [filtered, cardByDocument]);
+
+  const changeMode = (next: ManuscriptMode) => { browserStorage.set("arline:manuscript:mode", next); setMode(next); };
+
+  const reorderScene = async (targetId: string) => {
+    if (!draggedId || draggedId === targetId) return;
+    const reordered = [...planningDocuments];
+    const from = reordered.findIndex((item) => item.id === draggedId);
+    const to = reordered.findIndex((item) => item.id === targetId);
+    if (from < 0 || to < 0) return;
+    const [moved] = reordered.splice(from, 1); reordered.splice(to, 0, moved);
+    const updated = await Promise.all(reordered.map((item, index) => studioApi.saveSceneCard(projectId, item.id, sceneCardPayload(cardByDocument.get(item.id), item, worldId, branchId, index * 100))));
+    setSceneCards(updated);
+    setDraggedId("");
+  };
 
   const save = async () => {
     if (!doc) return;
@@ -145,6 +176,11 @@ export function ManuscriptView({ projectId, worldId, branchId, documents, folder
         <div className="filter-strip">
           {["all", "scene", "chapter", "note", "research", "outline"].map((value) => <button key={value} className={filter === value ? "active" : ""} onClick={() => setFilter(value)}>{value}</button>)}
         </div>
+        <div className="manuscript-mode-switch" aria-label="Manuscript view">
+          <button className={mode === "editor" ? "active" : ""} onClick={() => changeMode("editor")}><FileText size={13} /><span>Editor</span></button>
+          <button className={mode === "corkboard" ? "active" : ""} onClick={() => changeMode("corkboard")}><LayoutGrid size={13} /><span>Corkboard</span></button>
+          <button className={mode === "outliner" ? "active" : ""} onClick={() => changeMode("outliner")}><Rows3 size={13} /><span>Outliner</span></button>
+        </div>
         <div className="document-list">
           {filtered.map((item) => (
             <button key={item.id} className={selectedId === item.id ? "active" : ""} onClick={() => setSelectedId(item.id)}>
@@ -156,7 +192,7 @@ export function ManuscriptView({ projectId, worldId, branchId, documents, folder
         </div>
       </aside>
 
-      <section className="editor-pane">
+      {mode === "editor" ? <section className="editor-pane">
         {doc ? (
           <>
             <div className="editor-toolbar">
@@ -177,7 +213,15 @@ export function ManuscriptView({ projectId, worldId, branchId, documents, folder
         ) : (
           <div className="center-empty"><FileText size={28} /><h2>Your manuscript is empty</h2><p>Create a scene, chapter, note, research file, or outline.</p><button className="primary-action" onClick={() => setCreating(true)}><FilePlus2 size={14} />Create first document</button></div>
         )}
-      </section>
+      </section> : <section className="planning-pane">
+        <header className="planning-header"><div><span className="eyebrow">Scene planning</span><h1>{mode === "corkboard" ? "Corkboard" : "Outliner"}</h1><p>{mode === "corkboard" ? "Arrange scenes spatially. Drag cards to change their planning order." : "Review scene status, perspective, location, length, and continuity at a glance."}</p></div><button className="primary-action small" onClick={() => setCreating(true)}><FilePlus2 size={13} />New scene</button></header>
+        {mode === "corkboard" ? <div className="scene-corkboard">
+          {planningDocuments.map((item, index) => { const card = cardByDocument.get(item.id); return <article key={item.id} draggable onDragStart={() => setDraggedId(item.id)} onDragOver={(event) => event.preventDefault()} onDrop={() => void reorderScene(item.id)} className={`${selectedId === item.id ? "selected" : ""} ${draggedId === item.id ? "dragging" : ""}`} onClick={() => setSelectedId(item.id)} onDoubleClick={() => { setSelectedId(item.id); changeMode("editor"); }}>
+            <div className="scene-card-index"><span>Scene {String(index + 1).padStart(2, "0")}</span><ListTree size={14} /></div><h2>{item.title}</h2><p>{String(card?.target_outcome || excerpt(item.content) || "Add a scene objective in the Inspector.")}</p><div className="scene-card-meta"><span>POV<strong>{String(card?.pov_name || card?.pov_variant_id || "—")}</strong></span><span>Status<strong>{String(card?.status || item.status || "planned")}</strong></span></div><footer><span>{wordCountOf(item.content).toLocaleString()} words</span>{card?.notes ? <em>Context notes</em> : <em>No warnings</em>}</footer>
+          </article>; })}
+          {!planningDocuments.length && <div className="planning-empty"><LayoutGrid size={28} /><h2>No scenes on the Corkboard</h2><p>Create a scene or switch the Binder filter to All or Scene.</p><button className="primary-action" onClick={() => setCreating(true)}>Create scene</button></div>}
+        </div> : <div className="scene-outliner-wrap"><table className="scene-outliner"><thead><tr><th>#</th><th>Scene</th><th>Status</th><th>POV</th><th>Location</th><th>Words</th><th>Continuity</th></tr></thead><tbody>{planningDocuments.map((item, index) => { const card = cardByDocument.get(item.id); return <tr key={item.id} className={selectedId === item.id ? "selected" : ""} onClick={() => setSelectedId(item.id)} onDoubleClick={() => { setSelectedId(item.id); changeMode("editor"); }}><td>{String(index + 1).padStart(2, "0")}</td><td><strong>{item.title}</strong><small>{String(card?.target_outcome || excerpt(item.content) || "No objective yet")}</small></td><td><span className={`status-pill ${String(card?.status || item.status || "planned")}`}>{String(card?.status || item.status || "planned")}</span></td><td>{String(card?.pov_name || card?.pov_variant_id || "—")}</td><td>{String(card?.location_name || card?.location_variant_id || "—")}</td><td>{wordCountOf(item.content).toLocaleString()}</td><td>{card?.notes ? "Review notes" : "Clear"}</td></tr>; })}</tbody></table>{!planningDocuments.length && <div className="planning-empty"><Rows3 size={28} /><h2>No scenes to outline</h2><p>Create a scene or switch the Binder filter.</p></div>}</div>}
+      </section>}
 
       <aside className="manuscript-inspector">
         <div className="pane-heading"><div><span className="eyebrow">Inspector</span><h2>Scene</h2></div></div>
@@ -209,3 +253,21 @@ export function ManuscriptView({ projectId, worldId, branchId, documents, folder
 function Property({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
   return <div className="property-row"><span>{label}</span><strong className={mono ? "mono" : ""}>{value}</strong></div>;
 }
+
+function sceneCardPayload(card: JsonMap | undefined, document: DocumentItem, worldId: string, branchId: string, sortOrder: number) {
+  return {
+    world_id: card?.world_id || worldId || null,
+    branch_id: card?.branch_id || branchId || null,
+    pov_variant_id: card?.pov_variant_id || null,
+    location_variant_id: card?.location_variant_id || null,
+    participants: Array.isArray(card?.participants) ? card.participants : [],
+    narrative_time: String(card?.narrative_time || ""),
+    target_outcome: String(card?.target_outcome || excerpt(document.content)),
+    notes: String(card?.notes || ""),
+    status: String(card?.status || document.status || "planned"),
+    sort_order: sortOrder,
+  };
+}
+
+const wordCountOf = (value: unknown) => { const text = String(value || "").trim(); return text ? text.split(/\s+/).length : 0; };
+const excerpt = (value: unknown) => String(value || "").replace(/\s+/g, " ").trim().slice(0, 150);

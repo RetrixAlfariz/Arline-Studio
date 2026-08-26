@@ -1,6 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
-  BookOpenText,
   Boxes,
   ChevronDown,
   Command,
@@ -16,9 +15,8 @@ import {
   Settings2,
   LayoutDashboard,
   Sun,
-  Clock3,
 } from "lucide-react";
-import type { AppView, Project, Session, ThemeMode, World, WorldBible } from "../types";
+import type { AppView, Project, Session, ThemeMode, World } from "../types";
 
 interface ShellProps {
   children: ReactNode;
@@ -30,7 +28,6 @@ interface ShellProps {
   activeWorldId: string;
   activeBranchId: string;
   sessions: Session[];
-  bible: WorldBible | null;
   connectionLabel: string;
   onView: (view: AppView) => void;
   onProject: (id: string) => void;
@@ -39,6 +36,7 @@ interface ShellProps {
   onSession: (id: string) => void;
   onNewChat: () => void;
   onQuickCreate: () => void;
+  onPalette: () => void;
   onSettings: () => void;
   onTools: () => void;
   onTheme: () => void;
@@ -62,7 +60,6 @@ export function Shell({
   activeWorldId,
   activeBranchId,
   sessions,
-  bible,
   connectionLabel,
   onView,
   onProject,
@@ -71,6 +68,7 @@ export function Shell({
   onSession,
   onNewChat,
   onQuickCreate,
+  onPalette,
   onSettings,
   onTools,
   onTheme,
@@ -80,26 +78,25 @@ export function Shell({
   const activeProject = projects.find((item) => item.id === activeProjectId);
   const activeWorld = worlds.find((item) => item.id === activeWorldId);
   const branches = activeWorld?.branches || [];
-  const families = bible?.families || [];
-  const characterCount = families.filter((item) => item.entity_type === "character").length;
-  const locationCount = families.filter((item) => item.entity_type === "location").length;
-  const itemCount = families.filter((item) => item.entity_type === "item").length;
-
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey)) return;
-      if (event.key.toLowerCase() === "k") { event.preventDefault(); onView("commands"); }
       if (event.key.toLowerCase() === "n") { event.preventDefault(); onQuickCreate(); }
     };
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
-  }, [onView, onQuickCreate]);
+  }, [onQuickCreate]);
+
+  const navigate = (nextView: AppView) => {
+    onView(nextView);
+    setMobileOpen(false);
+  };
 
   return (
     <div className={`studio-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${mobileOpen ? "mobile-sidebar-open" : ""}`} data-theme={theme}>
       <header className="studio-topbar">
         <div className="topbar-brand compact-brand">
-          <button className="mobile-menu-button" onClick={() => setMobileOpen((value) => !value)}><Menu size={16} /></button>
+          <button className="mobile-menu-button" aria-label="Toggle navigation" onClick={() => setMobileOpen((value) => !value)}><Menu size={16} /></button>
           <img src="/static/assets/brand/arline-primary.svg" alt="" />
           <strong>Arline</strong>
         </div>
@@ -130,7 +127,7 @@ export function Shell({
           </label>
         </div>
 
-        <button className="global-command" onClick={() => onView("commands")}>
+        <button className="global-command" aria-label="Search or command" onClick={onPalette}>
           <Search size={14} />
           <span>Search or command</span>
           <kbd>Ctrl K</kbd>
@@ -149,38 +146,28 @@ export function Shell({
       <aside className="studio-sidebar">
         <div className="sidebar-brand">
           <img src="/static/assets/brand/arline-primary.svg" alt="Arline" />
-          <div><strong>Arline Studio</strong><small>React workspace</small></div>
-          <button className="sidebar-collapse" onClick={() => setSidebarCollapsed((value) => !value)}>{sidebarCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}</button>
+          <div><strong>Arline Studio</strong><small>Story workspace</small></div>
+          <button className="sidebar-collapse" aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setSidebarCollapsed((value) => !value)}>{sidebarCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}</button>
         </div>
 
         <div className="sidebar-actions">
-          <button className="sidebar-primary" onClick={onNewChat}><Plus size={15} /><span>New chat</span></button>
-          <button onClick={onQuickCreate}><Plus size={14} /><span>Quick create</span></button>
+          <button className="sidebar-primary" onClick={() => { onNewChat(); setMobileOpen(false); }}><Plus size={15} /><span>New chat</span></button>
+          <button onClick={() => { onQuickCreate(); setMobileOpen(false); }}><Plus size={14} /><span>Quick create</span></button>
         </div>
 
         <nav className="sidebar-nav">
           {navItems.map((item) => (
-            <button key={item.view} className={view === item.view ? "active" : ""} onClick={() => onView(item.view)}>
+            <button key={item.view} className={view === item.view ? "active" : ""} onClick={() => navigate(item.view)}>
               {item.icon}<span>{item.label}</span>
             </button>
           ))}
         </nav>
 
-        <section className="sidebar-section">
-          <div className="sidebar-section-title"><span>Library</span><BookOpenText size={13} /></div>
-          <button className="metric-nav" onClick={() => onView("library")}><span>Characters</span><em>{characterCount}</em></button>
-          <button className="metric-nav" onClick={() => onView("library")}><span>Locations</span><em>{locationCount}</em></button>
-          <button className="metric-nav" onClick={() => onView("library")}><span>Items</span><em>{itemCount}</em></button>
-          <button className="metric-nav" onClick={() => onView("library")}><span>Relationships</span><em>{bible?.relationships?.length || 0}</em></button>
-          <button className="metric-nav" onClick={() => onView("library")}><span>Lore & rules</span><em>{families.filter((item) => item.entity_type === "lore").length}</em></button>
-          <button className="metric-nav" onClick={() => onView("library")}><span>Timeline</span><em><Clock3 size={12} /></em></button>
-        </section>
-
         <section className="sidebar-section recent-section">
           <div className="sidebar-section-title"><span>Recent chats</span><MessageSquareText size={13} /></div>
           <div className="recent-list">
             {sessions.slice(0, 14).map((session) => (
-              <button key={session.id} onClick={() => onSession(session.id)}>
+              <button key={session.id} onClick={() => { onSession(session.id); setMobileOpen(false); }}>
                 <span>{session.title || "Untitled chat"}</span>
                 {session.pinned ? <b>•</b> : null}
               </button>

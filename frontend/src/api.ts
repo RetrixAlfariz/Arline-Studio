@@ -133,7 +133,7 @@ export const studioApi = {
   deleteSceneDependency: (id: string) => api<{ ok: boolean }>(`/api/scenes/dependencies/${encodeURIComponent(id)}`, { method: "DELETE" }),
   activeScene: (projectId: string) => api<JsonMap>(`/api/projects/${encodeURIComponent(projectId)}/active-scene`),
   setActiveScene: (projectId: string, payload: Record<string, unknown>) => api<JsonMap>(`/api/projects/${encodeURIComponent(projectId)}/active-scene`, { method: "PUT", body: payload }),
-  sceneCards: (projectId: string) => api<{ cards: JsonMap[] }>(`/api/projects/${encodeURIComponent(projectId)}/scene-cards`),
+  sceneCards: (projectId: string) => api<{ scene_cards: JsonMap[] }>(`/api/projects/${encodeURIComponent(projectId)}/scene-cards`),
   saveSceneCard: (projectId: string, documentId: string, payload: Record<string, unknown>) => api<JsonMap>(`/api/projects/${encodeURIComponent(projectId)}/scene-cards/${encodeURIComponent(documentId)}`, { method: "PUT", body: payload }),
   trash: (resourceType: string, resourceId: string) => api<{ ok?: boolean }>("/api/lifecycle/trash", {
     method: "POST",

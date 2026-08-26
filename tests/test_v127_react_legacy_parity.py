@@ -44,8 +44,24 @@ class ReactLegacyParityTests(unittest.TestCase):
             self.assertIn(token, manuscript)
         for token in ("custom", "profiles", "references", "history", "Recursive custom command"):
             self.assertIn(token, commands)
+        for token in ("selectedCommandId", "Why use this?", "Syntax", "Arguments", "Options", "What Arline does", "Authority", "Examples", "Use command"):
+            self.assertIn(token, commands)
         for token in ("Feedback Lab", "Import & export", "Contract & diagnostics", "Memory & discovery"):
             self.assertIn(token, tools)
+
+    def test_reference_guide_interactions_are_integrated(self):
+        app = (FRONTEND / "App.tsx").read_text(encoding="utf-8")
+        shell = (FRONTEND / "components" / "Shell.tsx").read_text(encoding="utf-8")
+        palette = (FRONTEND / "components" / "GlobalPalette.tsx").read_text(encoding="utf-8")
+        manuscript = (FRONTEND / "views" / "ManuscriptView.tsx").read_text(encoding="utf-8")
+        api = (FRONTEND / "api.ts").read_text(encoding="utf-8")
+        self.assertIn("GlobalPalette", app)
+        self.assertIn("onPalette", shell)
+        for token in ("Search Arline", "Ctrl Enter", "Add to Chat", "Inspect", "palette-preview"):
+            self.assertIn(token, palette)
+        for token in ("corkboard", "outliner", "reorderScene", "saveSceneCard", "scene-outliner"):
+            self.assertIn(token, manuscript)
+        self.assertIn("scene_cards", api)
 
 
 if __name__ == "__main__":

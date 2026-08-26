@@ -3,6 +3,7 @@ import { AlertTriangle, LoaderCircle } from "lucide-react";
 import { studioApi } from "./api";
 import { browserStorage, createClientId } from "./browserStorage";
 import { InspectorDrawer } from "./components/InspectorDrawer";
+import { GlobalPalette } from "./components/GlobalPalette";
 import { QuickCreateDialog } from "./components/QuickCreateDialog";
 import { SettingsDrawer } from "./components/SettingsDrawer";
 import { StudioToolsDrawer } from "./components/StudioToolsDrawer";
@@ -68,6 +69,7 @@ export default function App() {
   const [toolsOpen, setToolsOpen] = useState(false);
   const [welcomeOpen, setWelcomeOpen] = useState(() => browserStorage.get("arline:react:welcomed") !== "yes");
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [seedPrompt, setSeedPrompt] = useState("");
   const [booting, setBooting] = useState(true);
   const [scopeLoading, setScopeLoading] = useState(false);
@@ -157,6 +159,17 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const openPalette = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((value) => !value);
+      }
+    };
+    window.addEventListener("keydown", openPalette);
+    return () => window.removeEventListener("keydown", openPalette);
+  }, []);
+
+  useEffect(() => {
     if (!activeProjectId) return;
     browserStorage.set("arline:react:project", activeProjectId);
     void refreshScope();
@@ -239,7 +252,6 @@ export default function App() {
         activeWorldId={activeWorldId}
         activeBranchId={activeBranchId}
         sessions={sessions}
-        bible={bible}
         connectionLabel={connectionLabel}
         onView={setViewAndPersist}
         onProject={chooseProject}
@@ -248,6 +260,7 @@ export default function App() {
         onSession={(id) => void openSession(id)}
         onNewChat={newChat}
         onQuickCreate={() => setQuickCreateOpen(true)}
+        onPalette={() => setPaletteOpen(true)}
         onSettings={() => setSettingsOpen(true)}
         onTools={() => setToolsOpen(true)}
         onTheme={setThemeAndPersist}
@@ -256,6 +269,23 @@ export default function App() {
         {fatalError ? <div className="global-error"><AlertTriangle size={13} /><span>{fatalError}</span><button onClick={() => setFatalError("")}>×</button></div> : null}
         {mainContent}
       </Shell>
+      <GlobalPalette
+        open={paletteOpen}
+        commands={commands.commands || []}
+        sessions={sessions}
+        documents={documents}
+        families={bible?.families || []}
+        worlds={worlds}
+        canonFacts={bible?.canon_facts || []}
+        onClose={() => setPaletteOpen(false)}
+        onView={setViewAndPersist}
+        onSession={(id) => void openSession(id)}
+        onDocument={openDocument}
+        onWorld={chooseWorld}
+        onCommand={(command) => { setSeedPrompt(`/${command.id} `); setViewAndPersist("chat"); }}
+        onInspect={inspect}
+        onAddToChat={(text) => { setSeedPrompt(text); setViewAndPersist("chat"); }}
+      />
       <SettingsDrawer open={settingsOpen} config={config} onConfig={setConfig} onClose={() => setSettingsOpen(false)} />
       <StudioToolsDrawer open={toolsOpen} projectId={activeProjectId} worldId={activeWorldId} branchId={activeBranchId} config={config} onClose={() => setToolsOpen(false)} onChanged={refreshScope} />
       <WelcomeDialog open={welcomeOpen && !booting} onClose={closeWelcome} onStory={() => { closeWelcome(); setViewAndPersist("manuscript"); }} onLibrary={() => { closeWelcome(); setViewAndPersist("library"); setQuickCreateOpen(true); }} onImport={() => { closeWelcome(); setToolsOpen(true); }} />

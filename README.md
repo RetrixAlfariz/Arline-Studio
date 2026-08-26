@@ -68,6 +68,18 @@ python main.py
 
 4. Open the Studio URL configured under `[ui]` in `config/arline.toml` (default port `7860`).
 
+To force-stop the local web server from another terminal, run:
+
+```powershell
+uv run python shutdown.py
+```
+
+The command reads `[ui].port`, only stops an Arline/Uvicorn process by default,
+and is safe to repeat. Use `--dry-run` to inspect the target first, or
+`--any-process` only when the port belongs to a different process intentionally.
+After installing the project package, the equivalent command is
+`arline-shutdown`.
+
 The SQLite database, local media, exports, backups, and generated output are runtime data and are intentionally not included in release ZIPs.
 
 ## The v1.1 workflow

@@ -57,7 +57,7 @@ export function HomeView({ project, documents, sessions, bible, tree, onOpenChat
                 <ArrowRight size={13} />
               </button>
             ))}
-            {!recentDocs.length && <div className="empty-state">No manuscript files yet. Quick Create can make the first one without asking you to manually worship a schema.</div>}
+            {!recentDocs.length && <div className="empty-state">No manuscript files yet. Quick Create can help you begin with a scene, chapter, note, or outline.</div>}
           </div>
         </section>
 
