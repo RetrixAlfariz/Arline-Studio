@@ -35,6 +35,7 @@ class ArlineWriter:
         model_input: str,
         input_mode: str | None = None,
         reasoning_for_api: str | None | object = _UNSET,
+        images: list[str] | None = None,
     ) -> WriterResult:
         system = self.config.writer.system_prompt_file.read_text(encoding="utf-8").strip()
         g = self.config.generation
@@ -61,6 +62,7 @@ class ArlineWriter:
             context_length=self.config.model_load.context_length,
             seed=g.seed,
             extra_payload=g.extra,
+            images=images,
         )
 
         stats = dict(result.stats)

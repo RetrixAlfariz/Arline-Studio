@@ -79,6 +79,15 @@ MEDIA_RESOURCE_TYPES = {"entity_family", "entity_variant", "world", "document"}
 MAX_MEDIA_BYTES = 20 * 1024 * 1024
 
 
+def _validate_prompt_images(images: list[str]) -> None:
+    for image in images:
+        match = re.fullmatch(r"data:([^;,]+);base64,(.+)", image.strip(), flags=re.DOTALL)
+        if not match or match.group(1).lower() not in MEDIA_MIME_EXTENSIONS:
+            raise HTTPException(400, "Chat images must be PNG, JPEG, WebP, or GIF data URLs")
+        if len(match.group(2)) > MAX_MEDIA_BYTES * 2:
+            raise HTTPException(400, "Each chat image must be 20 MiB or smaller")
+
+
 class RuntimePayload(BaseModel):
     server_url: str = "http://127.0.0.1:1234"
     api_key: str | None = None
@@ -124,6 +133,7 @@ class PromptPayload(RuntimePayload):
     story_order: float | None = None
     pov_variant_id: str | None = None
     scratch_mode: bool = False
+    images: list[str] = Field(default_factory=list, max_length=4)
 
 
 class ModelsPayload(BaseModel):
@@ -2941,6 +2951,9 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             raise HTTPException(400, "Prompt is empty")
         if payload.generation_mode != "single":
             raise HTTPException(400, "Inline streaming currently supports single-response mode; beats use the normal generation endpoint")
+        if payload.images and payload.generation_mode != "single":
+            raise HTTPException(400, "Image context currently supports single-response generation only")
+        _validate_prompt_images(payload.images)
 
         async def events():
             existing_session = None
@@ -2951,6 +2964,9 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                     yield _sse("error", {"message": "Session not found"})
                     return
             cfg = _apply_payload(RuntimeConfig.load(config_path), payload)
+            if payload.images and not ArlineService(cfg).client().vision_supported(cfg.lmstudio.model):
+                yield _sse("error", {"message": "The selected model does not report vision support"})
+                return
             project_id = payload.project_id or (existing_session or {}).get("project_id")
             world_id = payload.world_id or (existing_session or {}).get("world_id")
             branch_id = payload.branch_id or (existing_session or {}).get("branch_id")
@@ -2999,7 +3015,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             partial_reasoning = ""
             try:
                 streamer = StreamingArlineService(cfg)
-                async for event in streamer.stream(payload.prompt, mode=payload.input_mode, session_context=session_context or None, workspace_context=ws_context):
+                async for event in streamer.stream(payload.prompt, mode=payload.input_mode, session_context=session_context or None, workspace_context=ws_context, images=payload.images):
                     event_type = event.get("type")
                     if event_type == "_prepared":
                         prepared = event["prepared"]
@@ -3155,6 +3171,11 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
 
         try:
             service = ArlineService(cfg)
+            if payload.images and payload.generation_mode != "single":
+                raise HTTPException(400, "Image context currently supports single-response generation only")
+            _validate_prompt_images(payload.images)
+            if payload.images and not service.client().vision_supported(cfg.lmstudio.model):
+                raise HTTPException(400, "The selected model does not report vision support")
             if payload.generation_mode == "beats":
                 bundle = service.generate_beats(
                     payload.prompt,
@@ -3170,9 +3191,12 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                     mode=payload.input_mode,
                     session_context=session_context or None,
                     workspace_context=ws_context,
+                    images=payload.images,
                 )
         except LMStudioError as exc:
             raise HTTPException(400, str(exc)) from exc
+        except HTTPException:
+            raise
         except Exception as exc:
             raise HTTPException(500, str(exc)) from exc
 

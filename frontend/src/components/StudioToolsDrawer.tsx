@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Activity, ArchiveRestore, BrainCircuit, Database, Download, FlaskConical, Search, ShieldCheck, Upload, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Activity, AlertCircle, ArchiveRestore, BrainCircuit, CheckCircle2, Database, Download, FileText, FlaskConical, Paperclip, Search, ShieldCheck, Upload, X } from "lucide-react";
 import { runtimePayload, studioApi } from "../api";
 import type { JsonMap, RuntimeConfig } from "../types";
 
@@ -41,6 +41,11 @@ export function StudioToolsDrawer({ open, projectId, worldId, branchId, config, 
   const [importTitle, setImportTitle] = useState("Imported manuscript");
   const [importText, setImportText] = useState("");
   const [importPreview, setImportPreview] = useState<JsonMap | null>(null);
+  const [importFileName, setImportFileName] = useState("");
+  const [importFileSize, setImportFileSize] = useState(0);
+  const [importError, setImportError] = useState("");
+  const [importDragging, setImportDragging] = useState(false);
+  const importFileRef = useRef<HTMLInputElement | null>(null);
   const [contract, setContract] = useState("");
   const [ablationPrompt, setAblationPrompt] = useState("");
   const [developerOutput, setDeveloperOutput] = useState<unknown>(null);
@@ -110,7 +115,45 @@ export function StudioToolsDrawer({ open, projectId, worldId, branchId, config, 
   const previewImport = async () => setImportPreview(await studioApi.importPreview({ project_id: projectId, title: importTitle, text: importText, split_headings: true, default_type: "scene" }));
   const commitImport = async () => {
     await studioApi.importManuscript({ project_id: projectId, title: importTitle, text: importText, split_headings: true, default_type: "scene" });
-    setStatus("Manuscript imported"); setImportText(""); setImportPreview(null); await onChanged();
+    setStatus("Manuscript imported"); setImportText(""); setImportPreview(null); setImportFileName(""); setImportFileSize(0); await onChanged();
+  };
+
+  const loadImportFile = async (file?: File) => {
+    if (!file) return;
+    const extension = file.name.includes(".") ? `.${file.name.split(".").pop()?.toLowerCase()}` : "";
+    if (![".md", ".markdown", ".txt"].includes(extension)) {
+      setImportError("Unsupported file. Choose a .md, .markdown, or .txt manuscript.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setImportError("This file is larger than the 5 MB import limit.");
+      return;
+    }
+    try {
+      const text = await file.text();
+      if (!text.trim()) {
+        setImportError("This file is empty.");
+        return;
+      }
+      setImportText(text);
+      setImportTitle(file.name.replace(/\.(md|markdown|txt)$/i, "") || "Imported manuscript");
+      setImportFileName(file.name);
+      setImportFileSize(file.size);
+      setImportPreview(null);
+      setImportError("");
+      setStatus("Manuscript ready to preview");
+    } catch {
+      setImportError("Arline could not read this file. Confirm that it is UTF-8 text and try again.");
+    }
+  };
+
+  const clearImportFile = () => {
+    setImportText("");
+    setImportPreview(null);
+    setImportFileName("");
+    setImportFileSize(0);
+    setImportError("");
+    if (importFileRef.current) importFileRef.current.value = "";
   };
 
   const saveStack = async () => {
@@ -152,10 +195,34 @@ export function StudioToolsDrawer({ open, projectId, worldId, branchId, config, 
           <div className="tools-actions">{["master", "sft", "preference", "eval"].map((kind) => <a key={kind} href={studioApi.exportDatasetUrl(kind)}><Download size={13} />Export {kind}</a>)}</div>
         </div>}
         {tab === "data" && <div className="tools-stack">
-          <ToolHeading title="Import & export" copy="Preview heading splits before importing an existing manuscript." />
+          <ToolHeading title="Import & export" copy="Drop a supported manuscript, review its heading splits, then import it into this project." />
           <label className="tools-field"><span>Import title</span><input value={importTitle} onChange={(event) => setImportTitle(event.target.value)} /></label>
-          <label className="tools-field"><span>Markdown or plain text</span><textarea value={importText} onChange={(event) => setImportText(event.target.value)} /></label>
-          <div className="tools-actions"><button onClick={() => void previewImport()}><Upload size={13} />Preview</button><button className="primary-action small" disabled={!importText.trim()} onClick={() => void commitImport()}>Import</button><a href={studioApi.exportProjectUrl(projectId)}><Download size={13} />Project</a><a href={studioApi.exportWorldBibleUrl(projectId, worldId)}><Download size={13} />World Bible</a></div>
+          <div
+            className={`manuscript-dropzone ${importDragging ? "dragging" : ""} ${importFileName ? "has-file" : ""}`}
+            role="button"
+            tabIndex={0}
+            aria-label="Attach a Markdown or text manuscript"
+            onClick={() => importFileRef.current?.click()}
+            onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); importFileRef.current?.click(); } }}
+            onDragEnter={(event) => { event.preventDefault(); setImportDragging(true); }}
+            onDragOver={(event) => { event.preventDefault(); setImportDragging(true); }}
+            onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setImportDragging(false); }}
+            onDrop={(event) => { event.preventDefault(); setImportDragging(false); void loadImportFile(event.dataTransfer.files[0]); }}
+          >
+            <input ref={importFileRef} type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" hidden onChange={(event) => void loadImportFile(event.target.files?.[0])} />
+            {importFileName ? <>
+              <span className="dropzone-icon ready"><CheckCircle2 size={20} /></span>
+              <div className="dropzone-copy"><strong>{importFileName}</strong><small>{(importFileSize / 1024).toFixed(importFileSize < 1024 ? 1 : 0)} KB · Ready to review</small></div>
+              <div className="dropzone-actions"><button onClick={(event) => { event.stopPropagation(); importFileRef.current?.click(); }}><Paperclip size={13} />Replace</button><button className="icon-control" title="Remove file" onClick={(event) => { event.stopPropagation(); clearImportFile(); }}><X size={13} /></button></div>
+            </> : <>
+              <span className="dropzone-icon"><FileText size={21} /></span>
+              <div className="dropzone-copy"><strong>Drop your manuscript here</strong><small>or click to attach a file</small></div>
+              <span className="dropzone-formats">MD · MARKDOWN · TXT <b>up to 5 MB</b></span>
+            </>}
+          </div>
+          {importError && <div className="import-file-error"><AlertCircle size={14} /><span>{importError}</span></div>}
+          <label className="tools-field manuscript-editor"><span>Review manuscript text</span><textarea value={importText} onChange={(event) => { setImportText(event.target.value); setImportPreview(null); }} placeholder="Attach a supported file or paste Markdown / plain text here…" /></label>
+          <div className="import-export-actions"><div className="tools-actions"><button disabled={!importText.trim()} onClick={() => void previewImport()}><Upload size={13} />Preview</button><button className="primary-action small" disabled={!importText.trim()} onClick={() => void commitImport()}>Import manuscript</button></div><div className="tools-actions export-actions"><span>Export</span><a href={studioApi.exportProjectUrl(projectId)}><Download size={13} />Project</a><a href={studioApi.exportWorldBibleUrl(projectId, worldId)}><Download size={13} />World Bible</a></div></div>
           {importPreview && <pre className="tools-json compact">{JSON.stringify(importPreview, null, 2)}</pre>}
           <div className="tools-columns"><ToolList title="Migration backups" items={backups} /><section className="tools-list"><h3>Trash</h3>{trash.map((item) => <article key={`${String(item.resource_type)}:${String(item.resource_id || item.id)}`}><div><strong>{labelOf(item)}</strong><small>{String(item.resource_type || item.kind || "resource")}</small></div><button onClick={async () => { await studioApi.lifecycle("restore", String(item.resource_type), String(item.resource_id || item.id)); await refreshData(); await onChanged(); }}><ArchiveRestore size={13} />Restore</button></article>)}{!trash.length && <p>Trash is empty.</p>}</section></div>
         </div>}

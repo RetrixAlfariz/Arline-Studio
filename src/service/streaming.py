@@ -114,11 +114,14 @@ class StreamingArlineService:
             deliberation=deliberation,
         )
 
-    def _payload(self, prepared: PreparedStreamingGeneration) -> dict[str, Any]:
+    def _payload(self, prepared: PreparedStreamingGeneration, images: list[str] | None = None) -> dict[str, Any]:
         g = self.config.generation
         payload: dict[str, Any] = {
             "model": self.config.lmstudio.model,
-            "input": prepared.model_input,
+            "input": prepared.model_input if not images else [
+                {"type": "message", "content": prepared.model_input},
+                *[{"type": "image", "data_url": image} for image in images],
+            ],
             "system_prompt": prepared.system_prompt,
             "stream": True,
             "temperature": g.temperature,
@@ -193,6 +196,7 @@ class StreamingArlineService:
         mode: str | None = None,
         session_context: str | None = None,
         workspace_context: Any = None,
+        images: list[str] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         yield RunEvent("stage", RunState.PREPARING, "Preparing story context").to_dict()
         prepared = await self.prepare(
@@ -246,7 +250,7 @@ class StreamingArlineService:
         timeout = httpx.Timeout(self.config.lmstudio.timeout_seconds, connect=30.0)
         try:
             async with httpx.AsyncClient(timeout=timeout, headers=client.headers) as http:
-                async with http.stream("POST", url, json=self._payload(prepared)) as response:
+                async with http.stream("POST", url, json=self._payload(prepared, images)) as response:
                     response.raise_for_status()
                     async for line in response.aiter_lines():
                         if line == "":

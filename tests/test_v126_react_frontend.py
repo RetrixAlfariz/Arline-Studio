@@ -86,6 +86,15 @@ class V126ReactFrontendTests(unittest.TestCase):
         self.assertIn("DELETE EVERYTHING", settings)
         self.assertIn("Complete reset", settings)
 
+    def test_chat_streaming_activates_first_session_and_respects_manual_scroll(self):
+        chat = (FRONTEND / "src" / "views" / "ChatView.tsx").read_text(encoding="utf-8")
+        self.assertIn("setPendingPrompt(sentPrompt)", chat)
+        self.assertIn("onSession(startedSession)", chat)
+        self.assertIn("setFollowLatest(viewport.scrollHeight", chat)
+        self.assertIn('behavior: "auto"', chat)
+        self.assertNotIn('scrollIntoView({ block: "end", behavior: "smooth" })', chat)
+        self.assertIn("Jump to latest", chat)
+
     def test_integrated_build_serves_es_modules_with_javascript_mime(self):
         index = FRONTEND / "dist" / "index.html"
         if not index.is_file():

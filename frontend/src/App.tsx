@@ -89,6 +89,8 @@ export default function App() {
   const projects = bootstrap?.projects || [];
   const worlds = bible?.worlds || bootstrap?.worlds || [];
   const activeProject = projects.find((item) => item.id === activeProjectId);
+  const activeWorld = worlds.find((item) => item.id === activeWorldId);
+  const activeBranch = activeWorld?.branches?.find((item) => item.id === activeBranchId);
   const theme: ThemeMode = appearance.mode === "system" ? systemTheme : appearance.mode;
   const appearanceStyle = useMemo(() => appearanceVariables(appearance, theme), [appearance, theme]);
 
@@ -249,12 +251,12 @@ export default function App() {
   const documents = tree?.documents || [];
 
   const mainContent = useMemo(() => {
-    if (view === "home") return <HomeView project={activeProject} documents={documents} sessions={sessions} bible={bible} tree={tree} onOpenChat={(id) => id ? void openSession(id) : newChat()} onOpenDocument={openDocument} onLibrary={() => setViewAndPersist("library")} onQuickCreate={() => setQuickCreateOpen(true)} />;
-    if (view === "chat") return <ChatView config={config} activeProjectId={activeProjectId} activeWorldId={activeWorldId} activeBranchId={activeBranchId} activeSession={activeSession} commands={commands.commands || []} onConfig={setConfig} onSession={setActiveSession} onSessionsChanged={refreshSessions} onInspect={inspect} seedPrompt={seedPrompt} onSeedConsumed={() => setSeedPrompt("")} />;
+    if (view === "home") return <HomeView project={activeProject} documents={documents} sessions={sessions} bible={bible} tree={tree} onOpenChat={(id) => id ? void openSession(id) : newChat()} onOpenDocument={openDocument} onManuscript={() => setViewAndPersist("manuscript")} onLibrary={() => setViewAndPersist("library")} onQuickCreate={() => setQuickCreateOpen(true)} onStartPrompt={(prompt) => { setSeedPrompt(prompt); setViewAndPersist("chat"); }} />;
+    if (view === "chat") return <ChatView config={config} activeProjectId={activeProjectId} activeWorldId={activeWorldId} activeBranchId={activeBranchId} projectName={activeProject?.name || "Project"} worldName={activeWorld?.name || "World"} branchName={activeBranch?.name || "Main"} activeSession={activeSession} commands={commands.commands || []} onConfig={setConfig} onSession={setActiveSession} onSessionsChanged={refreshSessions} onInspect={inspect} seedPrompt={seedPrompt} onSeedConsumed={() => setSeedPrompt("")} />;
     if (view === "manuscript") return <ManuscriptView projectId={activeProjectId} worldId={activeWorldId} branchId={activeBranchId} documents={documents} folders={tree?.folders || tree?.folder_tree || []} initialDocumentId={activeDocumentId} documentTypes={documentTypes} onDocumentsChanged={refreshScope} onInspect={inspect} />;
     if (view === "library") return <LibraryView projectId={activeProjectId} worldId={activeWorldId} branchId={activeBranchId} bible={bible} entityTypes={entityTypes} onChanged={async () => { await refreshBootstrap(); await refreshScope(); }} onSelect={setSelection} />;
     return <CommandCenterView projectId={activeProjectId} commands={commands.commands || []} registryVersion={commands.command_registry_version} dynamicReferences={commands.dynamic_references} referenceSelectors={commands.reference_selectors} onUse={(command, compiledText) => { setSeedPrompt(compiledText || `/${command.id} `); setViewAndPersist("chat"); }} />;
-  }, [view, activeProject, documents, sessions, bible, tree, config, activeProjectId, activeWorldId, activeBranchId, activeSession, commands, seedPrompt, activeDocumentId, documentTypes, entityTypes, refreshSessions, refreshScope, refreshBootstrap]);
+  }, [view, activeProject, activeWorld, activeBranch, documents, sessions, bible, tree, config, activeProjectId, activeWorldId, activeBranchId, activeSession, commands, seedPrompt, activeDocumentId, documentTypes, entityTypes, refreshSessions, refreshScope, refreshBootstrap]);
 
   if (booting) return <div className="boot-screen" data-theme={theme} style={appearanceStyle}><span className="brand-mark boot-brand-mark" aria-hidden="true" /><LoaderCircle className="spin" size={20} /><span>Starting Arline Studio…</span></div>;
 

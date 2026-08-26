@@ -322,6 +322,7 @@ class ArlineService:
         session_context: str | None = None,
         workspace_context: WorkspaceContext | None = None,
         beat_context: str | None = None,
+        images: list[str] | None = None,
     ) -> GenerationBundle:
         bundle = self.analyze(
             prompt,
@@ -379,6 +380,7 @@ class ArlineService:
             model_input=model_input,
             input_mode=mode,
             reasoning_for_api=effective_reasoning,
+            images=images,
         )
         result.stats["deliberation_version"] = deliberation.version
         result.stats["deliberation_status"] = deliberation.status
