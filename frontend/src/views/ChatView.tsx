@@ -311,7 +311,7 @@ export function ChatView({
       <div className="chat-viewport">
         {!turns.length && !liveText ? (
           <div className="chat-empty">
-            <img src="/static/assets/brand/arline-primary.svg" alt="" />
+            <span className="brand-mark chat-empty-brand-mark" aria-hidden="true" />
             <h2>Ready when you are</h2>
             <p>Reference canon with <kbd>@</kbd>, use <kbd>/</kbd> directives, or continue the current scene. The new frontend talks to the same Python context and generation engine underneath.</p>
             <div className="starter-grid">

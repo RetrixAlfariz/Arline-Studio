@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import {
   Boxes,
   ChevronDown,
@@ -16,12 +16,14 @@ import {
   LayoutDashboard,
   Sun,
 } from "lucide-react";
-import type { AppView, Project, Session, ThemeMode, World } from "../types";
+import type { AppView, ContrastMode, Project, Session, ThemeMode, World } from "../types";
 
 interface ShellProps {
   children: ReactNode;
   view: AppView;
   theme: ThemeMode;
+  contrast: ContrastMode;
+  appearanceStyle: CSSProperties;
   projects: Project[];
   worlds: World[];
   activeProjectId: string;
@@ -54,6 +56,8 @@ export function Shell({
   children,
   view,
   theme,
+  contrast,
+  appearanceStyle,
   projects,
   worlds,
   activeProjectId,
@@ -93,11 +97,11 @@ export function Shell({
   };
 
   return (
-    <div className={`studio-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${mobileOpen ? "mobile-sidebar-open" : ""}`} data-theme={theme}>
+    <div className={`studio-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${mobileOpen ? "mobile-sidebar-open" : ""}`} data-theme={theme} data-contrast={contrast} style={appearanceStyle}>
       <header className="studio-topbar">
         <div className="topbar-brand compact-brand">
           <button className="mobile-menu-button" aria-label="Toggle navigation" onClick={() => setMobileOpen((value) => !value)}><Menu size={16} /></button>
-          <img src="/static/assets/brand/arline-primary.svg" alt="" />
+          <span className="brand-mark topbar-brand-mark" aria-hidden="true" />
           <strong>Arline</strong>
         </div>
 
@@ -145,7 +149,7 @@ export function Shell({
 
       <aside className="studio-sidebar">
         <div className="sidebar-brand">
-          <img src="/static/assets/brand/arline-primary.svg" alt="Arline" />
+          <span className="brand-mark sidebar-brand-mark" role="img" aria-label="Arline" />
           <div><strong>Arline Studio</strong><small>Story workspace</small></div>
           <button className="sidebar-collapse" aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setSidebarCollapsed((value) => !value)}>{sidebarCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}</button>
         </div>

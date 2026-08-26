@@ -1,5 +1,12 @@
 export type AppView = "home" | "chat" | "manuscript" | "library" | "commands";
 export type ThemeMode = "dark" | "light";
+export type ThemePreference = "system" | ThemeMode;
+export type ContrastMode = "standard" | "high";
+export interface AppearanceSettings {
+  mode: ThemePreference;
+  accent: string;
+  contrast: ContrastMode;
+}
 
 export type JsonMap = Record<string, unknown>;
 

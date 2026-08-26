@@ -1,21 +1,25 @@
-import { useEffect, useState } from "react";
-import { AlertTriangle, Cpu, Database, RefreshCcw, Save, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { AlertTriangle, Check, Cpu, Database, Monitor, Moon, Palette, RefreshCcw, RotateCcw, Save, SlidersHorizontal, Sun, Trash2, X } from "lucide-react";
 import { studioApi } from "../api";
 import { browserStorage } from "../browserStorage";
-import type { ModelInfo, RuntimeConfig } from "../types";
+import { appearancePalette, DEFAULT_APPEARANCE, normalizeHex, readableForeground, resolveAccent } from "../theme";
+import type { AppearanceSettings, ModelInfo, RuntimeConfig, ThemeMode, ThemePreference } from "../types";
 
 interface SettingsDrawerProps {
   open: boolean;
   config: RuntimeConfig;
   onConfig: (config: RuntimeConfig) => void;
+  appearance: AppearanceSettings;
+  onAppearance: (appearance: AppearanceSettings) => void;
   onClose: () => void;
 }
 
-type SettingsTab = "runtime" | "generation" | "context" | "storage";
+type SettingsTab = "general" | "runtime" | "generation" | "context" | "storage";
 type ResetMode = "database" | "complete";
+const ACCENT_PRESETS = ["#2F9B81", "#367FA8", "#6559B4", "#A34F78", "#B4633E", "#758344"];
 
-export function SettingsDrawer({ open, config, onConfig, onClose }: SettingsDrawerProps) {
-  const [tab, setTab] = useState<SettingsTab>("runtime");
+export function SettingsDrawer({ open, config, onConfig, appearance, onAppearance, onClose }: SettingsDrawerProps) {
+  const [tab, setTab] = useState<SettingsTab>("general");
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [apiKey, setApiKey] = useState("");
   const [status, setStatus] = useState("");
@@ -48,6 +52,9 @@ export function SettingsDrawer({ open, config, onConfig, onClose }: SettingsDraw
 
   const save = async () => {
     setStatus("Saving…");
+    browserStorage.set("arline:theme", appearance.mode);
+    browserStorage.set("arline:accent", normalizeHex(appearance.accent));
+    browserStorage.set("arline:contrast", appearance.contrast);
     try {
       await studioApi.saveSettings({
         server_url: config.server_url,
@@ -70,9 +77,9 @@ export function SettingsDrawer({ open, config, onConfig, onClose }: SettingsDraw
         beat_tokens: config.beat_tokens,
         total_story_target_tokens: config.total_story_target_tokens,
       });
-      setStatus("Settings saved. API keys remain session-only.");
+      setStatus("Settings saved. Appearance is local; API keys remain session-only.");
     } catch (error) {
-      setStatus((error as Error).message);
+      setStatus(`Appearance saved locally. Runtime settings failed: ${(error as Error).message}`);
     }
   };
 
@@ -103,12 +110,32 @@ export function SettingsDrawer({ open, config, onConfig, onClose }: SettingsDraw
         <header><div><span className="eyebrow">Arline Studio</span><h2>Settings</h2></div><button className="icon-control" onClick={onClose}><X size={16} /></button></header>
         <div className="settings-body">
           <nav>
+            <button className={tab === "general" ? "active" : ""} onClick={() => setTab("general")}><Palette size={14} />General</button>
             <button className={tab === "runtime" ? "active" : ""} onClick={() => setTab("runtime")}><Cpu size={14} />Models & Runtime</button>
             <button className={tab === "generation" ? "active" : ""} onClick={() => setTab("generation")}><SlidersHorizontal size={14} />Generation</button>
             <button className={tab === "context" ? "active" : ""} onClick={() => setTab("context")}><RefreshCcw size={14} />Context</button>
             <button className={tab === "storage" ? "active" : ""} onClick={() => setTab("storage")}><Database size={14} />Data & Storage</button>
           </nav>
           <section className="settings-panel">
+            {tab === "general" && <>
+              <PanelHeading title="General" description="Shape how Arline looks without sacrificing legibility. Accent choices are adapted separately for dark and light surfaces." />
+              <section className="appearance-section">
+                <div className="settings-block-heading"><div><strong>Appearance</strong><span>Theme behavior and brand accent</span></div><button className="settings-reset" onClick={() => { onAppearance(DEFAULT_APPEARANCE); setStatus("Arline appearance restored. Save to keep it."); }}><RotateCcw size={12} />Reset</button></div>
+
+                <div className="appearance-field"><span>Theme</span><div className="theme-choice-grid">
+                  <ThemeChoice value="system" label="System" icon={<Monitor size={15} />} current={appearance.mode} onChange={(mode) => onAppearance({ ...appearance, mode })} />
+                  <ThemeChoice value="dark" label="Dark" icon={<Moon size={15} />} current={appearance.mode} onChange={(mode) => onAppearance({ ...appearance, mode })} />
+                  <ThemeChoice value="light" label="Light" icon={<Sun size={15} />} current={appearance.mode} onChange={(mode) => onAppearance({ ...appearance, mode })} />
+                </div></div>
+
+                <div className="appearance-field"><span>Accent color</span><div className="accent-control"><label className="custom-color"><input type="color" value={normalizeHex(appearance.accent)} onChange={(event) => onAppearance({ ...appearance, accent: event.target.value.toUpperCase() })} /><span><strong>Custom</strong><small>{normalizeHex(appearance.accent)}</small></span></label><div className="accent-swatches" aria-label="Accent presets">{ACCENT_PRESETS.map((color) => <button key={color} className={normalizeHex(appearance.accent) === color ? "active" : ""} style={{ backgroundColor: color }} title={color} aria-label={`Use accent ${color}`} onClick={() => onAppearance({ ...appearance, accent: color })}>{normalizeHex(appearance.accent) === color ? <Check size={11} /> : null}</button>)}</div></div><p>Arline preserves your hue, then corrects saturation and lightness per theme.</p></div>
+
+                <div className="appearance-field"><span>Contrast</span><div className="contrast-choice"><button className={appearance.contrast === "standard" ? "active" : ""} onClick={() => onAppearance({ ...appearance, contrast: "standard" })}><strong>Standard</strong><small>Calm borders and surfaces</small></button><button className={appearance.contrast === "high" ? "active" : ""} onClick={() => onAppearance({ ...appearance, contrast: "high" })}><strong>High</strong><small>Stronger separation and focus</small></button></div></div>
+              </section>
+
+              <section className="appearance-preview-section"><div className="settings-block-heading"><div><strong>Live preview</strong><span>Both themes remain readable with one accent</span></div><span className="contrast-safe"><Check size={11} />Contrast safeguarded</span></div><div className="appearance-previews"><AppearancePreview theme="dark" accent={appearance.accent} /><AppearancePreview theme="light" accent={appearance.accent} /></div></section>
+            </>}
+
             {tab === "runtime" && <>
               <PanelHeading title="Models & Runtime" description="The UI is TypeScript now; the model runtime remains local Python + LM Studio." />
               <label><span>LM Studio server</span><input value={config.server_url} onChange={(event) => patch("server_url", event.target.value)} /></label>
@@ -192,4 +219,27 @@ function PanelHeading({ title, description }: { title: string; description: stri
 
 function NumberSetting({ label, value, min, max, step, onChange }: { label: string; value: number; min?: number; max?: number; step?: number; onChange: (value: number) => void }) {
   return <label><span>{label}</span><input type="number" value={value} min={min} max={max} step={step} onChange={(event) => onChange(Number(event.target.value))} /></label>;
+}
+
+function ThemeChoice({ value, label, icon, current, onChange }: { value: ThemePreference; label: string; icon: ReactNode; current: ThemePreference; onChange: (value: ThemePreference) => void }) {
+  return <button className={current === value ? "active" : ""} onClick={() => onChange(value)}>{icon}<span>{label}</span>{current === value ? <Check size={11} /> : null}</button>;
+}
+
+function AppearancePreview({ theme, accent }: { theme: ThemeMode; accent: string }) {
+  const safeAccent = resolveAccent(accent, theme);
+  const palette = appearancePalette(accent, theme);
+  const style = {
+    "--preview-accent": safeAccent,
+    "--preview-accent-text": readableForeground(safeAccent),
+    "--preview-bg": palette.surface,
+    "--preview-surface": palette.surface2,
+    "--preview-line": palette.lineStrong,
+    "--preview-text": palette.text,
+    "--preview-muted": palette.muted,
+  } as CSSProperties;
+  return <article className="appearance-preview" data-preview-theme={theme} style={style}>
+    <header><span className="appearance-preview-logo" /><div><strong>Arline</strong><small>{theme} theme</small></div></header>
+    <div className="preview-copy"><span>Shared knowledge</span><strong>Story workspace</strong><p>A calm surface with accessible emphasis.</p></div>
+    <div className="preview-actions"><button>Selected</button><span>Secondary</span></div>
+  </article>;
 }

@@ -9,6 +9,7 @@ import { SettingsDrawer } from "./components/SettingsDrawer";
 import { StudioToolsDrawer } from "./components/StudioToolsDrawer";
 import { WelcomeDialog } from "./components/WelcomeDialog";
 import { Shell } from "./components/Shell";
+import { appearanceVariables, DEFAULT_ACCENT } from "./theme";
 import { ChatView } from "./views/ChatView";
 import { CommandCenterView } from "./views/CommandCenterView";
 import { HomeView } from "./views/HomeView";
@@ -16,6 +17,7 @@ import { LibraryView } from "./views/LibraryView";
 import { ManuscriptView } from "./views/ManuscriptView";
 import type {
   AppView,
+  AppearanceSettings,
   CommandPayload,
   ProjectTree,
   RuntimeConfig,
@@ -51,7 +53,16 @@ const DEFAULT_CONFIG: RuntimeConfig = {
 };
 
 export default function App() {
-  const [theme, setTheme] = useState<ThemeMode>(() => (browserStorage.get("arline:theme") === "light" ? "light" : "dark"));
+  const [appearance, setAppearance] = useState<AppearanceSettings>(() => {
+    const storedMode = browserStorage.get("arline:theme");
+    const storedContrast = browserStorage.get("arline:contrast");
+    return {
+      mode: storedMode === "dark" || storedMode === "light" || storedMode === "system" ? storedMode : "system",
+      accent: browserStorage.get("arline:accent") || DEFAULT_ACCENT,
+      contrast: storedContrast === "high" ? "high" : "standard",
+    };
+  });
+  const [systemTheme, setSystemTheme] = useState<ThemeMode>(() => window.matchMedia?.("(prefers-color-scheme: light)").matches ? "light" : "dark");
   const [view, setView] = useState<AppView>(() => (browserStorage.get("arline:react:view") as AppView) || "home");
   const [config, setConfig] = useState<RuntimeConfig>(DEFAULT_CONFIG);
   const [bootstrap, setBootstrap] = useState<WorkspaceBootstrap | null>(null);
@@ -78,11 +89,21 @@ export default function App() {
   const projects = bootstrap?.projects || [];
   const worlds = bible?.worlds || bootstrap?.worlds || [];
   const activeProject = projects.find((item) => item.id === activeProjectId);
+  const theme: ThemeMode = appearance.mode === "system" ? systemTheme : appearance.mode;
+  const appearanceStyle = useMemo(() => appearanceVariables(appearance, theme), [appearance, theme]);
+
+  useEffect(() => {
+    const query = window.matchMedia?.("(prefers-color-scheme: light)");
+    if (!query) return;
+    const update = () => setSystemTheme(query.matches ? "light" : "dark");
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
 
   const setThemeAndPersist = () => {
     const next = theme === "dark" ? "light" : "dark";
     browserStorage.set("arline:theme", next);
-    setTheme(next);
+    setAppearance((current) => ({ ...current, mode: next }));
   };
 
   const setViewAndPersist = (next: AppView) => {
@@ -235,17 +256,19 @@ export default function App() {
     return <CommandCenterView projectId={activeProjectId} commands={commands.commands || []} registryVersion={commands.command_registry_version} dynamicReferences={commands.dynamic_references} referenceSelectors={commands.reference_selectors} onUse={(command, compiledText) => { setSeedPrompt(compiledText || `/${command.id} `); setViewAndPersist("chat"); }} />;
   }, [view, activeProject, documents, sessions, bible, tree, config, activeProjectId, activeWorldId, activeBranchId, activeSession, commands, seedPrompt, activeDocumentId, documentTypes, entityTypes, refreshSessions, refreshScope, refreshBootstrap]);
 
-  if (booting) return <div className="boot-screen"><img src="/static/assets/brand/arline-primary.svg" alt="" /><LoaderCircle className="spin" size={20} /><span>Starting Arline Studio…</span></div>;
+  if (booting) return <div className="boot-screen" data-theme={theme} style={appearanceStyle}><span className="brand-mark boot-brand-mark" aria-hidden="true" /><LoaderCircle className="spin" size={20} /><span>Starting Arline Studio…</span></div>;
 
   if (fatalError && !bootstrap) return (
     <div className="fatal-screen"><AlertTriangle size={28} /><h1>Studio failed to start</h1><p>{fatalError}</p><button onClick={() => location.reload()}>Reload</button></div>
   );
 
   return (
-    <>
+    <div className="arline-app-theme" data-theme={theme} data-contrast={appearance.contrast} style={appearanceStyle}>
       <Shell
         view={view}
         theme={theme}
+        contrast={appearance.contrast}
+        appearanceStyle={appearanceStyle}
         projects={projects}
         worlds={worlds}
         activeProjectId={activeProjectId}
@@ -286,11 +309,11 @@ export default function App() {
         onInspect={inspect}
         onAddToChat={(text) => { setSeedPrompt(text); setViewAndPersist("chat"); }}
       />
-      <SettingsDrawer open={settingsOpen} config={config} onConfig={setConfig} onClose={() => setSettingsOpen(false)} />
+      <SettingsDrawer open={settingsOpen} config={config} onConfig={setConfig} appearance={appearance} onAppearance={setAppearance} onClose={() => setSettingsOpen(false)} />
       <StudioToolsDrawer open={toolsOpen} projectId={activeProjectId} worldId={activeWorldId} branchId={activeBranchId} config={config} onClose={() => setToolsOpen(false)} onChanged={refreshScope} />
       <WelcomeDialog open={welcomeOpen && !booting} onClose={closeWelcome} onStory={() => { closeWelcome(); setViewAndPersist("manuscript"); }} onLibrary={() => { closeWelcome(); setViewAndPersist("library"); setQuickCreateOpen(true); }} onImport={() => { closeWelcome(); setToolsOpen(true); }} />
       <InspectorDrawer selection={selection} projectId={activeProjectId} worldId={activeWorldId} branchId={activeBranchId} onChanged={refreshScope} onClose={() => setSelection(null)} />
       <QuickCreateDialog open={quickCreateOpen} projectId={activeProjectId} worldId={activeWorldId} branchId={activeBranchId} onClose={() => setQuickCreateOpen(false)} onCreated={async () => { await refreshBootstrap(); await refreshScope(); }} />
-    </>
+    </div>
   );
 }
