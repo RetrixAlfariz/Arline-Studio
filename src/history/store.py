@@ -12,10 +12,11 @@ from typing import Any, Iterable
 
 from src.storage_backup import backup_sqlite_before_migrations
 from src.domain_events import emit_domain_event
+from src.profile import normalize_user_profile
 from uuid import uuid4
 
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 6
 VALID_FEEDBACK = {"unreviewed", "accepted", "edited_accept", "rejected"}
 
 
@@ -106,6 +107,20 @@ class HistoryStore:
                     value TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS user_profiles (
+                    id TEXT PRIMARY KEY,
+                    profile_json TEXT NOT NULL DEFAULT '{}',
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS presence_bindings (
+                    scope_type TEXT NOT NULL,
+                    scope_id TEXT NOT NULL,
+                    profile_json TEXT NOT NULL DEFAULT '{}',
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(scope_type, scope_id)
+                );
+
                 CREATE TABLE IF NOT EXISTS sessions (
                     id TEXT PRIMARY KEY,
                     title TEXT NOT NULL,
@@ -124,6 +139,9 @@ class HistoryStore:
                     parent_session_id TEXT,
                     forked_from_turn_id TEXT,
                     scratch_mode INTEGER NOT NULL DEFAULT 0,
+                    conversation_mode TEXT NOT NULL DEFAULT 'story_writer',
+                    conversation_profile_json TEXT NOT NULL DEFAULT '{}',
+                    mode_events_json TEXT NOT NULL DEFAULT '[]',
                     world_fork_id TEXT,
                     last_model TEXT,
                     last_mode TEXT,
@@ -183,6 +201,9 @@ class HistoryStore:
                 ("parent_session_id", "TEXT"),
                 ("forked_from_turn_id", "TEXT"),
                 ("scratch_mode", "INTEGER NOT NULL DEFAULT 0"),
+                ("conversation_mode", "TEXT NOT NULL DEFAULT 'story_writer'"),
+                ("conversation_profile_json", "TEXT NOT NULL DEFAULT '{}'"),
+                ("mode_events_json", "TEXT NOT NULL DEFAULT '[]'"),
                 ("world_fork_id", "TEXT"),
             ):
                 if name not in session_columns:
@@ -261,6 +282,9 @@ class HistoryStore:
         parent_session_id: str | None = None,
         forked_from_turn_id: str | None = None,
         scratch_mode: bool = False,
+        conversation_mode: str = "story_writer",
+        conversation_profile: dict[str, Any] | None = None,
+        mode_events: list[dict[str, Any]] | None = None,
         world_fork_id: str | None = None,
     ) -> dict[str, Any]:
         session_id = _id("CHAT")
@@ -272,14 +296,17 @@ class HistoryStore:
                 INSERT INTO sessions(
                     id,title,created_at,updated_at,pinned,archived,project,
                     project_id,world_id,branch_id,folder_id,session_kind,tags_json,workspace_refs_json,
-                    parent_session_id,forked_from_turn_id,scratch_mode,world_fork_id
-                ) VALUES(?,?,?,?,0,0,?,?,?,?,?,?,?,?,?,?,?,?)
+                    parent_session_id,forked_from_turn_id,scratch_mode,conversation_mode,
+                    conversation_profile_json,mode_events_json,world_fork_id
+                ) VALUES(?,?,?,?,0,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     session_id, title, now, now, project, project_id, world_id,
                     branch_id, folder_id, session_kind, json.dumps(tags or [], ensure_ascii=False),
                     json.dumps(workspace_refs or [], ensure_ascii=False),
-                    parent_session_id, forked_from_turn_id, 1 if scratch_mode else 0, world_fork_id,
+                    parent_session_id, forked_from_turn_id, 1 if scratch_mode else 0,
+                    conversation_mode, json.dumps(conversation_profile or {}, ensure_ascii=False),
+                    json.dumps(mode_events or [], ensure_ascii=False), world_fork_id,
                 ),
             )
         return self.get_session_meta(session_id)
@@ -299,6 +326,53 @@ class HistoryStore:
         if row is None:
             raise KeyError(session_id)
         return self._session_row(row)
+
+    def get_user_profile(self, profile_id: str = "default") -> dict[str, Any]:
+        with self._connection() as con:
+            row = con.execute("SELECT profile_json,updated_at FROM user_profiles WHERE id=?", (profile_id,)).fetchone()
+        if row is None:
+            return normalize_user_profile({}, profile_id)
+        return {**normalize_user_profile({"id": profile_id, **self._loads(row["profile_json"], {})}, profile_id), "updated_at": row["updated_at"]}
+
+    def save_user_profile(self, profile: dict[str, Any], profile_id: str = "default") -> dict[str, Any]:
+        now = utc_now()
+        payload = normalize_user_profile(profile, profile_id)
+        payload.pop("id", None)
+        payload.pop("updated_at", None)
+        with self._lock, self._connection() as con:
+            con.execute(
+                "INSERT INTO user_profiles(id,profile_json,updated_at) VALUES(?,?,?) "
+                "ON CONFLICT(id) DO UPDATE SET profile_json=excluded.profile_json,updated_at=excluded.updated_at",
+                (profile_id, json.dumps(payload, ensure_ascii=False), now),
+            )
+        return self.get_user_profile(profile_id)
+
+    def get_presence_binding(self, scope_type: str, scope_id: str) -> dict[str, Any]:
+        if scope_type not in {"world", "branch"}:
+            raise ValueError("Presence scope must be world or branch")
+        with self._connection() as con:
+            row = con.execute(
+                "SELECT profile_json,updated_at FROM presence_bindings WHERE scope_type=? AND scope_id=?",
+                (scope_type, scope_id),
+            ).fetchone()
+        return {
+            "scope_type": scope_type,
+            "scope_id": scope_id,
+            "profile": self._loads(row["profile_json"], {}) if row else {},
+            "updated_at": row["updated_at"] if row else None,
+        }
+
+    def save_presence_binding(self, scope_type: str, scope_id: str, profile: dict[str, Any]) -> dict[str, Any]:
+        if scope_type not in {"world", "branch"}:
+            raise ValueError("Presence scope must be world or branch")
+        now = utc_now()
+        with self._lock, self._connection() as con:
+            con.execute(
+                "INSERT INTO presence_bindings(scope_type,scope_id,profile_json,updated_at) VALUES(?,?,?,?) "
+                "ON CONFLICT(scope_type,scope_id) DO UPDATE SET profile_json=excluded.profile_json,updated_at=excluded.updated_at",
+                (scope_type, scope_id, json.dumps(profile, ensure_ascii=False), now),
+            )
+        return self.get_presence_binding(scope_type, scope_id)
 
     def list_sessions(
         self,
@@ -393,6 +467,8 @@ class HistoryStore:
         tags: list[str] | None = None,
         workspace_refs: list[dict[str, Any]] | None = None,
         scratch_mode: bool | None = None,
+        conversation_mode: str | None = None,
+        conversation_profile: dict[str, Any] | None = None,
         world_fork_id: str | None = None,
     ) -> dict[str, Any]:
         fields: list[str] = []
@@ -429,6 +505,28 @@ class HistoryStore:
         if scratch_mode is not None:
             fields.append("scratch_mode=?")
             params.append(1 if scratch_mode else 0)
+        if conversation_mode is not None:
+            valid_modes = {"story_writer", "story_lab", "interactive", "analyst", "character_room"}
+            if conversation_mode not in valid_modes:
+                raise ValueError(f"Unknown conversation mode: {conversation_mode}")
+            current = self.get_session_meta(session_id)
+            previous = current.get("conversation_mode") or "story_writer"
+            fields.append("conversation_mode=?")
+            params.append(conversation_mode)
+            if previous != conversation_mode:
+                events = list(current.get("mode_events") or [])
+                profile = conversation_profile or current.get("conversation_profile") or {}
+                events.append({
+                    "id": _id("MODE"), "created_at": utc_now(),
+                    "from": previous, "to": conversation_mode,
+                    "presence": profile.get("presence") or {},
+                    "perspective": profile.get("perspective") or {},
+                })
+                fields.append("mode_events_json=?")
+                params.append(json.dumps(events[-100:], ensure_ascii=False))
+        if conversation_profile is not None:
+            fields.append("conversation_profile_json=?")
+            params.append(json.dumps(conversation_profile, ensure_ascii=False))
         if world_fork_id is not None:
             fields.append("world_fork_id=?")
             params.append(world_fork_id or None)
@@ -488,6 +586,9 @@ class HistoryStore:
             parent_session_id=session_id,
             forked_from_turn_id=through_turn_id or (turns[-1]["id"] if turns else None),
             scratch_mode=bool(source.get("scratch_mode")),
+            conversation_mode=source.get("conversation_mode") or "story_writer",
+            conversation_profile=source.get("conversation_profile") or {},
+            mode_events=source.get("mode_events") or [],
             world_fork_id=source.get("world_fork_id"),
         )
         for index, turn in enumerate(turns, start=1):
@@ -832,6 +933,29 @@ class HistoryStore:
             text = "[Earlier session context truncated]\n" + text[-max_chars:]
         return text
 
+    def build_discussion_context(
+        self,
+        session_id: str,
+        *,
+        max_turns: int = 12,
+        max_chars: int = 24000,
+    ) -> str:
+        """Render recent Story Lab turns as an actual alternating conversation."""
+        session = self.get_session(session_id)
+        turns = (session.get("turns") or [])[-max(1, int(max_turns)):]
+        blocks: list[str] = []
+        for turn in turns:
+            prompt = (turn.get("user_prompt") or "").strip()
+            response = (turn.get("final_story") or turn.get("story") or "").strip()
+            if prompt:
+                blocks.append(f"AUTHOR:\n{prompt}")
+            if response:
+                blocks.append(f"ARLINE:\n{response}")
+        text = "\n\n".join(blocks)
+        if len(text) > max_chars:
+            text = "[Earlier Story Lab dialogue omitted]\n" + text[-max_chars:]
+        return text
+
     def dataset_stats(self) -> dict[str, int]:
         with self._connection() as con:
             rows = con.execute(
@@ -1024,6 +1148,9 @@ class HistoryStore:
             "parent_session_id": row["parent_session_id"] if "parent_session_id" in row.keys() else None,
             "forked_from_turn_id": row["forked_from_turn_id"] if "forked_from_turn_id" in row.keys() else None,
             "scratch_mode": bool(row["scratch_mode"]) if "scratch_mode" in row.keys() else False,
+            "conversation_mode": (row["conversation_mode"] if "conversation_mode" in row.keys() else "story_writer") or "story_writer",
+            "conversation_profile": self._loads(row["conversation_profile_json"] if "conversation_profile_json" in row.keys() else "{}", {}),
+            "mode_events": self._loads(row["mode_events_json"] if "mode_events_json" in row.keys() else "[]", []),
             "world_fork_id": row["world_fork_id"] if "world_fork_id" in row.keys() else None,
             "last_model": row["last_model"],
             "last_mode": row["last_mode"],

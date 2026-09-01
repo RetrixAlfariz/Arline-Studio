@@ -15,6 +15,7 @@ from src.service.arline_service import AnalysisBundle, ArlineService, Generation
 from src.deliberation import NarrativeDeliberation
 from src.writer import ArlineWriter
 from src.writer.quality import ProseQualityAnalyzer
+from src.conversation import STORY_LAB_DISCUSSION_SYSTEM, story_lab_requests_prose
 
 
 @dataclass(slots=True)
@@ -26,6 +27,8 @@ class PreparedStreamingGeneration:
     load_status: dict[str, Any]
     system_prompt: str
     deliberation: NarrativeDeliberation
+    conversation_mode: str
+    response_kind: str
 
 
 class StreamingArlineService:
@@ -60,6 +63,7 @@ class StreamingArlineService:
         session_context: str | None = None,
         workspace_context: Any = None,
         beat_context: str | None = None,
+        conversation_mode: str | None = None,
     ) -> PreparedStreamingGeneration:
         mode = mode or self.config.writer.input_mode
         analysis = await asyncio.to_thread(
@@ -73,7 +77,8 @@ class StreamingArlineService:
         load = await asyncio.to_thread(manager.ensure_loaded)
         effective_reasoning = await asyncio.to_thread(self.base.resolve_reasoning_mode)
 
-        system_text = self._system_prompt()
+        response_kind = "discussion" if conversation_mode == "story_lab" and not story_lab_requests_prose(prompt) else "prose"
+        system_text = STORY_LAB_DISCUSSION_SYSTEM if response_kind == "discussion" else self._system_prompt()
         exact_counter = await asyncio.to_thread(
             TokenCounter.from_lmstudio, self.config.lmstudio.model
         )
@@ -103,6 +108,7 @@ class StreamingArlineService:
             session_context=session_context,
             beat_context=beat_context,
             deliberation=deliberation,
+            conversation_mode=conversation_mode,
         )
         return PreparedStreamingGeneration(
             analysis=analysis,
@@ -112,6 +118,8 @@ class StreamingArlineService:
             load_status=load,
             system_prompt=system_text,
             deliberation=deliberation,
+            conversation_mode=conversation_mode or "story_writer",
+            response_kind=response_kind,
         )
 
     def _payload(self, prepared: PreparedStreamingGeneration, images: list[str] | None = None) -> dict[str, Any]:
@@ -197,13 +205,16 @@ class StreamingArlineService:
         session_context: str | None = None,
         workspace_context: Any = None,
         images: list[str] | None = None,
+        conversation_mode: str | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
-        yield RunEvent("stage", RunState.PREPARING, "Preparing story context").to_dict()
+        discussion = conversation_mode == "story_lab" and not story_lab_requests_prose(prompt)
+        yield RunEvent("stage", RunState.PREPARING, "Preparing discussion context" if discussion else "Preparing story context").to_dict()
         prepared = await self.prepare(
             prompt,
             mode=mode,
             session_context=session_context,
             workspace_context=workspace_context,
+            conversation_mode=conversation_mode,
         )
         yield {"type": "_prepared", "prepared": prepared}
         yield RunEvent("stage", RunState.LOADING_MODEL, "Model ready").to_dict()
@@ -238,7 +249,7 @@ class StreamingArlineService:
             elif event_type == "reasoning.delta":
                 out.append({"type": "reasoning.delta", "content": str(data.get("content", ""))})
             elif event_type == "message.start":
-                out.append(RunEvent("stage", RunState.STREAMING, "Writing").to_dict())
+                out.append(RunEvent("stage", RunState.STREAMING, "Responding" if prepared.response_kind == "discussion" else "Writing").to_dict())
             elif event_type == "message.delta":
                 out.append({"type": "answer.delta", "content": str(data.get("content", ""))})
             elif event_type == "error":
@@ -273,14 +284,14 @@ class StreamingArlineService:
         if raw_final is None:
             raise LMStudioError("LM Studio stream ended without chat.end")
         writer_result = self._writer_result_from_raw(raw_final, prepared, self.config)
-        yield RunEvent("stage", RunState.POSTPROCESSING, "Checking prose quality").to_dict()
+        yield RunEvent("stage", RunState.POSTPROCESSING, "Finalizing response" if prepared.response_kind == "discussion" else "Checking prose quality").to_dict()
         post = (
             await asyncio.to_thread(
                 self.base.post_validator.validate,
                 writer_result.story,
                 prepared.analysis.writer_context,
             )
-            if self.config.writer.post_validate
+            if self.config.writer.post_validate and prepared.response_kind != "discussion"
             else None
         )
         generation = GenerationBundle(
@@ -294,5 +305,7 @@ class StreamingArlineService:
             prepared.load_status,
             prepared.deliberation,
         )
-        quality = self.quality.analyze(generation.story)
+        generation.stats["conversation_mode"] = prepared.conversation_mode
+        generation.stats["conversation_response_kind"] = prepared.response_kind
+        quality = self.quality.analyze(generation.story) if prepared.response_kind != "discussion" else {"mode": "discussion", "skipped": True}
         yield {"type": "_complete", "bundle": generation, "quality": quality, "prepared": prepared}

@@ -95,6 +95,18 @@ class V126ReactFrontendTests(unittest.TestCase):
         self.assertNotIn('scrollIntoView({ block: "end", behavior: "smooth" })', chat)
         self.assertIn("Jump to latest", chat)
 
+    def test_chat_reference_and_command_triggers_open_on_the_bare_symbol(self):
+        chat = (FRONTEND / "src" / "views" / "ChatView.tsx").read_text(encoding="utf-8")
+        self.assertIn(r'match(/^\/([^\s/]*)$/)', chat)
+        self.assertIn(r'match(/^@([^\s@]{0,40})$/)', chat)
+        self.assertIn('composerPopupMode === "commands"', chat)
+        self.assertIn('composerPopupMode === "mentions"', chat)
+        self.assertIn("Finding references…", chat)
+        self.assertIn("No matching references", chat)
+        self.assertIn("No matching commands", chat)
+        self.assertNotIn(r'lastToken.length > 1', chat)
+        self.assertNotIn(r'@([^\s@]{1,40})', chat)
+
     def test_integrated_build_serves_es_modules_with_javascript_mime(self):
         index = FRONTEND / "dist" / "index.html"
         if not index.is_file():

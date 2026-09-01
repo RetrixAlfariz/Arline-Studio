@@ -54,6 +54,8 @@ from src.workspace import (
     FoundationStore,
     parse_quick_create,
 )
+from src.conversation import extract_blueprint, recipe_for_mode, resolve_presence, story_lab_requests_prose, validate_user_agency
+from src.profile import build_personalization_context, extract_profile_draft
 
 
 try:
@@ -86,6 +88,61 @@ def _validate_prompt_images(images: list[str]) -> None:
             raise HTTPException(400, "Chat images must be PNG, JPEG, WebP, or GIF data URLs")
         if len(match.group(2)) > MAX_MEDIA_BYTES * 2:
             raise HTTPException(400, "Each chat image must be 20 MiB or smaller")
+
+
+def _conversation_contract(mode: str, profile: dict[str, Any]) -> str:
+    """Render session controls into an explicit, inspectable runtime contract."""
+    mode_rules = {
+        "story_writer": "Produce story prose. Prioritize continuity, scene state, voice, pacing, POV, and established character behavior.",
+        "story_lab": "Discuss story, character, relationship, scene, theme, and world design as a natural brainstorming partner. Default to author-facing conversation, not narrated fiction. Treat every idea as provisional and write prose only when explicitly requested.",
+        "interactive": "Respond as the world and NPCs. Preserve the user's agency over deliberate dialogue, voluntary actions, decisions, commitments, and private beliefs.",
+        "analyst": "Inspect structure, continuity, motivation, state, and consequences. Do not continue or mutate the story unless explicitly asked.",
+        "character_room": "Explore selected character interactions and dialogue chemistry as non-canon material unless explicitly promoted.",
+    }
+    safe_mode = mode if mode in mode_rules else "story_writer"
+    presence = profile.get("presence") or {}
+    perspective = profile.get("perspective") or {}
+    blueprint = profile.get("blueprint") or {}
+    resolved = resolve_presence(profile)
+    lines = [
+        "[ARLINE CONVERSATION CONTRACT]",
+        f"Mode: {safe_mode}",
+        f"Mode rule: {mode_rules[safe_mode]}",
+        f"Context policy: {'scratch/non-canon' if profile.get('scratch_mode') else 'canon-aware'}",
+        f"User creative boundaries: {json.dumps(profile.get('user_boundaries') or {}, ensure_ascii=False)}",
+    ]
+    personalization = profile.get("personalization_context") or {}
+    if personalization:
+        lines.extend([
+            f"Personalization: {json.dumps(personalization, ensure_ascii=False)}",
+            "Personal profile data is collaboration context only; it is never story canon by itself.",
+        ])
+        if not personalization.get("learn_from_chat", True):
+            lines.append("Do not infer or retain new personal facts from this conversation.")
+    if safe_mode == "story_lab":
+        lines.extend([
+            f"Story Lab focus: {profile.get('story_lab_focus') or 'plot'}",
+            f"Exploration: {profile.get('exploration') or 'open'}",
+            "Wanted/Flexible/Suggested/Avoid are creative intent, not canon facts.",
+            "Answer the author's actual design question before asking at most one useful follow-up.",
+            "Do not default to a numbered option list, formal report, scene narration, or invented dialogue.",
+        ])
+    if safe_mode == "interactive":
+        lines.extend([
+            f"Presence: {json.dumps(presence, ensure_ascii=False)}",
+            f"Perspective: {json.dumps(perspective, ensure_ascii=False)}",
+            f"Resolved pronouns and POV: {json.dumps(resolved, ensure_ascii=False)}",
+            "Resolve first-person pronouns to the active user Presence when Presence is not observer.",
+            "Never invent major voluntary user actions, dialogue, decisions, or future commitments.",
+        ])
+    if safe_mode == "character_room":
+        lines.extend([
+            f"Selected participant variant IDs: {json.dumps(profile.get('participants') or [], ensure_ascii=False)}",
+            "Only voice selected participants. Treat the room as rehearsal and do not mutate canon state.",
+        ])
+    if blueprint:
+        lines.append(f"Presence Blueprint: {json.dumps(blueprint, ensure_ascii=False)}")
+    return "\n".join(lines)
 
 
 class RuntimePayload(BaseModel):
@@ -133,6 +190,8 @@ class PromptPayload(RuntimePayload):
     story_order: float | None = None
     pov_variant_id: str | None = None
     scratch_mode: bool = False
+    conversation_mode: str | None = None
+    conversation_profile: dict[str, Any] = Field(default_factory=dict)
     images: list[str] = Field(default_factory=list, max_length=4)
 
 
@@ -171,7 +230,56 @@ class SessionPatchPayload(BaseModel):
     tags: list[str] | None = None
     workspace_refs: list[dict[str, Any]] | None = None
     scratch_mode: bool | None = None
+    conversation_mode: str | None = None
+    conversation_profile: dict[str, Any] | None = None
     world_fork_id: str | None = None
+
+
+class UserProfilePayload(BaseModel):
+    display_name: str = ""
+    about: str = ""
+    creative_profile: dict[str, Any] = Field(default_factory=dict)
+    collaboration: dict[str, Any] = Field(default_factory=dict)
+    presence_defaults: dict[str, Any] = Field(default_factory=dict)
+    story_lab: dict[str, Any] = Field(default_factory=dict)
+    boundaries: dict[str, Any] = Field(default_factory=dict)
+    memory_policy: dict[str, Any] = Field(default_factory=dict)
+    personal_details: dict[str, Any] = Field(default_factory=dict)
+    preferred_names: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class ProfileExtractPayload(BaseModel):
+    text: str = Field(min_length=1, max_length=20_000)
+
+
+class PresenceBindingPayload(BaseModel):
+    profile: dict[str, Any] = Field(default_factory=dict)
+
+
+class BlueprintExtractPayload(BaseModel):
+    text: str
+    current: dict[str, Any] = Field(default_factory=dict)
+
+
+class PresencePromotionPayload(BaseModel):
+    project_id: str
+    world_id: str
+    branch_id: str | None = None
+    name: str
+    blueprint: dict[str, Any] = Field(default_factory=dict)
+
+
+class UserEntityPayload(BaseModel):
+    project_id: str | None = None
+    world_id: str
+    branch_id: str | None = None
+    name: str
+    about: str = ""
+    creative_profile: dict[str, Any] = Field(default_factory=dict)
+    preferred_names: list[dict[str, Any]] = Field(default_factory=list)
+    personal_details: dict[str, Any] = Field(default_factory=dict)
+    presence_defaults: dict[str, Any] = Field(default_factory=dict)
+    entity_variant_id: str | None = None
 
 
 class FeedbackPayload(BaseModel):
@@ -2737,6 +2845,139 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         )
         return {"sessions": foundation.filter_visible("session", sessions)}
 
+    @app.get("/api/user-profile")
+    def get_user_profile():
+        return history.get_user_profile()
+
+    @app.put("/api/user-profile")
+    def save_user_profile(payload: UserProfilePayload):
+        return history.save_user_profile(payload.model_dump())
+
+    @app.post("/api/user-profile/extract")
+    def extract_user_profile(payload: ProfileExtractPayload):
+        return extract_profile_draft(payload.text)
+
+    @app.post("/api/user-profile/entity")
+    def save_user_as_entity(payload: UserEntityPayload):
+        """Create or update the user's explicitly linked Library character."""
+        name = payload.name.strip()
+        if not name:
+            raise HTTPException(400, "A display name is required before creating a self entity")
+        projected_details = {
+            key: detail.get("value")
+            for key, detail in payload.personal_details.items()
+            if isinstance(detail, dict)
+            and detail.get("value")
+            and detail.get("visibility") in {"collaboration", "story_presence"}
+            and not detail.get("sensitive")
+        }
+        aliases = [
+            str(item.get("value") or "").strip()
+            for item in payload.preferred_names
+            if isinstance(item, dict) and str(item.get("value") or "").strip()
+        ]
+        profile_snapshot = {
+            "source": "personalization",
+            "display_name": name,
+            "aliases": list(dict.fromkeys(aliases)),
+            "about": payload.about.strip(),
+            "creative_profile": payload.creative_profile,
+            "personal_details": projected_details,
+            "presence_defaults": payload.presence_defaults,
+        }
+        summary_parts = [payload.about.strip()]
+        if aliases:
+            summary_parts.append(f"Also known as {', '.join(dict.fromkeys(aliases))}.")
+        if projected_details:
+            summary_parts.append(" · ".join(f"{key.replace('_', ' ')}: {value}" for key, value in projected_details.items()))
+        entity_summary = " ".join(part for part in summary_parts if part).strip() or "User-linked story identity."
+        try:
+            if payload.entity_variant_id:
+                existing = workspace.get_variant(payload.entity_variant_id)
+                family = workspace.update_entity_family(
+                    existing["family_id"], name=name,
+                    description=entity_summary,
+                    shared_core={**(existing.get("shared_core") or {}), "user_profile_projection": profile_snapshot},
+                    note="synced from Personalization",
+                )
+                variant = workspace.update_variant(
+                    payload.entity_variant_id, display_name=name,
+                    summary=entity_summary,
+                    attributes={**(existing.get("attributes") or {}), "user_profile_projection": profile_snapshot},
+                    note="synced from Personalization",
+                )
+            else:
+                family = workspace.create_entity_family(
+                    project_id=payload.project_id, name=name, entity_type="character",
+                    description=entity_summary,
+                    shared_core={"user_profile_projection": profile_snapshot},
+                    create_variant_in_world=None, branch_id=payload.branch_id,
+                )
+                variant = workspace.create_variant(
+                    family_id=family["id"], world_id=payload.world_id,
+                    branch_id=payload.branch_id, display_name=name,
+                    summary=entity_summary,
+                    canon_status="draft", attributes={"user_profile_projection": profile_snapshot},
+                    voice={}, knowledge={}, beliefs={}, current_state={},
+                )
+            user_profile = history.get_user_profile()
+            defaults = dict(user_profile.get("presence_defaults") or {})
+            defaults.update({
+                "mode": "linked_entity", "identity_source": "self_entity",
+                "entity_family_id": family["id"], "entity_variant_id": variant["id"],
+                "display_name": name,
+            })
+            user_profile["display_name"] = name
+            user_profile["about"] = payload.about
+            user_profile["creative_profile"] = payload.creative_profile
+            if payload.preferred_names:
+                user_profile["preferred_names"] = payload.preferred_names
+            if payload.personal_details:
+                user_profile["personal_details"] = payload.personal_details
+            user_profile["presence_defaults"] = defaults
+            saved_profile = history.save_user_profile(user_profile)
+            return {"family": family, "variant": variant, "profile": saved_profile}
+        except KeyError as exc:
+            raise HTTPException(404, "The linked Library character no longer exists") from exc
+        except (ValueError, sqlite3.IntegrityError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.get("/api/presence-bindings/{scope_type}/{scope_id}")
+    def get_presence_binding(scope_type: str, scope_id: str):
+        try:
+            return history.get_presence_binding(scope_type, scope_id)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.put("/api/presence-bindings/{scope_type}/{scope_id}")
+    def save_presence_binding(scope_type: str, scope_id: str, payload: PresenceBindingPayload):
+        try:
+            return history.save_presence_binding(scope_type, scope_id, payload.profile)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.post("/api/conversation/blueprint/extract")
+    def extract_conversation_blueprint(payload: BlueprintExtractPayload):
+        return {"blueprint": extract_blueprint(payload.text, payload.current)}
+
+    @app.post("/api/conversation/promote-presence")
+    def promote_presence(payload: PresencePromotionPayload):
+        try:
+            family = workspace.create_entity_family(
+                project_id=payload.project_id, name=payload.name, entity_type="character",
+                description="Promoted from a Story Lab Presence Blueprint.",
+                shared_core={"presence_blueprint": payload.blueprint},
+                create_variant_in_world=None, branch_id=payload.branch_id,
+            )
+            variant = workspace.create_variant(
+                family_id=family["id"], world_id=payload.world_id, branch_id=payload.branch_id,
+                display_name=payload.name, summary="User-designed story Presence.", canon_status="draft",
+                attributes={"presence_blueprint": payload.blueprint}, voice={}, knowledge={}, beliefs={}, current_state={},
+            )
+            return {"family": family, "variant": variant}
+        except (KeyError, ValueError, sqlite3.IntegrityError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+
     @app.get("/api/sessions/{session_id}")
     def get_session(session_id: str):
         try:
@@ -2779,6 +3020,8 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                 tags=payload.tags,
                 workspace_refs=payload.workspace_refs,
                 scratch_mode=payload.scratch_mode,
+                conversation_mode=payload.conversation_mode,
+                conversation_profile=payload.conversation_profile,
                 world_fork_id=payload.world_fork_id,
             )
         except KeyError as exc:
@@ -2897,7 +3140,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                     world_id=payload.world_id,
                     branch_id=payload.branch_id,
                     references=refs,
-                    recipe_id=payload.context_recipe_id,
+                    recipe_id=recipe_for_mode(payload.conversation_mode, payload.context_recipe_id),
                 )
                 if cfg.workspace.context_enabled and (payload.project_id or payload.world_id)
                 else None
@@ -2977,7 +3220,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             ws_context = None
             if cfg.workspace.context_enabled and (project_id or world_id):
                 try:
-                    ws_context = workspace_context.resolve(project_id=project_id, world_id=world_id, branch_id=branch_id, references=refs, recipe_id=payload.context_recipe_id)
+                    ws_context = workspace_context.resolve(project_id=project_id, world_id=world_id, branch_id=branch_id, references=refs, recipe_id=recipe_for_mode(payload.conversation_mode or (existing_session or {}).get("conversation_mode") or "story_writer", payload.context_recipe_id))
                 except (KeyError, ValueError) as exc:
                     yield _sse("error", {"message": f"Workspace context error: {exc}"})
                     return
@@ -2990,19 +3233,39 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                     session_id=(existing_session or {}).get("id"),
                     refs=refs,
                 )
+            conversation_mode = payload.conversation_mode or (existing_session or {}).get("conversation_mode") or "story_writer"
             session_context = ""
             if existing_session is not None and cfg.history.smart_hybrid_continuity and payload.input_mode == "smart_hybrid":
                 context_policy = (ws_context.scope.get("context_policy") if ws_context else {}) or {}
                 requested_turns = context_policy.get("recent_turns", cfg.history.continuity_turns)
                 try: requested_turns = max(1, min(50, int(requested_turns)))
                 except (TypeError, ValueError): requested_turns = cfg.history.continuity_turns
-                session_context = history.build_continuity_context(existing_session["id"], max_turns=requested_turns, max_chars=cfg.history.continuity_chars)
+                if conversation_mode == "story_lab" and not story_lab_requests_prose(payload.prompt):
+                    session_context = history.build_discussion_context(
+                        existing_session["id"], max_turns=max(8, requested_turns),
+                        max_chars=max(16000, cfg.history.continuity_chars),
+                    )
+                else:
+                    session_context = history.build_continuity_context(existing_session["id"], max_turns=requested_turns, max_chars=cfg.history.continuity_chars)
+
+            continuity_context_used = bool(session_context)
+            user_profile = history.get_user_profile()
+            conversation_profile = {
+                **((existing_session or {}).get("conversation_profile") or {}),
+                **(payload.conversation_profile or {}),
+                "scratch_mode": payload.scratch_mode,
+                "user_boundaries": user_profile.get("boundaries") or {},
+                "memory_policy": user_profile.get("memory_policy") or {},
+                "personalization_context": build_personalization_context(user_profile, conversation_mode, payload.prompt),
+            }
+            contract = _conversation_contract(conversation_mode, conversation_profile)
+            session_context = f"{contract}\n\n{session_context}" if session_context else contract
 
             if existing_session is not None:
                 session = existing_session
-                history.update_session(session["id"], project_id=project_id, world_id=world_id, branch_id=branch_id, folder_id=None, workspace_refs=refs, scratch_mode=payload.scratch_mode)
+                history.update_session(session["id"], project_id=project_id, world_id=world_id, branch_id=branch_id, folder_id=None, workspace_refs=refs, scratch_mode=payload.scratch_mode, conversation_mode=conversation_mode, conversation_profile=conversation_profile)
             else:
-                session = history.create_session(prompt=payload.prompt, project_id=project_id, world_id=world_id, branch_id=branch_id, folder_id=None, session_kind="chat", workspace_refs=refs, scratch_mode=payload.scratch_mode)
+                session = history.create_session(prompt=payload.prompt, project_id=project_id, world_id=world_id, branch_id=branch_id, folder_id=None, session_kind="chat", workspace_refs=refs, scratch_mode=payload.scratch_mode, conversation_mode=conversation_mode, conversation_profile=conversation_profile)
 
             run_id = make_run_id(payload.input_mode, payload.reasoning, payload.timezone)
             base = run_id; index = 2
@@ -3015,7 +3278,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             partial_reasoning = ""
             try:
                 streamer = StreamingArlineService(cfg)
-                async for event in streamer.stream(payload.prompt, mode=payload.input_mode, session_context=session_context or None, workspace_context=ws_context, images=payload.images):
+                async for event in streamer.stream(payload.prompt, mode=payload.input_mode, session_context=session_context or None, workspace_context=ws_context, images=payload.images, conversation_mode=conversation_mode):
                     event_type = event.get("type")
                     if event_type == "_prepared":
                         prepared = event["prepared"]
@@ -3030,6 +3293,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                     quality_report = event["quality"]
                     post = bundle.post_validation.to_dict() if bundle.post_validation else {}
                     post["quality_report"] = quality_report
+                    post["conversation_validation"] = validate_user_agency(bundle.story, conversation_profile)
                     saved_cache.put(CachedRun(config=cfg, bundle=bundle, run_id=run_id))
                     lineage = {
                         "application_version": STUDIO_VERSION,
@@ -3057,7 +3321,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                     final_session = history.get_session_meta(session["id"])
                     result = {
                         "run_id": run_id, "session_id": final_session["id"], "session_title": final_session["title"], "turn_id": turn["id"],
-                        "continuity_context_used": bool(session_context), "story": bundle.story,
+                        "continuity_context_used": continuity_context_used, "story": bundle.story,
                         "wcf": bundle.analysis.rendered_context.text, "aif_core": bundle.analysis.aif_core,
                         "narrative_brief": bundle.analysis.narrative_brief.to_dict(), "workspace_context": ws_context.to_dict() if ws_context else {},
                         "context_breakdown": _context_breakdown(cfg, bundle.analysis, session_context=session_context),
@@ -3137,7 +3401,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                     world_id=world_id,
                     branch_id=branch_id,
                     references=refs,
-                    recipe_id=payload.context_recipe_id,
+                    recipe_id=recipe_for_mode(payload.conversation_mode or (existing_session or {}).get("conversation_mode") or "story_writer", payload.context_recipe_id),
                 )
             except (KeyError, ValueError) as exc:
                 raise HTTPException(400, f"Workspace context error: {exc}") from exc
@@ -3151,6 +3415,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                 session_id=(existing_session or {}).get("id"),
                 refs=refs,
             )
+        conversation_mode = payload.conversation_mode or (existing_session or {}).get("conversation_mode") or "story_writer"
         session_context = ""
         if (
             existing_session is not None
@@ -3163,11 +3428,30 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                 requested_turns = max(1, min(50, int(requested_turns)))
             except (TypeError, ValueError):
                 requested_turns = cfg.history.continuity_turns
-            session_context = history.build_continuity_context(
-                existing_session["id"],
-                max_turns=requested_turns,
-                max_chars=cfg.history.continuity_chars,
-            )
+            if conversation_mode == "story_lab" and not story_lab_requests_prose(payload.prompt):
+                session_context = history.build_discussion_context(
+                    existing_session["id"], max_turns=max(8, requested_turns),
+                    max_chars=max(16000, cfg.history.continuity_chars),
+                )
+            else:
+                session_context = history.build_continuity_context(
+                    existing_session["id"],
+                    max_turns=requested_turns,
+                    max_chars=cfg.history.continuity_chars,
+                )
+
+        continuity_context_used = bool(session_context)
+        user_profile = history.get_user_profile()
+        conversation_profile = {
+            **((existing_session or {}).get("conversation_profile") or {}),
+            **(payload.conversation_profile or {}),
+            "scratch_mode": payload.scratch_mode,
+            "user_boundaries": user_profile.get("boundaries") or {},
+            "memory_policy": user_profile.get("memory_policy") or {},
+            "personalization_context": build_personalization_context(user_profile, conversation_mode, payload.prompt),
+        }
+        contract = _conversation_contract(conversation_mode, conversation_profile)
+        session_context = f"{contract}\n\n{session_context}" if session_context else contract
 
         try:
             service = ArlineService(cfg)
@@ -3176,7 +3460,8 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             _validate_prompt_images(payload.images)
             if payload.images and not service.client().vision_supported(cfg.lmstudio.model):
                 raise HTTPException(400, "The selected model does not report vision support")
-            if payload.generation_mode == "beats":
+            story_lab_discussion = conversation_mode == "story_lab" and not story_lab_requests_prose(payload.prompt)
+            if payload.generation_mode == "beats" and not story_lab_discussion:
                 bundle = service.generate_beats(
                     payload.prompt,
                     mode=payload.input_mode,
@@ -3184,6 +3469,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                     workspace_context=ws_context,
                     beat_count=payload.beat_count,
                     beat_tokens=payload.beat_tokens,
+                    conversation_mode=conversation_mode,
                 )
             else:
                 bundle = service.generate(
@@ -3192,6 +3478,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                     session_context=session_context or None,
                     workspace_context=ws_context,
                     images=payload.images,
+                    conversation_mode=conversation_mode,
                 )
         except LMStudioError as exc:
             raise HTTPException(400, str(exc)) from exc
@@ -3209,7 +3496,8 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         saved_cache.put(CachedRun(config=cfg, bundle=bundle, run_id=run_id))
 
         post = bundle.post_validation.to_dict() if bundle.post_validation else {}
-        quality_report = ProseQualityAnalyzer().analyze(bundle.story)
+        post["conversation_validation"] = validate_user_agency(bundle.story, conversation_profile)
+        quality_report = ProseQualityAnalyzer().analyze(bundle.story) if not story_lab_discussion else {"mode": "discussion", "skipped": True}
         post["quality_report"] = quality_report
         if existing_session is not None:
             session = existing_session
@@ -3221,6 +3509,8 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                 folder_id=folder_id,
                 workspace_refs=refs,
                 scratch_mode=payload.scratch_mode,
+                conversation_mode=conversation_mode,
+                conversation_profile=conversation_profile,
             )
         else:
             session = history.create_session(
@@ -3232,6 +3522,8 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                 session_kind="chat",
                 workspace_refs=refs,
                 scratch_mode=payload.scratch_mode,
+                conversation_mode=conversation_mode,
+                conversation_profile=conversation_profile,
             )
 
         lineage = {
@@ -3275,7 +3567,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             "session_id": session["id"],
             "session_title": session["title"],
             "turn_id": turn["id"],
-            "continuity_context_used": bool(session_context),
+            "continuity_context_used": continuity_context_used,
             "story": bundle.story,
             "wcf": bundle.analysis.rendered_context.text,
             "aif_core": bundle.analysis.aif_core,

@@ -9,6 +9,41 @@ export interface AppearanceSettings {
 }
 
 export type JsonMap = Record<string, unknown>;
+export type ConversationMode = "story_writer" | "story_lab" | "interactive" | "analyst" | "character_room";
+export type ExplorationLevel = "grounded" | "open" | "unbound";
+export type PresenceMode = "observer" | "self" | "linked_entity";
+
+export interface ConversationProfile extends JsonMap {
+  exploration?: ExplorationLevel;
+  story_lab_focus?: string;
+  presence?: JsonMap;
+  perspective?: JsonMap;
+  blueprint?: JsonMap;
+  living_session?: JsonMap;
+}
+
+export interface UserProfile extends JsonMap {
+  id?: string;
+  display_name: string;
+  about: string;
+  creative_profile: JsonMap;
+  collaboration: JsonMap;
+  presence_defaults: JsonMap;
+  story_lab: JsonMap;
+  boundaries: JsonMap;
+  memory_policy: JsonMap;
+  personal_details: JsonMap;
+  preferred_names: PreferredName[];
+}
+
+export interface PreferredName {
+  id: string;
+  value: string;
+  context: "default" | "formal" | "casual" | "story_presence";
+  primary: boolean;
+  pronunciation?: string;
+  language?: string;
+}
 
 export interface RuntimeConfig extends JsonMap {
   studio_version: string;
@@ -171,6 +206,9 @@ export interface Session extends JsonMap {
   world_fork_id?: string | null;
   pinned?: boolean;
   scratch_mode?: boolean;
+  conversation_mode?: ConversationMode;
+  conversation_profile?: ConversationProfile;
+  mode_events?: Array<JsonMap>;
   updated_at?: string;
   created_at?: string;
   turns?: Turn[];

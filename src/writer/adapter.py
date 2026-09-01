@@ -36,8 +36,14 @@ class ArlineWriter:
         input_mode: str | None = None,
         reasoning_for_api: str | None | object = _UNSET,
         images: list[str] | None = None,
+        system_prompt_append: str | None = None,
+        system_prompt_override: str | None = None,
     ) -> WriterResult:
-        system = self.config.writer.system_prompt_file.read_text(encoding="utf-8").strip()
+        system = (
+            system_prompt_override.strip()
+            if system_prompt_override
+            else self.config.writer.system_prompt_file.read_text(encoding="utf-8").strip()
+        )
         g = self.config.generation
 
         if g.reasoning != "off":
@@ -46,6 +52,8 @@ class ArlineWriter:
                 guard = guard_path.read_text(encoding="utf-8").strip()
                 if guard:
                     system = f"{system}\n\n{guard}"
+        if system_prompt_append:
+            system = f"{system}\n\n{system_prompt_append.strip()}"
 
         api_reasoning = g.reasoning if reasoning_for_api is _UNSET else reasoning_for_api
         result = self.client.chat(

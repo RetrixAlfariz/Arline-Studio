@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   AlertTriangle,
   AtSign,
   Check,
+  Compass,
   Pin,
   Pencil,
   Ban,
@@ -11,12 +14,14 @@ import {
   Copy,
   CornerUpRight,
   FolderKanban,
+  FlaskConical,
   GitFork,
   GitBranch,
   Globe2,
   Image as ImageIcon,
   LoaderCircle,
   MessageSquareText,
+  Eye,
   Cpu,
   Gauge,
   Layers3,
@@ -28,9 +33,13 @@ import {
   SlidersHorizontal,
   Target,
   Trash2,
+  UserRound,
+  UsersRound,
+  ShieldCheck,
   X,
 } from "lucide-react";
 import { runtimePayload, streamGeneration, studioApi } from "../api";
+import { ArlineSelect, simpleOptions, type ArlineSelectOption } from "../components/ArlineSelect";
 import type {
   CommandDefinition,
   GenerationResult,
@@ -40,6 +49,10 @@ import type {
   Turn,
   JsonMap,
   ModelInfo,
+  ConversationMode,
+  ConversationProfile,
+  UserProfile,
+  WorldBible,
 } from "../types";
 
 interface ChatAttachment {
@@ -51,6 +64,60 @@ interface ChatAttachment {
   saved: boolean;
 }
 
+const MODE_META: Record<ConversationMode, { label: string; description: string; placeholder: string; icon: typeof PenLine; starters: Array<{ title: string; copy: string; prompt: string }> }> = {
+  story_writer: { label: "Story Writer", description: "Write polished story prose", placeholder: "Describe what should happen next…", icon: PenLine, starters: [
+    { title: "Continue the scene", copy: "Move forward while preserving established behavior.", prompt: "Continue the current scene while preserving established character behavior." },
+    { title: "Rewrite a passage", copy: "Shape an existing moment into polished prose.", prompt: "Rewrite the current passage as polished story prose with stronger pacing and voice." },
+    { title: "Check continuity", copy: "Review continuity risks before writing.", prompt: "Check continuity, then suggest the safest way to continue this scene." },
+  ] },
+  story_lab: { label: "Story Lab", description: "Brainstorm story and character design naturally", placeholder: "Talk through a story or character idea…", icon: FlaskConical, starters: [
+    { title: "Talk through an idea", copy: "Develop the strongest part through natural conversation.", prompt: "I have a story idea I want to talk through. Help me understand what is strongest about it and where it may need work." },
+    { title: "Develop a character", copy: "Discuss motivation, friction, and growth together.", prompt: "Help me think through this character naturally. Challenge weak assumptions, but do not write a scene unless I ask." },
+    { title: "Untangle a story problem", copy: "Find what is not working without forcing a menu of options.", prompt: "I am stuck on part of the story. Talk it through with me and help identify the underlying design problem." },
+    { title: "Design My Presence", copy: "Talk through who you want to be inside the story.", prompt: "I want to exist in this story. Talk with me naturally as we design My Presence without making it canon yet." },
+  ] },
+  interactive: { label: "Interactive", description: "Enter the story; Arline runs the world", placeholder: "What do you do?", icon: UserRound, starters: [
+    { title: "Enter current scene", copy: "Step into the active scene with agency protected.", prompt: "Place my active Presence at the edge of the current scene and let me choose what to do." },
+    { title: "Choose Presence", copy: "Decide whether to observe, enter as yourself, or play a character.", prompt: "Help me choose the right Presence for this interaction." },
+    { title: "Resume interaction", copy: "Continue from the latest world state.", prompt: "Resume the interaction from the latest state. Do not invent my dialogue or decisions." },
+  ] },
+  analyst: { label: "Analyst", description: "Inspect without continuing the story", placeholder: "What should Arline inspect?", icon: BrainCircuit, starters: [
+    { title: "Inspect motivation", copy: "Test whether character choices feel earned.", prompt: "Inspect the character motivations in the current scene without continuing it." },
+    { title: "Trace continuity", copy: "Follow facts and state changes across turns.", prompt: "Trace the continuity of the current conversation and flag contradictions with evidence." },
+    { title: "Explain state change", copy: "Diagnose how the scene reached its current state.", prompt: "Explain the important state changes that led to this point. Do not write new prose." },
+  ] },
+  character_room: { label: "Character Room", description: "Explore dialogue chemistry", placeholder: "Which characters should Arline bring into the room?", icon: UsersRound, starters: [
+    { title: "Choose participants", copy: "Select voices for a non-canon room.", prompt: "Help me choose characters for an exploratory Character Room." },
+    { title: "Test chemistry", copy: "Explore friction, warmth, and subtext.", prompt: "Test the chemistry between the selected characters as non-canon exploration." },
+    { title: "Rehearse dialogue", copy: "Try a conversation before committing it.", prompt: "Rehearse a dialogue between the selected characters without changing canon." },
+  ] },
+};
+
+const MODE_OPTIONS: ArlineSelectOption[] = (Object.entries(MODE_META) as Array<[ConversationMode, (typeof MODE_META)[ConversationMode]]>).map(([value, item]) => ({ value, label: item.label, description: item.description, icon: item.icon }));
+
+const DEFAULT_CONVERSATION_PROFILE: ConversationProfile = {
+  exploration: "open",
+  story_lab_focus: "plot",
+  presence: { mode: "observer", display_name: "", identity_style: "story_version", control_policy: "user_directed", persistence: "session" },
+  perspective: { style: "scene_defined", pov_entity_id: null },
+  blueprint: { wanted: [], flexible: [], suggested: [], avoid: [], open_questions: [] },
+  living_session: { current_question: "", emerging_idea: "", decisions: [], open_threads: [], insights: [] },
+};
+
+function deriveLivingSession(prompt: string, response: string, current: JsonMap = {}): JsonMap {
+  const paragraphs = response.split(/\n{2,}/).map((item) => item.replace(/^#+\s*/, "").trim()).filter(Boolean);
+  const questions = Array.from(response.matchAll(/(?:^|[.!]\s+)([^.!?]{12,220}\?)/gm)).map((match) => match[1].trim()).slice(-3);
+  const idea = paragraphs.find((item) => !item.endsWith("?") && item.length > 28)?.slice(0, 360) || prompt.slice(0, 360);
+  return {
+    ...current,
+    current_question: questions.at(-1) || String(current.current_question || prompt),
+    emerging_idea: idea,
+    decisions: Array.isArray(current.decisions) ? current.decisions : [],
+    open_threads: questions.length ? questions : (Array.isArray(current.open_threads) ? current.open_threads : []),
+    insights: Array.isArray(current.insights) ? current.insights : [],
+  };
+}
+
 interface ChatViewProps {
   config: RuntimeConfig;
   activeProjectId: string;
@@ -59,6 +126,7 @@ interface ChatViewProps {
   projectName: string;
   worldName: string;
   branchName: string;
+  worldBible: WorldBible | null;
   activeSession: Session | null;
   commands: CommandDefinition[];
   onConfig: (config: RuntimeConfig) => void;
@@ -81,6 +149,7 @@ export function ChatView({
   projectName,
   worldName,
   branchName,
+  worldBible,
   activeSession,
   commands,
   onConfig,
@@ -102,8 +171,12 @@ export function ChatView({
   const [analysis, setAnalysis] = useState<Record<string, unknown> | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mentions, setMentions] = useState<Array<Record<string, unknown>>>([]);
+  const [mentionsLoading, setMentionsLoading] = useState(false);
+  const [mentionsFailed, setMentionsFailed] = useState(false);
   const [commandMatches, setCommandMatches] = useState<CommandDefinition[]>([]);
   const [scratchMode, setScratchMode] = useState(Boolean(activeSession?.scratch_mode));
+  const [conversationMode, setConversationMode] = useState<ConversationMode>(activeSession?.conversation_mode || "story_writer");
+  const [conversationProfile, setConversationProfile] = useState<ConversationProfile>({ ...DEFAULT_CONVERSATION_PROFILE, ...(activeSession?.conversation_profile || {}) });
   const [runProfiles, setRunProfiles] = useState<JsonMap[]>([]);
   const [recipes, setRecipes] = useState<JsonMap[]>([]);
   const [selectedRecipeId, setSelectedRecipeId] = useState("");
@@ -118,12 +191,27 @@ export function ChatView({
   const [memoryReady, setMemoryReady] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deletingSession, setDeletingSession] = useState(false);
+  const [presenceName, setPresenceName] = useState("");
+  const [blueprintBusy, setBlueprintBusy] = useState(false);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [identityOpen, setIdentityOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
+  const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const turns = useMemo(() => activeSession?.turns || [], [activeSession]);
+  const lastPromptToken = prompt.split(/\s+/).at(-1) || "";
+  const commandTrigger = lastPromptToken.match(/^\/([^\s/]*)$/);
+  const mentionTrigger = lastPromptToken.match(/^@([^\s@]{0,40})$/);
+  const commandQuery = commandTrigger?.[1] ?? null;
+  const mentionQuery = mentionTrigger?.[1] ?? null;
+  const composerPopupMode = commandTrigger ? "commands" : mentionTrigger ? "mentions" : null;
+  const characterVariants = useMemo(() => {
+    const characterFamilies = new Set((worldBible?.families || []).filter((family) => family.entity_type === "character").map((family) => family.id));
+    return (worldBible?.variants || []).filter((variant) => characterFamilies.has(String(variant.family_id || "")) && (!variant.world_id || variant.world_id === activeWorldId));
+  }, [worldBible, activeWorldId]);
 
   useEffect(() => {
     if (!seedPrompt) return;
@@ -138,7 +226,39 @@ export function ChatView({
     setAnalysis(null);
     setReferences((activeSession?.workspace_refs as ReferenceItem[] | undefined) || []);
     setScratchMode(Boolean(activeSession?.scratch_mode));
+    setConversationMode(activeSession?.conversation_mode || "story_writer");
+    setConversationProfile({ ...DEFAULT_CONVERSATION_PROFILE, ...(activeSession?.conversation_profile || {}) });
   }, [activeSession?.id]);
+
+  useEffect(() => {
+    void studioApi.userProfile().then(setUserProfile).catch(() => setUserProfile(null));
+  }, []);
+
+  useEffect(() => {
+    if (activeSession) return;
+    void studioApi.userProfile().then((profile) => {
+      setUserProfile(profile);
+      setConversationMode(String(profile.collaboration?.default_conversation_mode || "story_writer") as ConversationMode);
+      setConversationProfile({
+        ...DEFAULT_CONVERSATION_PROFILE,
+        exploration: String(profile.story_lab?.exploration || "open") as ConversationProfile["exploration"],
+        story_lab_focus: String(profile.story_lab?.focus || "plot"),
+        presence: { ...(DEFAULT_CONVERSATION_PROFILE.presence || {}), ...(profile.presence_defaults || {}), display_name: profile.display_name || "" },
+        perspective: { ...(DEFAULT_CONVERSATION_PROFILE.perspective || {}), style: profile.presence_defaults?.perspective || "scene_defined" },
+      });
+    }).catch(() => undefined);
+  }, [activeSession]);
+
+  useEffect(() => {
+    if (activeSession || (!activeBranchId && !activeWorldId)) return;
+    const loadScopedPresence = async () => {
+      const branch = activeBranchId ? await studioApi.presenceBinding("branch", activeBranchId).catch(() => ({} as JsonMap)) : {} as JsonMap;
+      const world = activeWorldId ? await studioApi.presenceBinding("world", activeWorldId).catch(() => ({} as JsonMap)) : {} as JsonMap;
+      const scoped = ((branch.profile as JsonMap | undefined) && Object.keys(branch.profile as JsonMap).length ? branch.profile : world.profile) as ConversationProfile | undefined;
+      if (scoped && Object.keys(scoped).length) setConversationProfile((current) => ({ ...current, ...scoped }));
+    };
+    void loadScopedPresence();
+  }, [activeSession, activeBranchId, activeWorldId]);
 
   useEffect(() => {
     if (!activeProjectId) return;
@@ -202,25 +322,32 @@ export function ChatView({
   }, [deleteConfirmOpen, deletingSession]);
 
   useEffect(() => {
-    const lastToken = prompt.split(/\s+/).at(-1) || "";
-    if (lastToken.startsWith("/") && lastToken.length > 1) {
-      const needle = lastToken.slice(1).toLowerCase();
-      setCommandMatches(commands.filter((command) => command.id.toLowerCase().includes(needle) || command.aliases?.some((alias) => alias.toLowerCase().includes(needle))).slice(0, 8));
+    if (commandQuery !== null) {
+      const needle = commandQuery.toLowerCase();
+      setCommandMatches(commands.filter((command) => {
+        const searchable = [command.id, command.label, command.title, command.description, command.help, command.usage, ...(command.aliases || [])];
+        return searchable.some((value) => String(value || "").toLowerCase().includes(needle));
+      }).slice(0, 8));
     } else {
       setCommandMatches([]);
     }
-    const match = lastToken.match(/^@([^\s@]{1,40})$/);
-    if (!match) {
+    if (mentionQuery === null) {
       setMentions([]);
+      setMentionsLoading(false);
+      setMentionsFailed(false);
       return;
     }
+    let cancelled = false;
+    setMentionsLoading(true);
+    setMentionsFailed(false);
     const timer = window.setTimeout(() => {
-      void studioApi.mentions(match[1], activeProjectId, activeWorldId, activeBranchId)
-        .then((result) => setMentions(result.results || []))
-        .catch(() => setMentions([]));
-    }, 180);
-    return () => window.clearTimeout(timer);
-  }, [prompt, commands, activeProjectId, activeWorldId, activeBranchId]);
+      void studioApi.mentions(mentionQuery, activeProjectId, activeWorldId, activeBranchId)
+        .then((result) => { if (!cancelled) setMentions(result.results || []); })
+        .catch(() => { if (!cancelled) { setMentions([]); setMentionsFailed(true); } })
+        .finally(() => { if (!cancelled) setMentionsLoading(false); });
+    }, mentionQuery ? 180 : 0);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [commandQuery, mentionQuery, commands, activeProjectId, activeWorldId, activeBranchId]);
 
   const selectCommand = (command: CommandDefinition) => {
     const chunks = prompt.split(/\s+/);
@@ -271,6 +398,7 @@ export function ChatView({
     const controller = new AbortController();
     abortRef.current = controller;
     let runSessionId = activeSession?.id;
+    let streamedResponse = "";
     const payload = runtimePayload(config, {
       projectId: activeProjectId,
       worldId: activeWorldId,
@@ -278,6 +406,17 @@ export function ChatView({
       sessionId: activeSession?.id,
     }, prompt.trim(), references);
     payload.scratch_mode = scratchMode;
+    payload.conversation_mode = conversationMode;
+    payload.conversation_profile = conversationProfile;
+    payload.pov_variant_id = ((conversationProfile.perspective || {}) as JsonMap).pov_entity_id || null;
+    const contextVariants = Array.from(new Set([
+      String(((conversationProfile.presence || {}) as JsonMap).entity_variant_id || ""),
+      ...(((conversationProfile.participants as string[] | undefined) || [])),
+    ].filter(Boolean)));
+    payload.references = [
+      ...((payload.references as JsonMap[] | undefined) || []),
+      ...contextVariants.map((id) => ({ type: "entity_variant", id, label: characterVariants.find((item) => item.id === id)?.display_name || id, mode: "deep" })),
+    ];
     payload.context_recipe_id = selectedRecipeId || null;
     payload.images = attachments.map((attachment) => attachment.dataUrl);
     const sentPrompt = prompt.trim();
@@ -300,6 +439,7 @@ export function ChatView({
             }
           }
         } else if (event.type === "answer.delta") {
+          streamedResponse += String(event.data.content || "");
           setLiveText((value) => value + String(event.data.content || ""));
         } else if (event.type === "reasoning.delta") {
           setLiveReasoning((value) => value + String(event.data.content || ""));
@@ -321,7 +461,19 @@ export function ChatView({
         }
       }, controller.signal);
       const finalSessionId = String(result?.session_id || runSessionId || "");
-      if (finalSessionId) await refreshSession(finalSessionId);
+      if (finalSessionId && conversationMode === "story_lab") {
+        const nextLivingSession = deriveLivingSession(
+          sentPrompt,
+          String(result?.story || streamedResponse),
+          (conversationProfile.living_session || {}) as JsonMap,
+        );
+        const nextProfile = { ...conversationProfile, living_session: nextLivingSession };
+        setConversationProfile(nextProfile);
+        await studioApi.updateSession(finalSessionId, { conversation_profile: nextProfile });
+        await refreshSession(finalSessionId);
+      } else if (finalSessionId) {
+        await refreshSession(finalSessionId);
+      }
       setLiveText("");
       setLiveReasoning("");
       setAttachments([]);
@@ -382,7 +534,8 @@ export function ChatView({
 
   const patchActiveSession = async (payload: Record<string, unknown>) => {
     if (!activeSession) return;
-    onSession(await studioApi.updateSession(activeSession.id, payload));
+    await studioApi.updateSession(activeSession.id, payload);
+    onSession(await studioApi.session(activeSession.id));
     await onSessionsChanged();
   };
 
@@ -397,10 +550,65 @@ export function ChatView({
     if (activeSession) await patchActiveSession({ scratch_mode: next });
   };
 
-  const showReferencePicker = async () => {
-    const result = await studioApi.mentions("", activeProjectId, activeWorldId, activeBranchId);
-    setMentions(result.results || []);
-    setPrompt((value) => `${value}${value && !value.endsWith(" ") ? " " : ""}@`);
+  const changeConversation = async (mode: ConversationMode) => {
+    setConversationMode(mode);
+    if (activeSession) await patchActiveSession({ conversation_mode: mode, conversation_profile: conversationProfile });
+  };
+
+  const patchConversationProfile = async (patch: ConversationProfile) => {
+    const next = { ...conversationProfile, ...patch };
+    setConversationProfile(next);
+    if (activeSession) await patchActiveSession({ conversation_profile: next });
+  };
+
+  const patchLivingSession = async (patch: JsonMap) => {
+    const current = (conversationProfile.living_session || {}) as JsonMap;
+    await patchConversationProfile({ living_session: { ...current, ...patch } });
+  };
+
+  const persistPresence = async (scope: "world" | "branch") => {
+    const scopeId = scope === "branch" ? activeBranchId : activeWorldId;
+    if (!scopeId) return;
+    const next = { ...conversationProfile, presence: { ...(conversationProfile.presence || {}), persistence: scope } };
+    setConversationProfile(next);
+    await studioApi.savePresenceBinding(scope, scopeId, next);
+    if (activeSession) await patchActiveSession({ conversation_profile: next });
+  };
+
+  const extractPresenceBlueprint = async () => {
+    if (!prompt.trim() || blueprintBusy) return;
+    setBlueprintBusy(true);
+    try {
+      const result = await studioApi.extractBlueprint(prompt.trim(), (conversationProfile.blueprint || {}) as JsonMap);
+      await patchConversationProfile({ blueprint: result.blueprint });
+    } finally {
+      setBlueprintBusy(false);
+    }
+  };
+
+  const promotePresence = async () => {
+    const name = presenceName.trim() || String((conversationProfile.presence as JsonMap | undefined)?.display_name || "My Presence");
+    if (!activeProjectId || !activeWorldId) return;
+    const result = await studioApi.promotePresence({ project_id: activeProjectId, world_id: activeWorldId, branch_id: activeBranchId || null, name, blueprint: conversationProfile.blueprint || {} });
+    const variantId = String(result.variant.id || "");
+    await patchConversationProfile({ presence: { ...(conversationProfile.presence || {}), mode: "linked_entity", display_name: name, entity_variant_id: variantId, identity_style: "canonical" } });
+    setPresenceName("");
+  };
+
+  const approveSuggestion = async (value: string, target: "wanted" | "flexible") => {
+    const current = (conversationProfile.blueprint || {}) as JsonMap;
+    const suggested = ((current.suggested as string[] | undefined) || []).filter((item) => item !== value);
+    const destination = Array.from(new Set([...(current[target] as string[] | undefined || []), value]));
+    await patchConversationProfile({ blueprint: { ...current, suggested, [target]: destination } });
+  };
+
+  const showReferencePicker = () => {
+    setPrompt((value) => {
+      const activeToken = value.split(/\s+/).at(-1) || "";
+      if (/^@[^\s@]{0,40}$/.test(activeToken)) return value;
+      return `${value}${value && !value.endsWith(" ") ? " " : ""}@`;
+    });
+    window.setTimeout(() => composerInputRef.current?.focus(), 0);
   };
 
   const addImages = async (files: File[]) => {
@@ -463,8 +671,25 @@ export function ChatView({
     await studioApi.createFact({ project_id: activeProjectId, world_id: activeWorldId || null, branch_id: branchIdForCanon(activeBranchId), owner_type: ownerId === activeWorldId ? "world" : "entity_family", owner_id: ownerId, path, value: turn.story || "", status: "draft", authority: "user_explicit", source_type: "turn", source_id: turn.id });
   };
 
+  const modeMeta = MODE_META[conversationMode];
+  const ModeIcon = modeMeta.icon;
+  const presence = (conversationProfile.presence || DEFAULT_CONVERSATION_PROFILE.presence || {}) as JsonMap;
+  const perspective = (conversationProfile.perspective || DEFAULT_CONVERSATION_PROFILE.perspective || {}) as JsonMap;
+  const blueprint = (conversationProfile.blueprint || DEFAULT_CONVERSATION_PROFILE.blueprint || {}) as JsonMap;
+  const livingSession = (conversationProfile.living_session || DEFAULT_CONVERSATION_PROFILE.living_session || {}) as JsonMap;
+  const preferredName = userProfile?.preferred_names?.find((item) => item.context === "casual")?.value
+    || userProfile?.preferred_names?.find((item) => item.primary)?.value
+    || userProfile?.display_name
+    || "You";
+  const linkedSelfName = String((userProfile?.presence_defaults || {}).display_name || preferredName);
+  const presenceSuggestion = /\b(?:what if i was|i want to be in|put me in|play as|enter the story)\b/i.test(prompt);
+  const timelineItems = [
+    ...turns.map((turn, index) => ({ kind: "turn" as const, createdAt: String(turn.created_at || ""), key: turnKey(turn, index), turn, index })),
+    ...(activeSession?.mode_events || []).map((event, index) => ({ kind: "mode" as const, createdAt: String(event.created_at || ""), key: String(event.id || `mode-${index}`), event })),
+  ].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+
   return (
-    <div className="chat-workspace">
+    <div className={`chat-workspace ${["story_lab", "interactive", "character_room"].includes(conversationMode) ? "has-conversation-context" : ""} ${conversationMode === "story_lab" ? "is-story-lab" : ""} ${conversationMode === "story_lab" && conversationProfile.story_lab_focus === "my_presence" ? "has-presence-studio" : ""}`}>
       <section className="chat-header">
         <div className="chat-header-identity">
           <span className="chat-header-glyph" aria-hidden="true"><MessageSquareText size={18} /></span>
@@ -485,15 +710,61 @@ export function ChatView({
           {activeSession && <button onClick={() => void patchActiveSession({ pinned: !activeSession.pinned })}><Pin size={14} />{activeSession.pinned ? "Unpin" : "Pin"}</button>}
           {activeSession && <button onClick={fork}><GitFork size={14} />Fork</button>}
           {activeSession && <button className="danger" onClick={() => setDeleteConfirmOpen(true)}><Trash2 size={14} />Trash</button>}
+          <div className="conversation-mode-control">
+            <span>Conversation</span>
+            <ArlineSelect ariaLabel="Conversation mode" density="mode" value={conversationMode} options={MODE_OPTIONS} onValueChange={(value) => void changeConversation(value as ConversationMode)} menuMinWidth={330} />
+          </div>
           <div className="chat-mode-control">
             <span>Context mode</span>
-            <div className="chat-mode-switch" aria-label="Conversation mode">
-              <button aria-pressed={!scratchMode} className={!scratchMode ? "active" : ""} onClick={() => scratchMode && void toggleScratch()}><BrainCircuit size={13} />Canon-aware</button>
-              <button aria-pressed={scratchMode} className={scratchMode ? "active" : ""} onClick={() => !scratchMode && void toggleScratch()}><Ban size={13} />Scratch</button>
+            <div className="chat-mode-switch" aria-label="Context mode">
+              <button title="Canon-aware context" aria-pressed={!scratchMode} className={!scratchMode ? "active" : ""} onClick={() => scratchMode && void toggleScratch()}><BrainCircuit size={13} /><span>Canon-aware</span></button>
+              <button title="Scratch context" aria-pressed={scratchMode} className={scratchMode ? "active" : ""} onClick={() => !scratchMode && void toggleScratch()}><Ban size={13} /><span>Scratch</span></button>
             </div>
           </div>
         </div>
       </section>
+
+      {(["story_lab", "interactive", "character_room"] as ConversationMode[]).includes(conversationMode) && <section className="conversation-context-bar" aria-label={`${modeMeta.label} controls`}>
+        {conversationMode === "story_lab" ? <>
+          <div className="story-lab-identity">
+            <button className="story-lab-you" onClick={() => setIdentityOpen((value) => !value)}><UserRound size={13} /><span>You: {preferredName}</span><small>Author</small><ChevronDown size={12} /></button>
+            <span>Arline knows you from Personal profile; <strong>@{linkedSelfName.replaceAll(" ", "_")}</strong> is your story projection.</span>
+            {identityOpen && <div className="identity-popover">
+              <header><strong>What Arline knows</strong><button onClick={() => setIdentityOpen(false)}><X size={13} /></button></header>
+              <article><ShieldCheck size={15} /><span><strong>Private profile</strong><small>{userProfile?.about || "Personal details remain permission-controlled."}</small></span></article>
+              <article><UserRound size={15} /><span><strong>Story projection · @{linkedSelfName.replaceAll(" ", "_")}</strong><small>{String((userProfile?.presence_defaults || {}).entity_variant_id ? "Connected to a Library entity" : "Create or link one in Personalization")}</small></span></article>
+              <article><MessageSquareText size={15} /><span><strong>Current session</strong><small>Ideas and decisions from this Story Lab chat only.</small></span></article>
+            </div>}
+          </div>
+          <label><span>Focus</span><ArlineSelect density="compact" ariaLabel="Story Lab focus" value={String(conversationProfile.story_lab_focus || "plot")} options={simpleOptions([["plot", "Plot"], ["character", "Character"], ["world", "World"], ["relationship", "Relationship"], ["scene", "Scene"], ["my_presence", "My Presence"]])} onValueChange={(story_lab_focus) => void patchConversationProfile({ story_lab_focus })} /></label>
+          <label><span>Exploration</span><ArlineSelect density="compact" ariaLabel="Exploration" value={String(conversationProfile.exploration || "open")} options={simpleOptions([["grounded", "Grounded"], ["open", "Open"], ["unbound", "Unbound"]])} onValueChange={(exploration) => void patchConversationProfile({ exploration: exploration as ConversationProfile["exploration"] })} /></label>
+          <p><FlaskConical size={12} />Ideas stay exploratory until you explicitly stage or promote them.</p>
+        </> : conversationMode === "interactive" ? <>
+          <label><span>Presence</span><ArlineSelect density="compact" ariaLabel="Presence" value={String(presence.mode || "observer")} options={simpleOptions([["observer", "Observer"], ["self", "As myself"], ["linked_entity", "Play as character"]])} onValueChange={(mode) => void patchConversationProfile({ presence: { ...presence, mode } })} /></label>
+          {presence.mode === "self" && <label className="presence-name"><span>Playing as</span><input value={String(presence.display_name || "")} onChange={(event) => setConversationProfile((current) => ({ ...current, presence: { ...(current.presence || {}), display_name: event.target.value } }))} onBlur={() => void patchConversationProfile({ presence })} placeholder="Your story name" /></label>}
+          {presence.mode === "linked_entity" && <label><span>Character</span><ArlineSelect density="compact" ariaLabel="Character" value={String(presence.entity_variant_id || "")} options={[{ value: "", label: "Choose from Library…" }, ...characterVariants.map((variant) => ({ value: variant.id, label: variant.display_name || variant.id }))]} onValueChange={(entity_variant_id) => { const variant = characterVariants.find((item) => item.id === entity_variant_id); void patchConversationProfile({ presence: { ...presence, entity_variant_id, display_name: variant?.display_name || "", identity_style: "canonical" } }); }} /></label>}
+          {presence.mode === "linked_entity" && <label><span>Embodiment</span><ArlineSelect density="compact" ariaLabel="Embodiment" value={String(presence.identity_style || "canonical")} options={simpleOptions([["canonical", "Canonical"], ["blended", "Blended"], ["avatar", "Avatar"], ["loose", "Loose"]])} onValueChange={(identity_style) => void patchConversationProfile({ presence: { ...presence, identity_style } })} /></label>}
+          <label><span>POV</span><ArlineSelect density="compact" ariaLabel="Point of view" value={String(perspective.style || "scene_defined")} options={simpleOptions([["scene_defined", "Scene-defined"], ["first", "First person"], ["second", "Second person"], ["third_limited", "Third limited"], ["omniscient", "Omniscient"]])} onValueChange={(style) => void patchConversationProfile({ perspective: { ...perspective, style } })} /></label>
+          <label><span>POV entity</span><ArlineSelect density="compact" ariaLabel="POV entity" value={String(perspective.pov_entity_id || "")} options={[{ value: "", label: "Scene default" }, ...characterVariants.map((variant) => ({ value: variant.id, label: variant.display_name || variant.id }))]} onValueChange={(pov_entity_id) => void patchConversationProfile({ perspective: { ...perspective, pov_entity_id: pov_entity_id || null } })} /></label>
+          <label><span>Remember</span><ArlineSelect density="compact" ariaLabel="Presence persistence" value={String(presence.persistence || "session")} options={simpleOptions([["session", "This chat"], ["branch", "This branch"], ["world", "This world"]])} onValueChange={(persistence) => persistence === "session" ? void patchConversationProfile({ presence: { ...presence, persistence: "session" } }) : void persistPresence(persistence as "world" | "branch")} /></label>
+          <span className="agency-badge"><ShieldCheck size={12} />Agency: user-directed</span>
+        </> : <><label><span>Participants</span><ArlineSelect density="compact" ariaLabel="Add participant" value="" options={[{ value: "", label: "Add from Library…" }, ...characterVariants.map((variant) => ({ value: variant.id, label: variant.display_name || variant.id }))]} onValueChange={(value) => { const participants = Array.from(new Set([...(conversationProfile.participants as string[] | undefined || []), value])).filter(Boolean); void patchConversationProfile({ participants }); }} /></label><span className="agency-badge"><FlaskConical size={12} />Non-canon rehearsal</span>{((conversationProfile.participants as string[] | undefined) || []).map((id) => <button className="participant-chip" key={id} onClick={() => void patchConversationProfile({ participants: ((conversationProfile.participants as string[]) || []).filter((item) => item !== id) })}>{characterVariants.find((item) => item.id === id)?.display_name || id}<X size={10} /></button>)}</>}
+      </section>}
+
+      {conversationMode === "story_lab" && <aside className="living-session-panel" aria-label="Living session">
+        <header><div><span>Living session</span><strong>{activeSession?.title || "Untitled exploration"}</strong></div><span className="session-live-dot">Live</span></header>
+        <section><label><Target size={13} />Current question</label><textarea value={String(livingSession.current_question || "What are we trying to understand?")} onChange={(event) => setConversationProfile((current) => ({ ...current, living_session: { ...(current.living_session || {}), current_question: event.target.value } }))} onBlur={() => void patchLivingSession({ current_question: String(((conversationProfile.living_session || {}) as JsonMap).current_question || "") })} /></section>
+        <section><label><Sparkles size={13} />Emerging idea</label><textarea value={String(livingSession.emerging_idea || "The strongest direction will appear here as you talk.")} onChange={(event) => setConversationProfile((current) => ({ ...current, living_session: { ...(current.living_session || {}), emerging_idea: event.target.value } }))} onBlur={() => void patchLivingSession({ emerging_idea: String(((conversationProfile.living_session || {}) as JsonMap).emerging_idea || "") })} /></section>
+        <section><label><Check size={13} />Decisions</label>{((livingSession.decisions as string[] | undefined) || []).map((item) => <p className="session-decision" key={item}><Check size={11} />{item}</p>)}{!((livingSession.decisions as string[] | undefined) || []).length && <p className="session-empty">Nothing locked in yet.</p>}</section>
+        <section><label><Compass size={13} />Open threads</label>{((livingSession.open_threads as string[] | undefined) || []).map((item) => <button className="session-thread" key={item} onClick={() => setPrompt(item)}>{item}</button>)}{!((livingSession.open_threads as string[] | undefined) || []).length && <p className="session-empty">Questions will collect here.</p>}</section>
+        <footer><small>Session notes are exploratory and never become canon automatically.</small></footer>
+      </aside>}
+
+      {conversationMode === "story_lab" && conversationProfile.story_lab_focus === "my_presence" && <section className="presence-studio-panel">
+        <header><div><strong>My Presence Blueprint</strong><small>Creative intent only — nothing here becomes canon automatically.</small></div><button disabled={!prompt.trim() || blueprintBusy} onClick={() => void extractPresenceBlueprint()}><Sparkles size={13} />{blueprintBusy ? "Extracting…" : "Extract from prompt"}</button></header>
+        <div className="blueprint-columns">{(["wanted", "flexible", "suggested", "avoid"] as const).map((bucket) => <article key={bucket}><h3>{bucket}</h3>{((blueprint[bucket] as string[] | undefined) || []).map((item) => <div key={item}><span>{item}</span>{bucket === "suggested" && <><button onClick={() => void approveSuggestion(item, "wanted")} title="Move to wanted"><Check size={11} /></button><button onClick={() => void approveSuggestion(item, "flexible")} title="Move to flexible"><Compass size={11} /></button></>}</div>)}{!((blueprint[bucket] as string[] | undefined) || []).length && <p>None yet</p>}</article>)}</div>
+        <footer><input value={presenceName} onChange={(event) => setPresenceName(event.target.value)} placeholder="Character name for promotion" /><button onClick={() => void promotePresence()}><UserRound size={13} />Save as Library character</button><button className="primary" onClick={() => { void patchConversationProfile({ presence: { ...presence, mode: "self", control_policy: "user_directed" } }); void changeConversation("interactive"); }}><Send size={13} />Enter the story</button></footer>
+      </section>}
 
       <div
         ref={viewportRef}
@@ -507,28 +778,31 @@ export function ChatView({
           <div className="chat-empty">
             <span className="brand-mark chat-empty-brand-mark" aria-hidden="true" />
             <span className="chat-empty-scope"><Target size={12} />{worldName} / {branchName}</span>
-            <h2>Start inside your story scope</h2>
-            <p>Continue the active scene, inspect canon, or give Arline an explicit direction. References and memory stay grounded in this world and branch.</p>
+            <h2>{modeMeta.label}</h2>
+            <p>{modeMeta.description}. References and memory stay grounded in {worldName} / {branchName}; the active Context Mode remains independent.</p>
             <div className="starter-grid">
-              <button onClick={() => setPrompt("Continue the current scene while preserving established character behavior.")}><PenLine size={18} /><span><strong>Continue the scene</strong><small>Move the active scene forward without breaking established behavior.</small></span></button>
-              <button onClick={() => setPrompt("/intuition What is the strongest unresolved narrative pressure right now?")}><BrainCircuit size={18} /><span><strong>Inspect story pressure</strong><small>Surface unresolved tension, likely beats, and uncertainty.</small></span></button>
-              <button onClick={() => setPrompt("Summarize the active scene state and identify likely continuity risks.")}><Check size={18} /><span><strong>Check continuity</strong><small>Review the current scope for contradictions before writing.</small></span></button>
+              {modeMeta.starters.map((starter) => <button key={starter.title} onClick={() => setPrompt(starter.prompt)}><ModeIcon size={18} /><span><strong>{starter.title}</strong><small>{starter.copy}</small></span></button>)}
             </div>
           </div>
         ) : (
           <div className="turn-list">
-            {turns.map((turn, index) => (
-              <article className="turn-block" key={turnKey(turn, index)}>
-                <div className="user-turn"><div>{turn.user_prompt || ""}</div></div>
+            {timelineItems.map((item) => item.kind === "mode" ? <div className="mode-transition-marker" key={item.key}><span /><strong>{MODE_META[String(item.event.from || "story_writer") as ConversationMode]?.label || String(item.event.from || "Story Writer")}</strong><ChevronDown size={11} /><strong>{MODE_META[String(item.event.to || "story_writer") as ConversationMode]?.label || String(item.event.to || "Story Writer")}</strong><small>{item.createdAt}</small><span /></div> : (
+              <article className="turn-block" key={item.key}>
+                <div className="user-turn">{conversationMode === "story_lab" ? <div className="discussion-user-turn"><span>{preferredName.slice(0, 1).toUpperCase()}</span><div><strong>{preferredName}</strong><p>{item.turn.user_prompt || ""}</p></div></div> : <div>{item.turn.user_prompt || ""}</div>}</div>
                 <div className="assistant-turn">
-                  <div className="assistant-meta"><span>Arline</span><small>{turn.model || "local model"}</small><em>{turn.run_id || ""}</em></div>
-                  <StoryText text={turn.story || ""} />
+                  <div className="assistant-meta">{conversationMode === "story_lab" && <i className="brand-mark discussion-arline-mark" aria-hidden="true" />}<span>Arline</span><small>{item.turn.model || "local model"}</small><em>{item.turn.run_id || ""}</em></div>
+                  <StoryText text={item.turn.story || ""} discussion={conversationMode === "story_lab"} />
                   <div className="turn-actions">
-                    <button onClick={() => void navigator.clipboard.writeText(turn.story || "")}><Copy size={13} />Copy</button>
-                    <button onClick={() => onInspect("Turn data", turn)}><CornerUpRight size={13} />Inspect</button>
-                    <button onClick={() => void reviewTurn(turn, "accepted")}><Check size={13} />Accept</button>
-                    <button onClick={() => void reviewTurn(turn, "rejected")}><Ban size={13} />Reject</button>
-                    <button onClick={() => void stageTurn(turn)}><Sparkles size={13} />Stage canon</button>
+                    <button onClick={() => void navigator.clipboard.writeText(item.turn.story || "")}><Copy size={13} />Copy</button>
+                    <button onClick={() => onInspect("Turn data", item.turn)}><CornerUpRight size={13} />Inspect</button>
+                    {conversationMode === "story_lab" ? <>
+                      <button onClick={() => { const insight = (item.turn.story || "").split(/\n{2,}/)[0].slice(0, 300); void patchLivingSession({ emerging_idea: insight, insights: Array.from(new Set([...(livingSession.insights as string[] | undefined || []), insight])) }); }}><Sparkles size={13} />Keep as insight</button>
+                      <button onClick={() => setPrompt(`Write a scene draft from this Story Lab direction:\n\n${String(livingSession.emerging_idea || item.turn.story || "")}`)}><PenLine size={13} />Draft from this</button>
+                    </> : <>
+                      <button onClick={() => void reviewTurn(item.turn, "accepted")}><Check size={13} />Accept</button>
+                      <button onClick={() => void reviewTurn(item.turn, "rejected")}><Ban size={13} />Reject</button>
+                      <button onClick={() => void stageTurn(item.turn)}><Sparkles size={13} />Stage canon</button>
+                    </>}
                   </div>
                 </div>
               </article>
@@ -542,7 +816,7 @@ export function ChatView({
               <article className="turn-block live-turn">
                 <div className="assistant-turn">
                   <div className="assistant-meta"><span>Arline</span><small>{stage || "Generating"}</small><LoaderCircle size={13} className="spin" /></div>
-                  {liveText ? <StoryText text={liveText} /> : <div className="generation-placeholder">{stage || "Preparing generation…"}</div>}
+                  {liveText ? <StoryText text={liveText} discussion={conversationMode === "story_lab"} /> : <div className="generation-placeholder">{stage || (conversationMode === "story_lab" ? "Preparing discussion…" : "Preparing generation…")}</div>}
                   {liveReasoning && <details><summary>Reasoning stream</summary><pre>{liveReasoning}</pre></details>}
                 </div>
               </article>
@@ -554,7 +828,10 @@ export function ChatView({
       </div>
 
       <div className="composer-zone">
+        {presenceSuggestion && conversationMode !== "interactive" && <div className="presence-suggestion"><UserRound size={15} /><span><strong>It sounds like you want to enter the story.</strong><small>Switching is always your choice.</small></span><button onClick={() => { void patchConversationProfile({ presence: { ...presence, mode: "self", control_policy: "user_directed" } }); void changeConversation("interactive"); }}>Enter as myself</button><button onClick={() => { void patchConversationProfile({ presence: { ...presence, mode: "linked_entity", control_policy: "user_directed" } }); void changeConversation("interactive"); }}>Choose character</button></div>}
         <div className="context-strip" aria-label="Active conversation context">
+          <span className="ready"><strong>Mode</strong>{modeMeta.label}</span>
+          {conversationMode === "interactive" && <span><strong>Presence</strong>{presence.mode === "self" ? String(presence.display_name || "Myself") : presence.mode === "linked_entity" ? "Linked character" : "Observer"}</span>}
           <span><strong>Scope</strong>{worldName} / {branchName}</span>
           <span><strong>Scene</strong>{activeScene || "None selected"}</span>
           <span><strong>Pinned refs</strong>{references.length}</span>
@@ -576,18 +853,27 @@ export function ChatView({
           onDragLeave={(event) => event.currentTarget.classList.remove("dragging")}
           onDrop={(event) => { event.preventDefault(); event.currentTarget.classList.remove("dragging"); void addImages(Array.from(event.dataTransfer.files)); }}
         >
-          {(commandMatches.length > 0 || mentions.length > 0) && (
-            <div className="composer-popup">
-              {commandMatches.map((command) => (
+          {composerPopupMode && (
+            <div className="composer-popup" role="listbox" aria-label={composerPopupMode === "commands" ? "Command suggestions" : "Reference suggestions"}>
+              {composerPopupMode === "commands" && commandMatches.map((command) => (
                 <button key={command.id} onMouseDown={(event) => event.preventDefault()} onClick={() => selectCommand(command)}>
                   <span className="popup-symbol">/</span><span><strong>/{command.id}</strong><small>{command.description || command.help || command.label || "Command"}</small></span>
                 </button>
               ))}
-              {mentions.map((item) => (
+              {composerPopupMode === "mentions" && mentions.map((item) => (
                 <button key={`${String(item.type)}:${String(item.id)}`} onMouseDown={(event) => event.preventDefault()} onClick={() => selectMention(item)}>
                   <span className="popup-symbol">@</span><span><strong>{String(item.label || item.name || item.id)}</strong><small>{String(item.subtitle || item.type || "reference")}</small></span>
                 </button>
               ))}
+              {composerPopupMode === "commands" && commandMatches.length === 0 && (
+                <div className="composer-popup-status"><span className="popup-symbol">/</span><span><strong>No matching commands</strong><small>Try a command name such as /continue or /rewrite.</small></span></div>
+              )}
+              {composerPopupMode === "mentions" && mentionsLoading && mentions.length === 0 && (
+                <div className="composer-popup-status"><LoaderCircle className="spin" size={15} /><span><strong>Finding references…</strong><small>Searching this story scope.</small></span></div>
+              )}
+              {composerPopupMode === "mentions" && !mentionsLoading && mentions.length === 0 && (
+                <div className="composer-popup-status"><AtSign size={15} /><span><strong>{mentionsFailed ? "References could not be loaded" : "No matching references"}</strong><small>{mentionsFailed ? "Check the Studio connection and try again." : "Try another entity, scene, document, or world name."}</small></span></div>
+              )}
             </div>
           )}
 
@@ -606,9 +892,20 @@ export function ChatView({
           )}
 
           <textarea
+            ref={composerInputRef}
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
             onKeyDown={(event) => {
+              if ((event.key === "Enter" || event.key === "Tab") && composerPopupMode === "commands" && commandMatches[0]) {
+                event.preventDefault();
+                selectCommand(commandMatches[0]);
+                return;
+              }
+              if ((event.key === "Enter" || event.key === "Tab") && composerPopupMode === "mentions" && mentions[0]) {
+                event.preventDefault();
+                selectMention(mentions[0]);
+                return;
+              }
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 void generate();
@@ -618,7 +915,7 @@ export function ChatView({
               const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
               if (files.length) void addImages(files);
             }}
-            placeholder="Message Arline…"
+            placeholder={modeMeta.placeholder}
             spellCheck
             rows={1}
           />
@@ -627,7 +924,7 @@ export function ChatView({
             <div className="composer-left">
               <input ref={imageInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden onChange={(event) => { void addImages(Array.from(event.target.files || [])); event.currentTarget.value = ""; }} />
               <button title="Attach image" onClick={() => imageInputRef.current?.click()}><Paperclip size={15} /><span>Image</span></button>
-              <button title="Reference canon" onClick={() => void showReferencePicker()}><AtSign size={15} /><span>Reference</span></button>
+              <button title="Reference canon" onClick={showReferencePicker}><AtSign size={15} /><span>Reference</span></button>
               <button className="profile-button" onClick={() => setSettingsOpen((value) => !value)}>
                 <Sparkles size={13} /><span>{config.input_mode === "smart_hybrid" ? "Smart Hybrid" : config.input_mode} · {Math.round((config.visible_output_tokens || 4096) / 1024)}K</span><ChevronDown size={12} />
               </button>
@@ -661,7 +958,7 @@ export function ChatView({
               <div className="run-settings-grid">
                 <section className="run-settings-section compact">
                   <div className="run-setting-heading"><span><Sparkles size={13} />Reasoning</span><small>Model deliberation</small></div>
-                  <select aria-label="Reasoning mode" value={config.reasoning} onChange={(event) => onConfig({ ...config, reasoning: event.target.value })}>{(config.reasoning_modes || ["off", "on", "low", "medium", "high"]).map((value) => <option key={value} value={value}>{value === "off" ? "Off" : value.charAt(0).toUpperCase() + value.slice(1)}</option>)}</select>
+                  <ArlineSelect density="compact" ariaLabel="Reasoning mode" value={config.reasoning} options={(config.reasoning_modes || ["off", "on", "low", "medium", "high"]).map((value) => ({ value, label: value === "off" ? "Off" : value.charAt(0).toUpperCase() + value.slice(1) }))} onValueChange={(reasoning) => onConfig({ ...config, reasoning })} />
                 </section>
                 <section className="run-settings-section compact">
                   <div className="run-setting-heading"><span><Gauge size={13} />Response length</span><small>{Math.round((config.visible_output_tokens || 4096) / 1024)}K token target</small></div>
@@ -675,8 +972,8 @@ export function ChatView({
               </section>
 
               <div className="run-settings-grid profile-grid">
-                <label><span>Run profile</span><select value={selectedProfileId} onChange={(event) => { setSelectedProfileId(event.target.value); const profile = runProfiles.find((item) => String(item.id) === event.target.value); const values = (profile?.profile || {}) as Partial<RuntimeConfig>; if (profile) onConfig({ ...config, ...values }); }}><option value="">Current settings</option>{runProfiles.map((item) => <option key={String(item.id)} value={String(item.id)}>{String(item.name || item.id)}</option>)}</select></label>
-                <label><span>Context recipe</span><select value={selectedRecipeId} onChange={(event) => setSelectedRecipeId(event.target.value)}><option value="">Default recipe</option>{recipes.map((item) => <option key={String(item.id)} value={String(item.id)}>{String(item.name || item.id)}</option>)}</select></label>
+                <label><span>Run profile</span><ArlineSelect density="compact" ariaLabel="Run profile" value={selectedProfileId} options={[{ value: "", label: "Current settings" }, ...runProfiles.map((item) => ({ value: String(item.id), label: String(item.name || item.id) }))]} onValueChange={(value) => { setSelectedProfileId(value); const profile = runProfiles.find((item) => String(item.id) === value); const values = (profile?.profile || {}) as Partial<RuntimeConfig>; if (profile) onConfig({ ...config, ...values }); }} /></label>
+                <label><span>Context recipe</span><ArlineSelect density="compact" ariaLabel="Context recipe" value={selectedRecipeId} options={[{ value: "", label: "Default recipe" }, ...recipes.map((item) => ({ value: String(item.id), label: String(item.name || item.id) }))]} onValueChange={setSelectedRecipeId} /></label>
               </div>
 
               {profileSaveOpen ? (
@@ -726,10 +1023,10 @@ export function ChatView({
 
 function branchIdForCanon(branchId: string) { return branchId || null; }
 
-function StoryText({ text }: { text: string }) {
+function StoryText({ text, discussion = false }: { text: string; discussion?: boolean }) {
   return (
-    <div className="story-text">
-      {text.split(/\n\s*\n/).filter(Boolean).map((paragraph, index) => <p key={`${index}-${paragraph.slice(0, 24)}`}>{paragraph}</p>)}
+    <div className={`story-text${discussion ? " discussion-text" : ""}`}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
     </div>
   );
 }

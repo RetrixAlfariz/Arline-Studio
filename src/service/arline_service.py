@@ -27,6 +27,7 @@ from src.directives import DirectiveEngine, DirectiveIntent
 from src.deliberation import NarrativeDeliberation, NarrativeDeliberator
 from src.writer import ArlineWriter, PostWriteValidator
 from src.workspace import WorkspaceContext
+from src.conversation import STORY_LAB_DISCUSSION_SYSTEM, story_lab_requests_prose
 
 
 @dataclass(slots=True)
@@ -211,19 +212,41 @@ class ArlineService:
         session_context: str | None = None,
         beat_context: str | None = None,
         deliberation: NarrativeDeliberation | None = None,
+        conversation_mode: str | None = None,
+        force_prose: bool = False,
     ) -> str:
         mode = mode or self.config.writer.input_mode
-        request = self._compact_request(prompt, bundle)
+        story_lab_discussion = conversation_mode == "story_lab" and not (force_prose or story_lab_requests_prose(prompt))
+        output_mode = deliberation.output_mode if deliberation is not None else (bundle.directive.output_mode if bundle.directive else "fiction")
+        write_instruction = "Write the requested fiction using the structured context."
+        if story_lab_discussion:
+            write_instruction = (
+                "Talk with the author as a natural, collaborative story-development partner. "
+                "Discuss the idea directly instead of dramatizing it: do not narrate a scene, "
+                "invent dialogue, or produce polished fiction unless the request explicitly asks for prose. "
+                "Build on useful parts of the author's idea, explain your reasoning, and tactfully challenge "
+                "weak motivation, continuity, or design assumptions. Treat every proposal as provisional, "
+                "not canon. Use plain conversational paragraphs. Do not expose internal context labels or "
+                "terms such as UNKNOWN, LOCKED, projections, rails, or retrieval. Do not produce headings, "
+                "bullets, numbered alternatives, or an A/B/C menu unless the author requests structure. "
+                "Develop the strongest useful direction instead. Ask at most one focused follow-up question "
+                "when it genuinely advances the design. Match the author's language and tone."
+            )
+        elif output_mode == "author_intuition":
+            write_instruction = "Respond to the author with concise narrative intuition, likely beats, and explicit uncertainty. Do not write story prose unless specifically requested."
+        elif output_mode == "author_alternatives":
+            write_instruction = "Respond to the author with distinct plausible next-beat alternatives and tradeoffs. Keep them non-canonical and do not silently choose one."
+        request = prompt.strip() if story_lab_discussion or mode == "raw" else self._compact_request(prompt, bundle)
         if mode == "raw":
             return (
                 f"<REQUEST>\n{prompt.strip()}\n</REQUEST>\n\n"
-                "<WRITE>Write the requested fiction.</WRITE>"
+                f"<WRITE>{write_instruction}</WRITE>"
             )
         if mode == "aif_core":
             return (
                 f"<AIF_CORE>\n{bundle.aif_core.rstrip()}\n</AIF_CORE>\n\n"
                 f"<REQUEST>\n{request}\n</REQUEST>\n\n"
-                "<WRITE>Write the requested fiction.</WRITE>"
+                f"<WRITE>{write_instruction}</WRITE>"
             )
 
         parts = []
@@ -234,7 +257,7 @@ class ArlineService:
                 "</WORKSPACE_CONTEXT>",
                 "",
             ]
-        if bundle.narrative_brief and bundle.narrative_brief.text:
+        if not story_lab_discussion and bundle.narrative_brief and bundle.narrative_brief.text:
             parts += [
                 "<NARRATIVE_BRIEF>",
                 bundle.narrative_brief.text.rstrip(),
@@ -249,7 +272,7 @@ class ArlineService:
         ]
         if bundle.directive and bundle.directive.active:
             parts += ["<DIRECTIVE>", bundle.directive.render().rstrip(), "</DIRECTIVE>", ""]
-        if deliberation is not None:
+        if deliberation is not None and not story_lab_discussion:
             parts += ["<NARRATIVE_DELIBERATION>", deliberation.render().rstrip(), "</NARRATIVE_DELIBERATION>", ""]
         parts += [
             "<REQUEST>",
@@ -282,16 +305,24 @@ class ArlineService:
                     "</UNRESOLVED_SOURCE_CONTEXT>",
                 ]
             if session_context:
-                parts += [
-                    "",
-                    "<SESSION_CONTINUITY_CONTEXT>",
-                    "Earlier user messages are continuity source context. Later user "
-                    "messages override earlier ones. Previous generated prose is only "
-                    "surface continuity and must not override canonical ARLINE_CONTEXT, "
-                    "UNKNOWN precision, or current user corrections.",
-                    session_context.strip(),
-                    "</SESSION_CONTINUITY_CONTEXT>",
-                ]
+                if story_lab_discussion:
+                    parts += [
+                        "", "<STORY_LAB_DIALOGUE>",
+                        "This is the recent alternating conversation. Continue it naturally; "
+                        "do not repeat ideas Arline already gave unless the author asks.",
+                        session_context.strip(), "</STORY_LAB_DIALOGUE>",
+                    ]
+                else:
+                    parts += [
+                        "",
+                        "<SESSION_CONTINUITY_CONTEXT>",
+                        "Earlier user messages are continuity source context. Later user "
+                        "messages override earlier ones. Previous generated prose is only "
+                        "surface continuity and must not override canonical ARLINE_CONTEXT, "
+                        "UNKNOWN precision, or current user corrections.",
+                        session_context.strip(),
+                        "</SESSION_CONTINUITY_CONTEXT>",
+                    ]
         if beat_context:
             parts += [
                 "",
@@ -299,12 +330,6 @@ class ArlineService:
                 beat_context.strip(),
                 "</BEAT_CONTEXT>",
             ]
-        output_mode = deliberation.output_mode if deliberation is not None else (bundle.directive.output_mode if bundle.directive else "fiction")
-        write_instruction = "Write the requested fiction using the structured context."
-        if output_mode == "author_intuition":
-            write_instruction = "Respond to the author with concise narrative intuition, likely beats, and explicit uncertainty. Do not write story prose unless specifically requested."
-        elif output_mode == "author_alternatives":
-            write_instruction = "Respond to the author with distinct plausible next-beat alternatives and tradeoffs. Keep them non-canonical and do not silently choose one."
         parts += [
             "",
             "<WRITE>",
@@ -323,6 +348,7 @@ class ArlineService:
         workspace_context: WorkspaceContext | None = None,
         beat_context: str | None = None,
         images: list[str] | None = None,
+        conversation_mode: str | None = None,
     ) -> GenerationBundle:
         bundle = self.analyze(
             prompt,
@@ -374,6 +400,7 @@ class ArlineService:
             session_context=session_context,
             beat_context=beat_context,
             deliberation=deliberation,
+            conversation_mode=conversation_mode,
         )
         writer = ArlineWriter(self.config, client=client)
         result = writer.generate(
@@ -381,13 +408,16 @@ class ArlineService:
             input_mode=mode,
             reasoning_for_api=effective_reasoning,
             images=images,
+            system_prompt_override=STORY_LAB_DISCUSSION_SYSTEM if conversation_mode == "story_lab" and not story_lab_requests_prose(prompt) else None,
         )
         result.stats["deliberation_version"] = deliberation.version
         result.stats["deliberation_status"] = deliberation.status
         result.stats["deliberation_model"] = deliberation.model
+        result.stats["conversation_mode"] = conversation_mode or "story_writer"
+        result.stats["conversation_response_kind"] = "discussion" if conversation_mode == "story_lab" and not story_lab_requests_prose(prompt) else "prose"
         post = (
             self.post_validator.validate(result.story, bundle.writer_context)
-            if self.config.writer.post_validate
+            if self.config.writer.post_validate and result.stats["conversation_response_kind"] != "discussion"
             else None
         )
         return GenerationBundle(
@@ -412,6 +442,7 @@ class ArlineService:
         surface_history=None,
         session_context: str | None = None,
         workspace_context: WorkspaceContext | None = None,
+        conversation_mode: str | None = None,
     ) -> GenerationBundle:
         """Generate a long narrative as bounded sequential beats.
 
@@ -463,6 +494,7 @@ class ArlineService:
                     session_context=session_context,
                     beat_context=beat_instruction,
                     deliberation=deliberation,
+                    conversation_mode=conversation_mode,
                 )
                 result = writer.generate(
                     model_input=model_input,
@@ -519,7 +551,8 @@ class ArlineService:
             {"beats": raw_responses},
             post,
             self.compose_model_input(
-                prompt, bundle, mode, session_context=session_context, deliberation=deliberation
+                prompt, bundle, mode, session_context=session_context, deliberation=deliberation,
+                conversation_mode=conversation_mode,
             ),
             load,
             deliberation,

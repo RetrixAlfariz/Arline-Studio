@@ -4,6 +4,7 @@ import re
 
 from src.narrative.dynamics import SceneDynamicsPlanner
 from src.narrative.rails import CharacterRailParser
+from src.conversation import story_lab_requests_prose
 
 from .arline_service import ArlineService
 
@@ -53,6 +54,8 @@ def _compose_v121(
     session_context: str | None = None,
     beat_context: str | None = None,
     deliberation=None,
+    conversation_mode: str | None = None,
+    force_prose: bool = False,
 ) -> str:
     compilation = CharacterRailParser.parse(prompt)
     clean_prompt = compilation.cleaned_prompt if compilation.active else prompt
@@ -65,6 +68,8 @@ def _compose_v121(
         session_context=clean_session,
         beat_context=beat_context,
         deliberation=deliberation,
+        conversation_mode=conversation_mode,
+        force_prose=force_prose or story_lab_requests_prose(prompt),
     )
     if not compilation.active or not compilation.rendered_text:
         return model_input

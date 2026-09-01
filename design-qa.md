@@ -94,6 +94,256 @@ No actionable P0, P1, or P2 visual or interaction findings remain. Populated-dat
 
 final result: passed
 
+## Living Story Session overhaul
+
+Source visual truth: `C:/Users/Revian/.codex/generated_images/01a03aed-25e4-7893-b664-61c069d469d6/exec-e95a0651-0eb3-4b81-9e15-bd3786ab1dd6.png`.
+
+Implementation evidence: `E:/Developen/Github/Arline Studio/tmp/living-story-session-implementation-final.png`.
+
+### Comparison state and normalization
+
+- Source and implementation are both 1488 x 1058 pixels at density 1, dark theme, desktop, expanded navigation, active Story Lab conversation, identity context, and Living Session panel.
+- Both images were opened together in one comparison input after the final implementation capture.
+- Full-view comparison was sufficient because the identity strip, alternating conversation, action row, composer, and complete right panel are legible at native resolution; no focused crop was required.
+- The implementation intentionally retains Arline Studio's existing global project/world/runtime shell instead of replacing application navigation with the concept mock's standalone Story Lab information architecture.
+
+### Fidelity surfaces
+
+- Fonts and typography: the existing Arline UI stack remains in controls, while Story Lab responses now use conversational UI typography instead of the manuscript serif treatment. Author and Arline labels create the same hierarchy as the source.
+- Spacing and layout rhythm: the main conversation and persistent right panel use the source's dominant two-column proportion. The composer stays attached to the conversation column and the panel remains independently scrollable.
+- Colors and visual tokens: borders, fills, focus rings, active states, icons, glow, and elevation use semantic Studio tokens, so the screen follows the user's current custom accent rather than hard-coded pink.
+- Image and icon quality: the existing Arline logo asset and Lucide icon system are used. No raster placeholder, CSS-drawn logo, emoji, or replacement icon was introduced.
+- Copy and content: the identity explanation, What Arline knows popover, exploratory-status copy, Living Session sections, Keep as insight, and Draft from this match the selected product direction while preserving current project vocabulary.
+
+### Interaction and runtime verification
+
+- A real local Story Lab generation completed with the configured LM Studio model. The response remained direct brainstorming instead of becoming fictional scene prose.
+- The generated response populated Current question, Emerging idea, and Open threads, and those values persisted with the session.
+- What Arline knows opened and correctly reported Private profile, the linked `@Vian` Library projection, and Current session context.
+- Keep as insight persisted without dropping conversation turns. Draft from this placed an explicit prose request into the composer.
+- The authorized self-context check confirmed Story Presence details are available for a direct Story Lab self-query when that memory category is enabled.
+- At 760 x 900, the page had no horizontal overflow, the composer remained available, and the right panel collapsed at the responsive breakpoint.
+- Browser console after the complete flow: zero errors or warnings.
+
+### Comparison history
+
+- Initial comparison found a P1 proportion/readability issue: the Living Session panel was too narrow and its editable Current question and Emerging idea values clipped heavily.
+- The panel was widened, conversation width was rebalanced, fields were enlarged, and each session section received source-aligned card treatment.
+- The initial conversation surface also lacked strong role separation. The final pass adds a user avatar/name row, Arline brand marker, conversational typography, and a turn divider.
+- Post-fix comparison at the same 1488 x 1058 state shows both primary regions readable, aligned, and visually coherent. No actionable P0, P1, or P2 findings remain.
+
+### Automated verification
+
+- `npm run build`: passed.
+- `.venv\\Scripts\\python.exe -m unittest tests.test_v128_conversation_modes tests.test_v126_react_frontend`: 20 tests passed.
+- Story Lab self-context projection assertion: passed.
+
+final result: passed
+
+## Advanced personalization and personal-memory controls
+
+Source visual truth:
+
+- `C:/Users/Revian/.codex/generated_images/01a03aed-25e4-7893-b664-61c069d469d6/exec-ddb585e3-2566-4ce5-8863-61330a0cc6ef.png`
+
+Implementation evidence:
+
+- Empty profile state: `E:/Developen/Github/Arline Studio/tmp/design-qa/personalization-memory-advanced.png`
+- Populated multi-name state: `E:/Developen/Github/Arline Studio/tmp/design-qa/personalization-memory-populated.png`
+- Source/implementation comparison: `E:/Developen/Github/Arline Studio/tmp/design-qa/personalization-memory-comparison.png`
+
+### Comparison state and normalization
+
+- Source: 1046 x 1478 pixels, dark theme, populated identity rules, Story Presence expanded.
+- Implementation: 1280 x 1180 CSS viewport at density 1, dark theme, Settings > Personalization, two unsaved preferred-name rules, Story Presence expanded.
+- The comparison board scales both views to the same 1180-pixel content height. The implementation retains Arline's existing Settings navigation and fixed save footer, so its content canvas is intentionally narrower than the standalone concept.
+
+### Fidelity surfaces and findings
+
+- Identity hierarchy follows the selected direction: one ordered rules area supports primary and contextual names, priority controls, context selectors, optional pronunciation/language metadata, and a live addressing test.
+- Personal details use progressive disclosure so the daily identity and memory decisions remain above the fold.
+- Memory uses the active Studio accent and existing compact design language while preserving the concept's master state, category rows, review expansion, scope, retention, field-level permissions, safety rules, search, export, pause, and selective clearing.
+- Empty counts and `Not tracked yet` are shown truthfully instead of fabricating remembered data or activity timestamps.
+- The selected concept's cyan was correctly translated to the user's active pink theme token; focus, toggles, borders, and shadows stay theme-connected.
+- No actionable P0, P1, or P2 visual findings remain. The denser row sizing is consistent with the rest of Arline Studio and remains readable in the verified viewport.
+
+### Interaction verification
+
+- Added primary `Vian` and contextual `Revian`, changed the second rule to Formal conversations, and verified the addressing summary resolved Default to Vian and Formal to Revian.
+- Pause all changed the master state to `Personal memory is paused` and exposed Resume memory.
+- Clear selected opened a confirmation dialog with per-category item counts; its destructive action remained disabled until a category was selected and explicitly stated that nothing changes before Save settings.
+- Expanded Story Presence exposed scope, retention, last-used truth state, and four field-level permission switches.
+- Reload discarded all unsaved QA profile edits. Browser console log after the clean reload contained zero entries.
+
+### Runtime and policy verification
+
+- Legacy single preferred names migrate into ordered preferred-name rules.
+- Story Lab, Analyst, Interactive, and Character Room resolve casual, formal, Story Presence, and casual name rules respectively, with the primary name as fallback.
+- Private personal fields are excluded from generated personalization context. Story Presence details require both the matching conversation mode and an enabled category.
+- Personal memory can be paused independently from story/canon memory, and the no-automatic-canon rule is included in the generation contract.
+- A retention value of zero now persists as Never instead of being normalized back to 90 days.
+
+### Comparison history
+
+- The initial implementation placed Memory below all long-form profile cards, creating a P2 hierarchy mismatch with the selected direction.
+- Profile details were collapsed and Memory moved directly below the identity card. The final full-view comparison confirms identity and memory are now the first two working surfaces.
+
+### Automated verification
+
+- `npm run build`: passed. Vite retained its existing unresolved-at-build-time brand URL and bundle-size warnings.
+- `.venv/Scripts/python.exe -m unittest tests.test_v128_conversation_modes tests.test_v126_react_frontend`: 20 tests passed.
+- `git diff --check`: passed with line-ending normalization warnings only.
+
+final result: passed
+
+## Contextual dropdown system redesign
+
+Source visual truth: `C:/Users/Revian/.codex/generated_images/01a03f79-ea79-71a2-8912-944d690ef6cc/exec-6baee57c-9ccb-4c3f-b185-7e52f38b8c2e.png` (selected concept 1).
+
+Implementation evidence:
+
+- Settings open state: `E:/Developen/Github/Arline Studio/tmp/design-qa/dropdowns/dropdown-settings-final.png`
+- Original narrow viewport: `E:/Developen/Github/Arline Studio/tmp/design-qa/dropdowns/dropdown-settings-769x948.png`
+- Conversation mode state: `E:/Developen/Github/Arline Studio/tmp/design-qa/dropdowns/dropdown-conversation-implementation-v2.png`
+- Full comparison: `E:/Developen/Github/Arline Studio/tmp/design-qa/dropdowns/dropdown-design-qa-comparison.png`
+- Focused dropdown comparison: `E:/Developen/Github/Arline Studio/tmp/design-qa/dropdowns/dropdown-design-qa-focused.png`
+
+Viewport and normalization: the final full-view implementation was captured at 1440 x 1024 CSS pixels and density 1. The selected source is 1488 x 1058 pixels. Both were proportionally fit side by side without stretching. The reported 769 x 948 viewport was tested separately at density 1; its menu bounds were left 479, right 759, top 507.44, and bottom 781.44, fully inside the viewport.
+
+State: dark theme with the user's saved pink accent; Personalization Settings with Tone open; new Chat with Conversation mode open. The selected concept uses green, while the implementation intentionally inherits the user's active semantic accent instead of hard-coding the concept color.
+
+### Required fidelity surfaces
+
+- Fonts and typography: trigger values use the established Arline UI stack at a stronger 10.5-pixel optical size. Default option titles are 11 pixels with 8.5-pixel explanatory copy; compact controls retain the denser product scale.
+- Spacing and layout rhythm: default rows are at least 52 pixels high, selected rows have a clear leading indicator, and menus use 12-pixel radii, six-pixel internal padding, and controlled elevation. The menu escapes Settings card clipping through a fixed portal.
+- Colors and visual tokens: trigger focus, selected rows, checks, icons, borders, shadow, and hover surfaces inherit `--core-*` and surface tokens from the active Studio shell.
+- Image and asset fidelity: no raster imagery is required. Conversation choices reuse the existing Lucide mode icons; no handcrafted SVG, emoji, placeholder, or CSS-drawn icon was introduced.
+- Copy and content: Tone, pacing, density, collaboration, Presence, and Conversation mode options include concise contextual descriptions where they improve the decision. Compact toolbar choices stay one-line.
+
+### Interaction verification
+
+- Mouse-open, outside-dismiss, option selection, selected checkmark, and viewport-aware above/below positioning were exercised.
+- Arrow Down plus Enter changed Story Writer to Story Lab and closed the listbox. Escape, Home, End, Space, disabled options, ARIA listbox/option semantics, active descendant, and focus return are implemented in the shared component.
+- Settings, Conversation mode, dependent conversation controls, composer reasoning, run profile, and context recipe no longer use browser-native selects.
+- Browser console: zero errors in the final Settings state.
+
+### Comparison history
+
+- Initial pass found a P1 theme mismatch because the fixed portal mounted outside the themed Studio root. The portal now mounts inside `.studio-shell`, so custom accent and surface variables propagate correctly.
+- Initial Conversation pass found a P2 double border/focus ring from the previous native-select wrapper rule. The shared component wrapper now resets that legacy surface and exposes one clear trigger.
+- Initial focused comparison found a P2 density gap. Default menus now use a 280-pixel minimum width, 52-pixel rows, and stronger option typography while compact variants retain toolbar density.
+- Post-fix desktop and 769 x 948 evidence show no clipped menu, browser-native white surface, residual fixed-green state, or actionable P0/P1/P2 mismatch.
+
+### Automated verification
+
+- `npm run build`: passed.
+- `uv run python -m unittest tests.test_v126_react_frontend tests.test_v128_conversation_modes -v`: 14 tests passed.
+
+final result: passed
+
+## Conversation modes completion pass
+
+Source visual truth: `C:/Users/Revian/Downloads/Documents/Arline_Conversation_Modes_Story_Lab_User_Presence_Guide.pdf`.
+
+Implemented and inspected at `http://127.0.0.1:7860/` in a 1280 x 720 CSS viewport:
+
+- Story Lab / My Presence exposes an editable Blueprint with Wanted, Flexible, Suggested, and Avoid lanes; extraction classified explicit sample intent correctly.
+- Interactive exposes Observer, As myself, and Library-character Presence, plus embodiment, POV style, POV entity, persistence scope, and the user-agency contract.
+- Character Room exposes Library participant selection and an explicit non-canon rehearsal state.
+- The Presence Blueprint keeps promotion and transition explicit through `Save as Library character` and `Enter the story`; neither happens silently.
+- No document-level horizontal overflow was detected, and the browser console returned zero errors or warnings.
+
+Automated verification:
+
+- `npm run build`: passed.
+- `uv run python -m unittest tests.test_v128_conversation_modes tests.test_v126_react_frontend tests.test_v127_react_legacy_parity`: 18 tests passed.
+- Python compile checks for the conversation, history, and web API modules: passed.
+- Live server restart and `/api/user-profile` health response: passed.
+
+No actionable P0, P1, or P2 visual or interaction findings remain.
+
+final result: passed
+
+## Personalization story-identity integration
+
+Source visual truth: `C:/Users/Revian/AppData/Local/Temp/codex-clipboard-d9ddbba0-a783-4207-8c71-52efaeb772a6.png`.
+
+Implementation evidence:
+
+- Profile-only state at 545 x 857: `E:/Developen/Github/Arline Studio/tmp/design-qa/personalization-profile-545x857.png`
+- Library-link state at 545 x 857: `E:/Developen/Github/Arline Studio/tmp/design-qa/personalization-identity-link-545x857.png`
+- Reference/implementation comparison: `E:/Developen/Github/Arline Studio/tmp/design-qa/personalization-identity-comparison.png`
+
+### Fidelity and interaction verification
+
+- The existing Personalization hierarchy, typography, surface treatment, field styling, and sticky Save action remain intact.
+- The new Story identity card uses the same card borders, accent token, spacing rhythm, and custom select component as the reference panel.
+- Profile-only and Library-entity states are explicit. Library linking exposes existing character variants; self creation remains disabled until a display name and active world are available.
+- At the reference width, the Settings navigation now becomes a contained horizontal tab rail and the content uses the full drawer width. Document width remains 545 pixels with no page-level horizontal overflow.
+- Browser console: zero errors or warnings. The create-self endpoint rejects an empty display name with HTTP 400 and does not mutate the Library.
+
+### Automated verification
+
+- `npm run build`: passed.
+- `uv --cache-dir .tmp-uv-cache run python -m unittest tests.test_v128_conversation_modes tests.test_v126_react_frontend tests.test_v127_react_legacy_parity`: 20 tests passed, including create-and-sync against isolated temporary databases.
+- `uv --cache-dir .tmp-uv-cache run python -m py_compile src/interface/web/app.py`: passed.
+
+No actionable P0, P1, or P2 visual or interaction findings remain.
+
+final result: passed
+
+## Conversation Modes, Story Lab, and User Presence
+
+Source visual truth: `C:/Users/Revian/Downloads/Documents/Arline_Conversation_Modes_Story_Lab_User_Presence_Guide.pdf`, especially rendered pages 10 and 20.
+
+Implementation evidence:
+
+- `E:/Developen/Github/Arline Studio/tmp/design-qa/conversation-story-lab-final-2.png`
+- `E:/Developen/Github/Arline Studio/tmp/design-qa/conversation-interactive-2.png`
+- `E:/Developen/Github/Arline Studio/tmp/design-qa/personalization-settings-final-2.png`
+- Combined comparison inputs: `compare-chat.png` and `compare-settings.png` in the same directory.
+
+Viewport and normalization: implementation captures are 1248 x 720 CSS pixels at density 1. PDF page renders are 993 x 1404 pixels. For the combined visual check, both source and implementation were proportionally fit into a shared 1311 x 944 canvas without stretching. The source page is an architecture/layout guide rather than a pixel-identical application mock, so fidelity was judged against its hierarchy, contextual disclosure, control separation, and copy contracts while retaining Arline's existing product tokens.
+
+State: dark theme; new conversation; Story Lab with Plot/Open controls; Interactive with As myself/Vian, scene-defined POV, and user-directed agency; Personalization Settings; Conversation defaults Settings.
+
+### Full-view and focused comparison evidence
+
+- The full Chat comparison confirms Conversation Mode and Context Mode remain separate, dependent controls appear only for Story Lab/Interactive, and mode-aware starters plus composer language occupy the existing Arline shell without introducing another permanent panel.
+- The Settings comparison confirms Personalization is a separate navigation destination, begins with an approachable profile summary, and progressively reveals editable You, Creative Profile, collaboration, Presence, and Story Lab defaults.
+- Focused inspection used the Chat header/context bar and the nested Personalization fields because those dense regions carried the primary fidelity risk. Other regions reuse previously verified Arline components and did not require separate crops.
+
+### Required fidelity surfaces
+
+- Fonts and typography: existing Arline typography is preserved. Conversation labels use the established small uppercase hierarchy; mode names, starters, and profile summaries remain readable at the desktop capture size.
+- Spacing and layout rhythm: the header gains one compact selector, and a 42-pixel dependent-control row appears only when needed. Composer and empty-state proportions remain unchanged. Settings cards use the existing drawer grid and vertical rhythm.
+- Colors and visual tokens: borders, active states, badges, shadows, and mode icons use semantic accent tokens, so custom themes continue to propagate through the new UI.
+- Image and asset fidelity: the existing supplied Arline brand mark is reused. No missing raster assets or code-drawn substitutes were introduced; new interface icons use the project's existing Lucide system.
+- Copy and content: mode names, focus options, Exploration levels, Presence choices, Perspective choices, agency wording, starters, and placeholders follow the guide. The UI explicitly says Story Lab ideas remain exploratory and Personalization does not become canon by itself.
+
+### Interaction verification
+
+- Switched among Story Writer, Story Lab, and Interactive; dependent controls and placeholders changed correctly.
+- Selected `As myself`, entered `Vian`, and verified the active context strip updated to the named Presence.
+- Opened Personalization and Conversation Settings and verified every expected field and default.
+- Verified Story Lab and Interactive retain Canon-aware/Scratch as a separate Context Mode.
+- Browser console: zero errors or warnings.
+
+### Comparison history
+
+- Initial pass found a P2 header overflow at 1248 pixels. Context Mode now collapses to titled icon controls below 1350 pixels while preserving both actions.
+- Initial Settings pass found P1 intrinsic-width inputs and an oversized inherited textarea font inside nested profile cards. Nested controls now use full-width Settings styling and the established compact type scale.
+- Post-fix captures show no clipped persistent controls, broken form rhythm, or actionable P0/P1/P2 differences.
+
+### Automated verification
+
+- `npm run build`: passed.
+- `uv run python -m unittest tests.test_v128_conversation_modes tests.test_v126_react_frontend tests.test_v127_react_legacy_parity`: 15 tests passed.
+- Isolated SQLite smoke test: profile persistence, mode event persistence, and fork inheritance passed.
+- `git diff --check`: passed with line-ending normalization warnings only.
+
+final result: passed
+
 ## Chat Trash confirmation redesign
 
 Source visual truth:

@@ -719,6 +719,10 @@ class WorkspaceStore:
                 "Favor state, timeline, staged changes, and contradictions.",
                 {"active_scene": True, "explicit_refs": True, "pins": True, "relationships": True, "timeline": True, "conflicts": True, "recent_turns": 10, "world_canon": "deep"},
             ),
+            ("RECIPE-LAB", "Story Lab", "Wide exploratory context without canon mutation.", {"active_scene": True, "explicit_refs": True, "pins": True, "relationships": True, "timeline": True, "recent_turns": 8, "world_canon": "relevant", "project_documents": "relevant"}),
+            ("RECIPE-INTERACTIVE", "Interactive Presence", "POV, participants, relationship state, and recent action context.", {"active_scene": True, "explicit_refs": True, "pins": True, "relationships": True, "recent_turns": 14, "voice": "deep", "world_canon": "relevant"}),
+            ("RECIPE-ANALYST", "Analyst", "Deep evidence and continuity context without narrative continuation.", {"active_scene": True, "explicit_refs": True, "pins": True, "relationships": True, "timeline": True, "conflicts": True, "recent_turns": 12, "world_canon": "deep", "project_documents": "relevant"}),
+            ("RECIPE-CHARACTER-ROOM", "Character Room", "Deep participant voice and relationships for non-canon rehearsal.", {"active_scene": False, "explicit_refs": True, "pins": False, "relationships": True, "recent_turns": 10, "voice": "deep", "world_canon": "compact"}),
         ]
         for recipe_id, name, description, payload in recipes:
             con.execute(

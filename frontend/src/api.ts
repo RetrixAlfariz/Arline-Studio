@@ -9,6 +9,7 @@ import type {
   ReferenceItem,
   RuntimeConfig,
   Session,
+  UserProfile,
   WorkspaceBootstrap,
   WorldBible,
   MediaItem,
@@ -148,6 +149,14 @@ export const studioApi = {
     if (params.coverOnly) query.set("cover_only", "true");
     return api<{ items: MediaItem[] }>(`/api/media?${query}`);
   },
+  userProfile: () => api<UserProfile>("/api/user-profile"),
+  saveUserProfile: (payload: UserProfile) => api<UserProfile>("/api/user-profile", { method: "PUT", body: payload }),
+  extractUserProfile: (text: string) => api<{ display_name: string; fields: Array<Record<string, unknown>>; source_length: number }>("/api/user-profile/extract", { method: "POST", body: { text } }),
+  saveUserAsEntity: (payload: Record<string, unknown>) => api<{ family: JsonMap; variant: JsonMap; profile: UserProfile }>("/api/user-profile/entity", { method: "POST", body: payload }),
+  presenceBinding: (scopeType: "world" | "branch", scopeId: string) => api<JsonMap>(`/api/presence-bindings/${scopeType}/${encodeURIComponent(scopeId)}`),
+  savePresenceBinding: (scopeType: "world" | "branch", scopeId: string, profile: JsonMap) => api<JsonMap>(`/api/presence-bindings/${scopeType}/${encodeURIComponent(scopeId)}`, { method: "PUT", body: { profile } }),
+  extractBlueprint: (text: string, current: JsonMap) => api<{ blueprint: JsonMap }>("/api/conversation/blueprint/extract", { method: "POST", body: { text, current } }),
+  promotePresence: (payload: Record<string, unknown>) => api<{ family: JsonMap; variant: JsonMap }>("/api/conversation/promote-presence", { method: "POST", body: payload }),
   timeline: (worldId: string, branchId?: string) => {
     const query = new URLSearchParams({ world_id: worldId });
     if (branchId) query.set("branch_id", branchId);
