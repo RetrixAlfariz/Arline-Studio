@@ -2600,6 +2600,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                 project_id=payload.project_id, world_id=payload.world_id,
                 owner_type=payload.owner_type, owner_id=payload.owner_id,
                 path=payload.path, new_value=payload.new_value,
+                branch_id=payload.branch_id,
             )
         except (KeyError, ValueError) as exc:
             raise HTTPException(400, str(exc)) from exc
