@@ -30,6 +30,14 @@ try {
   if (boot.assetScripts < 1) throw new Error("Vite asset bundle was not served");
   if (!boot.title.includes("Arline")) throw new Error(`Unexpected title: ${boot.title}`);
 
+  // A new local workspace shows its first-run onboarding dialog. Exercise
+  // the real dismissal action instead of clicking through the modal backdrop.
+  const welcome = page.locator(".welcome-react");
+  if (await welcome.isVisible()) {
+    await welcome.getByRole("button", { name: "Not now" }).click();
+    await welcome.waitFor({ state: "detached" });
+  }
+
   await page.getByRole("button", { name: "Chat", exact: true }).click();
   await page.waitForSelector(".chat-workspace", { state: "visible" });
   await page.waitForSelector(".composer-shell textarea", { state: "visible" });
@@ -37,6 +45,12 @@ try {
   if (placeholder !== "Message Arline…") throw new Error(`Unexpected composer placeholder: ${placeholder}`);
 
   await page.locator(".global-command").click();
+  await page.waitForSelector(".global-palette", { state: "visible" });
+  await page.locator(".global-palette").press("Escape");
+  await page.waitForSelector(".global-palette", { state: "detached" });
+
+  // The top-bar search opens the palette; Command Center is a distinct view.
+  await page.getByRole("button", { name: "Commands", exact: true }).click();
   await page.waitForSelector(".command-view", { state: "visible" });
   const commandHeading = page.getByRole("heading", { name: "Direct Arline explicitly", exact: true });
   if ((await commandHeading.count()) !== 1 || !(await commandHeading.isVisible())) {
@@ -53,8 +67,9 @@ try {
 
   await page.getByRole("button", { name: "Quick create", exact: true }).click();
   await page.waitForSelector(".quick-modal", { state: "visible" });
-  if (!(await page.locator(".quick-modal").innerText()).toLowerCase().includes("describe it naturally")) {
-    throw new Error("Quick Create did not render");
+  if (!(await page.locator(".quick-modal").getByRole("heading", { name: "Describe what you need" }).isVisible())
+      || !(await page.locator(".quick-modal textarea").isVisible())) {
+    throw new Error("Quick Create input and heading did not render");
   }
   await page.locator(".quick-modal .modal-close").click();
 

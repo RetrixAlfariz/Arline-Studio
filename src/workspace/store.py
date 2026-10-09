@@ -1470,6 +1470,8 @@ class WorkspaceStore:
     ) -> dict[str, Any]:
         if kind not in BRANCH_KINDS:
             raise ValueError("Unsupported branch kind")
+        if kind == "main":
+            raise ValueError("Main branches are created with worlds and cannot be added separately")
         if canon_status not in CANON_STATUSES:
             raise ValueError("Unsupported canon status")
         name = name.strip()
@@ -1480,6 +1482,14 @@ class WorkspaceStore:
         with self._lock, self._connection() as con:
             if con.execute("SELECT 1 FROM worlds WHERE id=?", (world_id,)).fetchone() is None:
                 raise KeyError(world_id)
+            if parent_branch_id is not None:
+                parent = con.execute(
+                    "SELECT world_id FROM world_branches WHERE id=?", (parent_branch_id,)
+                ).fetchone()
+                if parent is None:
+                    raise ValueError("Parent branch does not exist")
+                if parent["world_id"] != world_id:
+                    raise ValueError("Parent branch must belong to the same world")
             slug = self._unique_slug(
                 con, "world_branches", slugify(name), scope_column="world_id", scope_value=world_id
             )
@@ -1532,11 +1542,19 @@ class WorkspaceStore:
             fields.append("updated_at=?")
             params.extend([utc_now(), branch_id])
             with self._lock, self._connection() as con:
-                cur = con.execute(
+                current = con.execute(
+                    "SELECT kind FROM world_branches WHERE id=?", (branch_id,)
+                ).fetchone()
+                if current is None:
+                    raise KeyError(branch_id)
+                requested_kind = changes.get("kind")
+                if requested_kind is not None:
+                    next_kind = str(requested_kind).strip()
+                    if next_kind != current["kind"] and "main" in {next_kind, current["kind"]}:
+                        raise ValueError("Cannot change a branch to or from Main")
+                con.execute(
                     f"UPDATE world_branches SET {', '.join(fields)} WHERE id=?", params
                 )
-                if cur.rowcount == 0:
-                    raise KeyError(branch_id)
         return self.get_branch(branch_id)
 
     def branch_lineage(self, branch_id: str) -> list[dict[str, Any]]:
@@ -3238,6 +3256,22 @@ class WorkspaceStore:
                 raise
         return SnapshotResult(snapshot_id=snapshot_id, branch_id=new_branch_id, mode="new_sandbox_branch")
 
+    @staticmethod
+    def _retcon_storage_branch_id(
+        con: sqlite3.Connection, world_id: str, branch_id: str | None
+    ) -> str | None:
+        """Keep the legacy NULL-as-Main fact scope while checking branch ownership."""
+        if branch_id is None:
+            return None
+        row = con.execute(
+            "SELECT world_id,kind FROM world_branches WHERE id=?", (branch_id,)
+        ).fetchone()
+        if row is None:
+            raise ValueError("Retcon branch does not exist")
+        if row["world_id"] != world_id:
+            raise ValueError("Retcon branch belongs to a different world")
+        return None if row["kind"] == "main" else branch_id
+
     def retcon_preview(
         self,
         *,
@@ -3247,9 +3281,20 @@ class WorkspaceStore:
         owner_id: str,
         path: str,
         new_value: Any,
+        branch_id: str | None = None,
     ) -> dict[str, Any]:
-        facts = self.list_facts(owner_type=owner_type, owner_id=owner_id)
-        current = [f for f in facts if f["path"] == path and f["status"] not in {"retconned", "deprecated"}]
+        with self._connection() as con:
+            scoped_branch_id = self._retcon_storage_branch_id(con, world_id, branch_id)
+        facts = self.list_facts(
+            project_id=project_id, world_id=world_id, branch_id=scoped_branch_id,
+            owner_type=owner_type, owner_id=owner_id,
+        )
+        current = [
+            f for f in facts
+            if f["path"] == path
+            and f["status"] not in {"retconned", "deprecated"}
+            and (f["branch_id"] is None or f["branch_id"] == scoped_branch_id)
+        ]
         owner_label = owner_id
         if owner_type == "entity_variant":
             try:
@@ -3302,17 +3347,22 @@ class WorkspaceStore:
         with self._lock, self._connection() as con:
             con.execute("BEGIN IMMEDIATE")
             try:
+                scoped_branch_id = self._retcon_storage_branch_id(con, world_id, branch_id)
+                # A retcon edits only the exact scope. A sandbox override must
+                # not invalidate the inherited main fact or a sibling's facts.
                 con.execute(
                     "UPDATE canon_facts SET status='retconned',updated_at=? "
-                    "WHERE owner_type=? AND owner_id=? AND path=? AND status NOT IN ('retconned','deprecated')",
-                    (now, owner_type, owner_id, path),
+                    "WHERE project_id=? AND world_id=? AND branch_id IS ? "
+                    "AND owner_type=? AND owner_id=? AND path=? "
+                    "AND status NOT IN ('retconned','deprecated')",
+                    (now, project_id, world_id, scoped_branch_id, owner_type, owner_id, path),
                 )
                 fact_id = make_id("FACT")
                 con.execute(
                     "INSERT INTO canon_facts(id,project_id,world_id,branch_id,owner_type,owner_id,path,value_json,"
                     "status,authority,source_type,source_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
-                        fact_id, project_id, world_id, branch_id, owner_type, owner_id,
+                        fact_id, project_id, world_id, scoped_branch_id, owner_type, owner_id,
                         path, _dumps(new_value), "canon", "latest_user_correction",
                         "retcon", note or None, now, now,
                     ),
