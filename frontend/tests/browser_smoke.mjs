@@ -67,8 +67,9 @@ try {
 
   await page.getByRole("button", { name: "Quick create", exact: true }).click();
   await page.waitForSelector(".quick-modal", { state: "visible" });
-  if (!(await page.locator(".quick-modal").innerText()).toLowerCase().includes("describe it naturally")) {
-    throw new Error("Quick Create did not render");
+  if (!(await page.locator(".quick-modal").getByRole("heading", { name: "Describe what you need" }).isVisible())
+      || !(await page.locator(".quick-modal textarea").isVisible())) {
+    throw new Error("Quick Create input and heading did not render");
   }
   await page.locator(".quick-modal .modal-close").click();
 
