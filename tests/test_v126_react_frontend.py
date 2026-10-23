@@ -77,6 +77,21 @@ class V126ReactFrontendTests(unittest.TestCase):
         self.assertIn("streamGeneration", chat)
         self.assertNotIn("const mock", app.lower())
 
+    def test_scope_hydration_is_atomic_and_ignores_stale_requests(self):
+        api = (FRONTEND / "src/api.ts").read_text(encoding="utf-8")
+        app = (FRONTEND / "src/App.tsx").read_text(encoding="utf-8")
+
+        self.assertIn("new AbortController()", app)
+        self.assertIn("scopeRequestRef.current.controller?.abort()", app)
+        self.assertIn("scopeRequestRef.current.version !== version", app)
+        self.assertIn("setHydratedScopeKey(requestKey)", app)
+        self.assertIn("const scopeReady =", app)
+        self.assertIn("scopeReady ? mainContent", app)
+        self.assertIn("aria-busy={!scopeReady || scopeLoading}", app)
+        self.assertRegex(api, r"projectTree: .*signal\?: AbortSignal")
+        self.assertRegex(api, r"worldBible: .*signal\?: AbortSignal")
+        self.assertRegex(api, r"sessions: .*signal\?: AbortSignal")
+
     def test_storage_reset_is_guarded_in_the_react_settings_ui(self):
         settings = (FRONTEND / "src" / "components" / "SettingsDrawer.tsx").read_text(encoding="utf-8")
         api = (FRONTEND / "src" / "api.ts").read_text(encoding="utf-8")
@@ -85,6 +100,22 @@ class V126ReactFrontendTests(unittest.TestCase):
         self.assertIn("RESET DATABASE", settings)
         self.assertIn("DELETE EVERYTHING", settings)
         self.assertIn("Complete reset", settings)
+
+    def test_personalization_can_name_the_writing_partner(self):
+        settings = (FRONTEND / "src" / "components" / "SettingsDrawer.tsx").read_text(encoding="utf-8")
+        chat = (FRONTEND / "src" / "views" / "ChatView.tsx").read_text(encoding="utf-8")
+        self.assertIn("Assistant alias", settings)
+        self.assertIn("partner_name", settings)
+        self.assertIn("arline:user-profile-updated", settings)
+        self.assertIn("arline:user-profile-updated", chat)
+        self.assertIn("<span>{partnerName}</span>", chat)
+
+    def test_sidebar_controls_use_soft_layered_shadows(self):
+        styles = (FRONTEND / "src" / "styles.css").read_text(encoding="utf-8")
+        self.assertIn("--shadow-control-soft:", styles)
+        self.assertIn("--shadow-control-accent:", styles)
+        self.assertIn("box-shadow:var(--shadow-control-accent)", styles)
+        self.assertNotIn(".sidebar-actions .sidebar-primary{color:var(--core-bright);background:var(--core-soft);border-color:var(--core-line);box-shadow:0 7px 20px", styles)
 
     def test_chat_streaming_activates_first_session_and_respects_manual_scroll(self):
         chat = (FRONTEND / "src" / "views" / "ChatView.tsx").read_text(encoding="utf-8")

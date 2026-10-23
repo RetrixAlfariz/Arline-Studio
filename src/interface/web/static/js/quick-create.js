@@ -67,7 +67,20 @@
     };
   }
 
-  window.ArlineQuickCreate = { decodeCreateAs, inferRelationship, preparePayload, previewOverride };
+  function replaceSelectOptions(select, rows, valueOf, labelOf, datasetOf = () => ({})) {
+    if (!select) return;
+    const ownerDocument = select.ownerDocument;
+    const options = (rows || []).map((row) => {
+      const option = ownerDocument.createElement("option");
+      option.value = String(valueOf(row) ?? "");
+      option.textContent = String(labelOf(row) ?? "");
+      for (const [key, value] of Object.entries(datasetOf(row) || {})) option.dataset[key] = String(value ?? "");
+      return option;
+    });
+    select.replaceChildren(...options);
+  }
+
+  window.ArlineQuickCreate = { decodeCreateAs, inferRelationship, replaceSelectOptions, preparePayload, previewOverride };
   if (typeof document === "undefined") return;
 
   const originalFetch = window.fetch.bind(window);
@@ -204,7 +217,7 @@
 
   function fillSelect(select, rows, value, labelOf) {
     if (!select) return;
-    select.innerHTML = (rows || []).map((row) => `<option value="${String(row.id).replaceAll('"','&quot;')}">${labelOf(row)}</option>`).join("");
+    replaceSelectOptions(select, rows, (row) => row.id, labelOf);
     if (value && [...select.options].some((option) => option.value === value)) select.value = value;
   }
 
@@ -230,15 +243,21 @@
   async function refreshBranches() {
     const worldId = byId("quickCreateWorld")?.value;
     const branchSelect = byId("quickCreateBranch");
-    if (!worldId) { if (branchSelect) branchSelect.innerHTML = ""; return; }
+    if (!worldId) { branchSelect?.replaceChildren(); return; }
     try {
       const world = await fetchJSON(`/api/worlds/${encodeURIComponent(worldId)}`);
       const currentBranch = runtimeScope().branchId || world.branches?.find((b) => b.kind === "main")?.id || world.branches?.[0]?.id || "";
       if (branchSelect) {
-        branchSelect.innerHTML = (world.branches || []).map((branch) => `<option value="${branch.id}" data-kind="${branch.kind || "main"}">${branch.name} · ${branch.kind || "main"}</option>`).join("");
+        replaceSelectOptions(
+          branchSelect,
+          world.branches || [],
+          (branch) => branch.id,
+          (branch) => `${branch.name} · ${branch.kind || "main"}`,
+          (branch) => ({ kind: branch.kind || "main" }),
+        );
         if ([...branchSelect.options].some((option) => option.value === currentBranch)) branchSelect.value = currentBranch;
       }
-    } catch (_) { if (branchSelect) branchSelect.innerHTML = ""; }
+    } catch (_) { branchSelect?.replaceChildren(); }
     await refreshFolderOptions();
   }
 
@@ -287,7 +306,12 @@
       } catch (_) {}
       if (folderLabel) folderLabel.childNodes[0].nodeValue = mode.kind === "folder" ? "Parent folder" : "Project folder";
     }
-    folder.innerHTML = `<option value="">${mode.kind === "folder" ? "Project root" : "No folder"}</option>${rows.map((row) => `<option value="${row.id}">${row.path}</option>`).join("")}`;
+    replaceSelectOptions(
+      folder,
+      [{ id: "", path: mode.kind === "folder" ? "Project root" : "No folder" }, ...rows],
+      (row) => row.id,
+      (row) => row.path,
+    );
     folder.disabled = !["entity", "document", "folder"].includes(mode.kind);
     await refreshRelationshipResolver();
     updateDestinationSummary();
@@ -303,9 +327,8 @@
     try { bible = await loadLibraryScope(); } catch (_) { bible = { variants: [] }; }
     const variants = scopedVariants(bible);
     const subject = byId("quickCreateRelationSubject"), object = byId("quickCreateRelationObject");
-    const options = variants.map((variant) => `<option value="${variant.id}">${variant.display_name}</option>`).join("");
-    if (subject) subject.innerHTML = options;
-    if (object) object.innerHTML = options;
+    replaceSelectOptions(subject, variants, (variant) => variant.id, (variant) => variant.display_name);
+    replaceSelectOptions(object, variants, (variant) => variant.id, (variant) => variant.display_name);
     if (object && variants.length > 1) object.value = variants[1].id;
     relationTouched = false;
     applyRelationshipInference(variants);

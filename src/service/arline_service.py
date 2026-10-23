@@ -27,7 +27,7 @@ from src.directives import DirectiveEngine, DirectiveIntent
 from src.deliberation import NarrativeDeliberation, NarrativeDeliberator
 from src.writer import ArlineWriter, PostWriteValidator
 from src.workspace import WorkspaceContext
-from src.conversation import STORY_LAB_DISCUSSION_SYSTEM, story_lab_requests_prose
+from src.conversation import STORY_LAB_DISCUSSION_SYSTEM, STORY_LAB_PROSE_SYSTEM, story_lab_requests_prose
 
 
 @dataclass(slots=True)
@@ -232,11 +232,13 @@ class ArlineService:
                 "Develop the strongest useful direction instead. Ask at most one focused follow-up question "
                 "when it genuinely advances the design. Match the author's language and tone."
             )
+        elif conversation_mode == "story_lab":
+            write_instruction = STORY_LAB_PROSE_SYSTEM
         elif output_mode == "author_intuition":
             write_instruction = "Respond to the author with concise narrative intuition, likely beats, and explicit uncertainty. Do not write story prose unless specifically requested."
         elif output_mode == "author_alternatives":
             write_instruction = "Respond to the author with distinct plausible next-beat alternatives and tradeoffs. Keep them non-canonical and do not silently choose one."
-        request = prompt.strip() if story_lab_discussion or mode == "raw" else self._compact_request(prompt, bundle)
+        request = prompt.strip() if conversation_mode == "story_lab" or mode == "raw" else self._compact_request(prompt, bundle)
         if mode == "raw":
             return (
                 f"<REQUEST>\n{prompt.strip()}\n</REQUEST>\n\n"
@@ -408,7 +410,13 @@ class ArlineService:
             input_mode=mode,
             reasoning_for_api=effective_reasoning,
             images=images,
-            system_prompt_override=STORY_LAB_DISCUSSION_SYSTEM if conversation_mode == "story_lab" and not story_lab_requests_prose(prompt) else None,
+            system_prompt_override=(
+                STORY_LAB_DISCUSSION_SYSTEM
+                if conversation_mode == "story_lab" and not story_lab_requests_prose(prompt)
+                else f"{system_text}\n\n{STORY_LAB_PROSE_SYSTEM}"
+                if conversation_mode == "story_lab"
+                else None
+            ),
         )
         result.stats["deliberation_version"] = deliberation.version
         result.stats["deliberation_status"] = deliberation.status

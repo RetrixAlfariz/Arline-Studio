@@ -18,6 +18,8 @@ class V11QuickCreateFeatureTests(unittest.TestCase):
         self.assertNotIn("window.fetch =", quick)
         self.assertIn("preparePayload", quick)
         self.assertIn("previewOverride", quick)
+        self.assertIn("replaceSelectOptions", quick)
+        self.assertNotRegex(quick, r"innerHTML\s*=\s*[^;\n]*<option")
         self.assertIn("ArlineQuickCreate?.preparePayload", main_js)
         self.assertIn("ArlineQuickCreate?.previewOverride", main_js)
 
@@ -59,6 +61,7 @@ const api = context.ArlineQuickCreate;
 if (!api) throw new Error("ArlineQuickCreate helpers were not exported");
 if (typeof api.preparePayload !== "function") throw new Error("preparePayload missing");
 if (typeof api.previewOverride !== "function") throw new Error("previewOverride missing");
+if (typeof api.replaceSelectOptions !== "function") throw new Error("replaceSelectOptions missing");
 
 const character = api.decodeCreateAs("entity:character");
 const research = api.decodeCreateAs("document:research");
@@ -69,7 +72,25 @@ const variants = [
 ];
 const inferred = api.inferRelationship("Vian dan Fano adalah saudara angkat", variants);
 
-console.log(JSON.stringify({ character, research, relationship, inferred }));
+const hostile = '<img src=x onerror="globalThis.compromised=true">';
+const select = {
+  ownerDocument: {
+    createElement(tagName) {
+      return { tagName: tagName.toUpperCase(), value: "", textContent: "", dataset: {} };
+    },
+  },
+  replaceChildren(...children) { this.options = children; },
+};
+api.replaceSelectOptions(
+  select,
+  [{ id: '\"><script>bad()</script>', label: hostile, kind: '\"><svg onload=bad()>' }],
+  (row) => row.id,
+  (row) => row.label,
+  (row) => ({ kind: row.kind }),
+);
+const safeOption = select.options[0];
+
+console.log(JSON.stringify({ character, research, relationship, inferred, safeOption }));
 '''
         result = subprocess.run(
             ["node", "-e", smoke, str(quick_path)],
@@ -87,6 +108,10 @@ console.log(JSON.stringify({ character, research, relationship, inferred }));
         self.assertEqual(data["inferred"]["object_id"], "VAR-FANO")
         self.assertEqual(data["inferred"]["relation_type"], "adopted_sibling")
         self.assertTrue(data["inferred"]["resolved"])
+        self.assertEqual(data["safeOption"]["tagName"], "OPTION")
+        self.assertEqual(data["safeOption"]["textContent"], '<img src=x onerror="globalThis.compromised=true">')
+        self.assertEqual(data["safeOption"]["value"], '\"><script>bad()</script>')
+        self.assertEqual(data["safeOption"]["dataset"]["kind"], '\"><svg onload=bad()>')
 
 
 if __name__ == "__main__":

@@ -34,7 +34,7 @@ try {
   await page.waitForSelector(".chat-workspace", { state: "visible" });
   await page.waitForSelector(".composer-shell textarea", { state: "visible" });
   const placeholder = await page.locator(".composer-shell textarea").getAttribute("placeholder");
-  if (placeholder !== "Message Arline…") throw new Error(`Unexpected composer placeholder: ${placeholder}`);
+  if (placeholder !== "Describe what should happen next…") throw new Error(`Unexpected composer placeholder: ${placeholder}`);
 
   await page.locator(".global-command").click();
   await page.waitForSelector(".command-view", { state: "visible" });
@@ -53,7 +53,7 @@ try {
 
   await page.getByRole("button", { name: "Quick create", exact: true }).click();
   await page.waitForSelector(".quick-modal", { state: "visible" });
-  if (!(await page.locator(".quick-modal").innerText()).toLowerCase().includes("describe it naturally")) {
+  if (!(await page.locator(".quick-modal").innerText()).toLowerCase().includes("write naturally")) {
     throw new Error("Quick Create did not render");
   }
   await page.locator(".quick-modal .modal-close").click();

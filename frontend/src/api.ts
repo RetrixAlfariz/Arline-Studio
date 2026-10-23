@@ -77,27 +77,27 @@ export const studioApi = {
   bootstrap: (stackId: string) => api<WorkspaceBootstrap>(`/api/workspace/bootstrap?stack_id=${encodeURIComponent(stackId)}`),
   projects: () => api<{ projects: Project[] }>("/api/projects"),
   project: (projectId: string) => api<Project>(`/api/projects/${encodeURIComponent(projectId)}`),
-  projectTree: (projectId: string, worldId?: string, branchId?: string) => {
+  projectTree: (projectId: string, worldId?: string, branchId?: string, signal?: AbortSignal) => {
     const query = new URLSearchParams();
     if (worldId) query.set("world_id", worldId);
     if (branchId) query.set("branch_id", branchId);
     const suffix = query.toString() ? `?${query.toString()}` : "";
-    return api<ProjectTree>(`/api/projects/${encodeURIComponent(projectId)}/tree${suffix}`);
+    return api<ProjectTree>(`/api/projects/${encodeURIComponent(projectId)}/tree${suffix}`, { signal });
   },
-  worldBible: (projectId?: string, worldId?: string, branchId?: string) => {
+  worldBible: (projectId?: string, worldId?: string, branchId?: string, signal?: AbortSignal) => {
     const query = new URLSearchParams();
     if (projectId) query.set("project_id", projectId);
     if (worldId) query.set("world_id", worldId);
     if (branchId) query.set("branch_id", branchId);
     const suffix = query.toString() ? `?${query.toString()}` : "";
-    return api<WorldBible>(`/api/world-bible${suffix}`);
+    return api<WorldBible>(`/api/world-bible${suffix}`, { signal });
   },
-  sessions: (projectId?: string, worldId?: string, branchId?: string) => {
+  sessions: (projectId?: string, worldId?: string, branchId?: string, signal?: AbortSignal) => {
     const query = new URLSearchParams({ limit: "120" });
     if (projectId) query.set("project_id", projectId);
     if (worldId) query.set("world_id", worldId);
     if (branchId) query.set("branch_id", branchId);
-    return api<{ sessions: Session[] }>(`/api/sessions?${query}`);
+    return api<{ sessions: Session[] }>(`/api/sessions?${query}`, { signal });
   },
   session: (sessionId: string) => api<Session>(`/api/sessions/${encodeURIComponent(sessionId)}`),
   updateSession: (sessionId: string, payload: Record<string, unknown>) => api<Session>(`/api/sessions/${encodeURIComponent(sessionId)}`, { method: "PATCH", body: payload }),
@@ -253,6 +253,9 @@ export const studioApi = {
   backlinks: (resourceType: string, resourceId: string) => api<JsonMap>(`/api/backlinks/${encodeURIComponent(resourceType)}/${encodeURIComponent(resourceId)}`),
   pinContext: (payload: Record<string, unknown>) => api<JsonMap>("/api/context/pins", { method: "POST", body: payload }),
   stateProposals: (payload: Record<string, unknown>) => api<JsonMap>("/api/state-proposals", { method: "POST", body: payload }),
+  createStoryLabSheetProposal: (payload: Record<string, unknown>) => api<JsonMap>("/api/story-lab/sheet-proposals", { method: "POST", body: payload }),
+  applyStoryLabSheetProposal: (id: string, payload: Record<string, unknown>) => api<JsonMap>(`/api/story-lab/sheet-proposals/${encodeURIComponent(id)}/apply`, { method: "POST", body: payload }),
+  applyStoryLabSheetBundle: (payload: Record<string, unknown>) => api<JsonMap>("/api/story-lab/sheet-proposal-bundles/apply", { method: "POST", body: payload }),
   stagedChanges: (projectId: string) => api<{ changes: JsonMap[] }>(`/api/projects/${encodeURIComponent(projectId)}/staged-changes`),
   createStagedChange: (projectId: string, payload: Record<string, unknown>) => api<JsonMap>(`/api/projects/${encodeURIComponent(projectId)}/staged-changes`, { method: "POST", body: payload }),
   resolveStagedChange: (id: string, accept: boolean) => api<JsonMap>(`/api/staged-changes/${encodeURIComponent(id)}/resolve`, { method: "POST", body: { accept } }),
@@ -291,6 +294,7 @@ export function runtimePayload(
     context_length: Number(next.context_length ?? 32768),
     input_mode: next.input_mode || "smart_hybrid",
     reasoning: next.reasoning || "off",
+    deliberation_mode: next.planning_enabled === true ? "on" : "off",
     projection_mode: next.projection_mode || "balanced",
     temperature: Number(next.temperature ?? 0.8),
     top_p: Number(next.top_p ?? 0.95),

@@ -15,7 +15,7 @@ from src.service.arline_service import AnalysisBundle, ArlineService, Generation
 from src.deliberation import NarrativeDeliberation
 from src.writer import ArlineWriter
 from src.writer.quality import ProseQualityAnalyzer
-from src.conversation import STORY_LAB_DISCUSSION_SYSTEM, story_lab_requests_prose
+from src.conversation import STORY_LAB_DISCUSSION_SYSTEM, STORY_LAB_PROSE_SYSTEM, story_lab_requests_prose
 
 
 @dataclass(slots=True)
@@ -79,6 +79,8 @@ class StreamingArlineService:
 
         response_kind = "discussion" if conversation_mode == "story_lab" and not story_lab_requests_prose(prompt) else "prose"
         system_text = STORY_LAB_DISCUSSION_SYSTEM if response_kind == "discussion" else self._system_prompt()
+        if conversation_mode == "story_lab" and response_kind == "prose":
+            system_text = f"{system_text}\n\n{STORY_LAB_PROSE_SYSTEM}"
         exact_counter = await asyncio.to_thread(
             TokenCounter.from_lmstudio, self.config.lmstudio.model
         )

@@ -1,0 +1,923 @@
+{
+  "version": "1.2.4a1",
+  "commands": [
+    {
+      "id": "continue",
+      "label": "/continue",
+      "category": "Writing",
+      "description": "Continue the active scene with continuity-aware context",
+      "text": "/continue ",
+      "planner_intent": "continue",
+      "deliberation_mode": "auto",
+      "output_mode": "fiction",
+      "aliases": [],
+      "syntax": "/continue [@refs] [options] [\"goal\"]",
+      "generation_only": true,
+      "action": "insert",
+      "runtime_version": "1.2.5a1",
+      "role": "operation",
+      "arguments": [
+        {
+          "name": "refs",
+          "kind": "reference",
+          "description": "Optional explicit grounding",
+          "required": false,
+          "variadic": true,
+          "resource_types": []
+        },
+        {
+          "name": "goal",
+          "kind": "text",
+          "description": "Semantic continuation goal",
+          "required": false,
+          "variadic": false,
+          "resource_types": []
+        }
+      ],
+      "options": [
+        {
+          "name": "pace",
+          "kind": "enum",
+          "description": "Narrative pacing",
+          "choices": [
+            "auto",
+            "immediate",
+            "fast",
+            "natural",
+            "slow",
+            "lingering"
+          ],
+          "default": "auto",
+          "minimum": null,
+          "maximum": null
+        }
+      ],
+      "why_use": "Continue the active scene without restating continuity, cast, POV, and open threads manually.",
+      "examples": [
+        "/continue @scene",
+        "/continue @scene pace=slow \"let the tension settle naturally\""
+      ],
+      "execution_contract": {
+        "runtime_version": "1.2.5a1",
+        "retrieval_profile": "scene_continue",
+        "retrieval_weights": {
+          "continuity": 1.0,
+          "state": 0.92,
+          "relationships": 0.82,
+          "events": 0.72,
+          "spatial": 0.62,
+          "threads": 0.78,
+          "pov": 0.72,
+          "source": 0.32
+        },
+        "deliberation_profile": "scene",
+        "realization_profile": "fiction",
+        "capabilities": [
+          "read_context",
+          "deliberate",
+          "generate"
+        ],
+        "authority": "generation_only",
+        "mutates_authority": false,
+        "writer_calls_hint": 1
+      }
+    },
+    {
+      "id": "rewrite",
+      "label": "/rewrite",
+      "category": "Writing",
+      "description": "Rewrite current/selected material while preserving requested constraints",
+      "text": "/rewrite ",
+      "planner_intent": "description",
+      "deliberation_mode": "rewrite",
+      "output_mode": "fiction",
+      "aliases": [],
+      "syntax": "/rewrite [@refs] [tone=...] [preserve=...] \"goal\"",
+      "generation_only": true,
+      "action": "insert",
+      "runtime_version": "1.2.5a1",
+      "role": "operation",
+      "arguments": [
+        {
+          "name": "refs",
+          "kind": "reference",
+          "description": "",
+          "required": false,
+          "variadic": true,
+          "resource_types": []
+        },
+        {
+          "name": "goal",
+          "kind": "text",
+          "description": "",
+          "required": false,
+          "variadic": false,
+          "resource_types": []
+        }
+      ],
+      "options": [
+        {
+          "name": "pace",
+          "kind": "enum",
+          "description": "",
+          "choices": [
+            "auto",
+            "immediate",
+            "fast",
+            "natural",
+            "slow",
+            "lingering"
+          ],
+          "default": null,
+          "minimum": null,
+          "maximum": null
+        },
+        {
+          "name": "tone",
+          "kind": "string",
+          "description": "",
+          "choices": [],
+          "default": null,
+          "minimum": null,
+          "maximum": null
+        },
+        {
+          "name": "preserve",
+          "kind": "string",
+          "description": "",
+          "choices": [],
+          "default": null,
+          "minimum": null,
+          "maximum": null
+        }
+      ],
+      "why_use": "Revise prose while keeping current authoritative state and continuity visible to the writer.",
+      "examples": [
+        "/rewrite @scene \"make the exchange less formal\""
+      ],
+      "execution_contract": {
+        "runtime_version": "1.2.5a1",
+        "retrieval_profile": "revision",
+        "retrieval_weights": {
+          "continuity": 1.0,
+          "state": 0.88,
+          "relationships": 0.78,
+          "events": 0.7,
+          "spatial": 0.55,
+          "threads": 0.66,
+          "pov": 0.76,
+          "source": 0.68
+        },
+        "deliberation_profile": "revision",
+        "realization_profile": "fiction_revision",
+        "capabilities": [
+          "read_context",
+          "deliberate",
+          "generate"
+        ],
+        "authority": "generation_only",
+        "mutates_authority": false,
+        "writer_calls_hint": 1
+      }
+    },
+    {
+      "id": "mono",
+      "label": "/mono",
+      "category": "Character Rails",
+      "description": "Character-aware monologue or expression seed",
+      "text": "/mono @characterA \"intent or thought\" ",
+      "planner_intent": "dialogue",
+      "deliberation_mode": "character",
+      "output_mode": "fiction",
+      "aliases": [],
+      "syntax": "/mono @character [internal|spoken] [pacing] \"intent\"",
+      "generation_only": true,
+      "action": "insert",
+      "runtime_version": "1.2.5a1",
+      "role": "operation",
+      "arguments": [
+        {
+          "name": "character",
+          "kind": "reference",
+          "description": "Character to realize",
+          "required": true,
+          "variadic": false,
+          "resource_types": [
+            "entity_variant"
+          ]
+        },
+        {
+          "name": "goal",
+          "kind": "text",
+          "description": "",
+          "required": false,
+          "variadic": false,
+          "resource_types": []
+        }
+      ],
+      "options": [
+        {
+          "name": "pace",
+          "kind": "enum",
+          "description": "",
+          "choices": [
+            "auto",
+            "immediate",
+            "fast",
+            "natural",
+            "slow",
+            "lingering"
+          ],
+          "default": null,
+          "minimum": null,
+          "maximum": null
+        },
+        {
+          "name": "delivery",
+          "kind": "enum",
+          "description": "",
+          "choices": [
+            "internal",
+            "spoken",
+            "whisper",
+            "murmur",
+            "mutter"
+          ],
+          "default": null,
+          "minimum": null,
+          "maximum": null
+        }
+      ],
+      "why_use": "Realize one character's expression through their voice, state, relationships, and POV boundaries.",
+      "examples": [
+        "/mono @Fila internal slow \"why did I say that?\""
+      ],
+      "execution_contract": {
+        "runtime_version": "1.2.5a1",
+        "retrieval_profile": "character_voice",
+        "retrieval_weights": {
+          "continuity": 0.96,
+          "state": 0.82,
+          "relationships": 0.9,
+          "events": 0.48,
+          "spatial": 0.3,
+          "threads": 0.55,
+          "pov": 1.0,
+          "source": 0.2
+        },
+        "deliberation_profile": "character",
+        "realization_profile": "fiction_monologue",
+        "capabilities": [
+          "read_context",
+          "deliberate",
+          "generate"
+        ],
+        "authority": "generation_only",
+        "mutates_authority": false,
+        "writer_calls_hint": 1
+      }
+    },
+    {
+      "id": "dia",
+      "label": "/dia",
+      "category": "Character Rails",
+      "description": "Character-aware adaptive dialogue / interaction",
+      "text": "/dia @characterA @characterB \"topic or interaction goal\" ",
+      "planner_intent": "dialogue",
+      "deliberation_mode": "interaction",
+      "output_mode": "fiction",
+      "aliases": [],
+      "syntax": "/dia @characterA @characterB [pacing] [curve=...] \"topic\"",
+      "generation_only": true,
+      "action": "insert",
+      "runtime_version": "1.2.5a1",
+      "role": "operation",
+      "arguments": [
+        {
+          "name": "participants",
+          "kind": "reference",
+          "description": "Dialogue participants",
+          "required": true,
+          "variadic": true,
+          "resource_types": [
+            "entity_variant"
+          ]
+        },
+        {
+          "name": "goal",
+          "kind": "text",
+          "description": "",
+          "required": false,
+          "variadic": false,
+          "resource_types": []
+        }
+      ],
+      "options": [
+        {
+          "name": "pace",
+          "kind": "enum",
+          "description": "",
+          "choices": [
+            "auto",
+            "immediate",
+            "fast",
+            "natural",
+            "slow",
+            "lingering"
+          ],
+          "default": "natural",
+          "minimum": null,
+          "maximum": null
+        },
+        {
+          "name": "curve",
+          "kind": "enum",
+          "description": "",
+          "choices": [
+            "auto",
+            "flat",
+            "rising",
+            "falling",
+            "wave",
+            "spike"
+          ],
+          "default": "auto",
+          "minimum": null,
+          "maximum": null
+        },
+        {
+          "name": "tension",
+          "kind": "enum",
+          "description": "",
+          "choices": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "default": "medium",
+          "minimum": null,
+          "maximum": null
+        }
+      ],
+      "why_use": "Use a relationship-aware dialogue profile instead of merely asking the model to write dialogue.",
+      "examples": [
+        "/dia @Fila @Mira pace=slow tension=high \"awkward apology\"",
+        "/dia @Fila @Mira curve=wave \"discuss moving away\""
+      ],
+      "execution_contract": {
+        "runtime_version": "1.2.5a1",
+        "retrieval_profile": "character_interaction",
+        "retrieval_weights": {
+          "continuity": 1.0,
+          "state": 0.9,
+          "relationships": 1.0,
+          "events": 0.58,
+          "spatial": 0.42,
+          "threads": 0.65,
+          "pov": 1.0,
+          "source": 0.24
+        },
+        "deliberation_profile": "interaction",
+        "realization_profile": "fiction_dialogue",
+        "capabilities": [
+          "read_context",
+          "deliberate",
+          "generate"
+        ],
+        "authority": "generation_only",
+        "mutates_authority": false,
+        "writer_calls_hint": 1
+      }
+    },
+    {
+      "id": "ambience",
+      "label": "/ambience",
+      "category": "Scene Rails",
+      "description": "Guide atmosphere and sensory emphasis without changing canon",
+      "text": "/ambience @location slow \"scene atmosphere\" ",
+      "planner_intent": "description",
+      "deliberation_mode": "scene",
+      "output_mode": "fiction",
+      "aliases": [],
+      "syntax": "/ambience [@location] [pacing] \"atmosphere\"",
+      "generation_only": true,
+      "action": "insert",
+      "runtime_version": "1.2.5a1",
+      "role": "operation",
+      "arguments": [
+        {
+          "name": "refs",
+          "kind": "reference",
+          "description": "",
+          "required": false,
+          "variadic": true,
+          "resource_types": []
+        },
+        {
+          "name": "goal",
+          "kind": "text",
+          "description": "",
+          "required": false,
+          "variadic": false,
+          "resource_types": []
+        }
+      ],
+      "options": [
+        {
+          "name": "pace",
+          "kind": "enum",
+          "description": "",
+          "choices": [
+            "auto",
+            "immediate",
+            "fast",
+            "natural",
+            "slow",
+            "lingering"
+          ],
+          "default": null,
+          "minimum": null,
+          "maximum": null
+        },
+        {
+          "name": "detail",
+          "kind": "enum",
+          "description": "",
+          "choices": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "default": null,
+          "minimum": null,
+          "maximum": null
+        }
+      ],
+      "why_use": "Steer atmosphere and sensory density without silently creating persistent location facts.",
+      "examples": [
+        "/ambience @location pace=lingering \"quiet after closing time\""
+      ],
+      "execution_contract": {
+        "runtime_version": "1.2.5a1",
+        "retrieval_profile": "scene_description",
+        "retrieval_weights": {
+          "continuity": 0.84,
+          "state": 1.0,
+          "relationships": 0.46,
+          "events": 0.38,
+          "spatial": 1.0,
+          "threads": 0.34,
+          "pov": 0.58,
+          "source": 0.34
+        },
+        "deliberation_profile": "scene",
+        "realization_profile": "fiction_description",
+        "capabilities": [
+          "read_context",
+          "deliberate",
+          "generate"
+        ],
+        "authority": "generation_only",
+        "mutates_authority": false,
+        "writer_calls_hint": 1
+      }
+    },
+    {
+      "id": "intimacy",
+      "label": "/intimacy",
+      "category": "Scene Rails",
+      "description": "Guide character-aware intimate scene dynamics and aftermath",
+      "text": "/intimacy @characterA @characterB slow \"scene intent\" ",
+      "planner_intent": "dialogue",
+      "deliberation_mode": "interaction",
+      "output_mode": "fiction",
+      "aliases": [],
+      "syntax": "/intimacy @characterA [@characterB] [pacing] [curve=...] \"intent\"",
+      "generation_only": true,
+      "action": "insert",
+      "runtime_version": "1.2.5a1",
+      "role": "operation",
+      "arguments": [
+        {
+          "name": "participants",
+          "kind": "reference",
+          "description": "",
+          "required": true,
+          "variadic": true,
+          "resource_types": [
+            "entity_variant"
+          ]
+        },
+        {
+          "name": "goal",
+          "kind": "text",
+          "description": "",
+          "required": false,
+          "variadic": false,
+          "resource_types": []
+        }
+      ],
+      "options": [
+        {
+          "name": "pace",
+          "kind": "enum",
+          "description": "",
+          "choices": [
+            "auto",
+            "immediate",
+            "fast",
+            "natural",
+            "slow",
+            "lingering"
+          ],
+          "default": null,
+          "minimum": null,
+          "maximum": null
+        },
+        {
+          "name": "curve",
+          "kind": "enum",
+          "description": "",
+          "choices": [
+            "auto",
+            "flat",
+            "rising",
+            "falling",
+            "wave",
+            "spike"
+          ],
+          "default": null,
+          "minimum": null,
+          "maximum": null
+        }
+      ],
+      "why_use": "Use the same continuity, agency, POV, relationship, pacing, and aftermath rails as other character interaction.",
+      "examples": [
+        "/intimacy @Fila @Mira pace=slow \"reconciliation and vulnerability\""
+      ],
+      "execution_contract": {
+        "runtime_version": "1.2.5a1",
+        "retrieval_profile": "character_interaction",
+        "retrieval_weights": {
+          "continuity": 1.0,
+          "state": 0.9,
+          "relationships": 1.0,
+          "events": 0.58,
+          "spatial": 0.42,
+          "threads": 0.65,
+          "pov": 1.0,
+          "source": 0.24
+        },
+        "deliberation_profile": "interaction",
+        "realization_profile": "fiction_interaction",
+        "capabilities": [
+          "read_context",
+          "deliberate",
+          "generate"
+        ],
+        "authority": "generation_only",
+        "mutates_authority": false,
+        "writer_calls_hint": 1
+      }
+    },
+    {
+      "id": "intuition",
+      "label": "/intuition",
+      "category": "Deliberation",
+      "description": "Ask the narrative deliberator what most naturally follows from the current state",
+      "text": "/intuition @scene \"what should naturally happen next?\" ",
+      "planner_intent": "deliberate",
+      "deliberation_mode": "inspect",
+      "output_mode": "author_intuition",
+      "aliases": [
+        "think",
+        "next-beat"
+      ],
+      "syntax": "/intuition [@refs] [\"question\"]",
+      "generation_only": true,
+      "action": "insert",
+      "runtime_version": "1.2.5a1",
+      "role": "operation",
+      "arguments": [
+        {
+          "name": "refs",
+          "kind": "reference",
+          "description": "",
+          "required": false,
+          "variadic": true,
+          "resource_types": []
+        },
+        {
+          "name": "question",
+          "kind": "text",
+          "description": "",
+          "required": false,
+          "variadic": false,
+          "resource_types": []
+        }
+      ],
+      "options": [],
+      "why_use": "Ask what most naturally follows before committing to prose. Output remains non-canonical author-facing reasoning.",
+      "examples": [
+        "/intuition @scene \"what naturally happens next?\""
+      ],
+      "execution_contract": {
+        "runtime_version": "1.2.5a1",
+        "retrieval_profile": "author_deliberation",
+        "retrieval_weights": {
+          "continuity": 1.0,
+          "state": 0.92,
+          "relationships": 0.9,
+          "events": 0.9,
+          "spatial": 0.6,
+          "threads": 0.86,
+          "pov": 0.92,
+          "source": 0.42
+        },
+        "deliberation_profile": "inspect",
+        "realization_profile": "author_intuition",
+        "capabilities": [
+          "read_context",
+          "deliberate",
+          "generate"
+        ],
+        "authority": "generation_only",
+        "mutates_authority": false,
+        "writer_calls_hint": 1
+      }
+    },
+    {
+      "id": "alternatives",
+      "label": "/alternatives",
+      "category": "Deliberation",
+      "description": "Generate several non-canonical next-beat alternatives",
+      "text": "/alternatives @scene count=4 \"next beat\" ",
+      "planner_intent": "deliberate",
+      "deliberation_mode": "alternatives",
+      "output_mode": "author_alternatives",
+      "aliases": [
+        "alts",
+        "options"
+      ],
+      "syntax": "/alternatives [@refs] [count=N] [\"goal\"]",
+      "generation_only": true,
+      "action": "insert",
+      "runtime_version": "1.2.5a1",
+      "role": "operation",
+      "arguments": [
+        {
+          "name": "refs",
+          "kind": "reference",
+          "description": "",
+          "required": false,
+          "variadic": true,
+          "resource_types": []
+        },
+        {
+          "name": "goal",
+          "kind": "text",
+          "description": "",
+          "required": false,
+          "variadic": false,
+          "resource_types": []
+        }
+      ],
+      "options": [
+        {
+          "name": "count",
+          "kind": "integer",
+          "description": "Number of alternatives",
+          "choices": [],
+          "default": 4,
+          "minimum": 1,
+          "maximum": 8
+        }
+      ],
+      "why_use": "Generate bounded non-canonical alternatives without silently choosing one.",
+      "examples": [
+        "/alternatives @scene count=5 \"next beat\""
+      ],
+      "execution_contract": {
+        "runtime_version": "1.2.5a1",
+        "retrieval_profile": "author_deliberation",
+        "retrieval_weights": {
+          "continuity": 1.0,
+          "state": 0.92,
+          "relationships": 0.9,
+          "events": 0.9,
+          "spatial": 0.6,
+          "threads": 0.86,
+          "pov": 0.92,
+          "source": 0.42
+        },
+        "deliberation_profile": "alternatives",
+        "realization_profile": "author_alternatives",
+        "capabilities": [
+          "read_context",
+          "deliberate",
+          "generate"
+        ],
+        "authority": "generation_only",
+        "mutates_authority": false,
+        "writer_calls_hint": 1
+      }
+    },
+    {
+      "id": "describe",
+      "label": "/describe",
+      "category": "Writing",
+      "description": "Describe a referenced subject with selector-aware context",
+      "text": "/describe @subject.appearance detail=high ",
+      "planner_intent": "description",
+      "deliberation_mode": "scene",
+      "output_mode": "fiction",
+      "aliases": [],
+      "syntax": "/describe @ref[.selector] [detail=...] [\"focus\"]",
+      "generation_only": true,
+      "action": "insert",
+      "runtime_version": "1.2.5a1",
+      "role": "operation",
+      "arguments": [
+        {
+          "name": "subject",
+          "kind": "reference",
+          "description": "",
+          "required": true,
+          "variadic": false,
+          "resource_types": []
+        },
+        {
+          "name": "focus",
+          "kind": "text",
+          "description": "",
+          "required": false,
+          "variadic": false,
+          "resource_types": []
+        }
+      ],
+      "options": [
+        {
+          "name": "detail",
+          "kind": "enum",
+          "description": "",
+          "choices": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "default": "medium",
+          "minimum": null,
+          "maximum": null
+        }
+      ],
+      "why_use": "Description becomes selector-aware, so @Fila.appearance and @Fila.state can request different evidence.",
+      "examples": [
+        "/describe @Fila.appearance detail=high"
+      ],
+      "execution_contract": {
+        "runtime_version": "1.2.5a1",
+        "retrieval_profile": "scene_description",
+        "retrieval_weights": {
+          "continuity": 0.84,
+          "state": 1.0,
+          "relationships": 0.46,
+          "events": 0.38,
+          "spatial": 1.0,
+          "threads": 0.34,
+          "pov": 0.58,
+          "source": 0.34
+        },
+        "deliberation_profile": "scene",
+        "realization_profile": "fiction_description",
+        "capabilities": [
+          "read_context",
+          "deliberate",
+          "generate"
+        ],
+        "authority": "generation_only",
+        "mutates_authority": false,
+        "writer_calls_hint": 1
+      }
+    },
+    {
+      "id": "pov",
+      "label": "/pov",
+      "category": "Writing",
+      "description": "Temporarily emphasize a POV reference for this generation",
+      "text": "/pov @character \"scene intent\" ",
+      "planner_intent": "continue",
+      "deliberation_mode": "character",
+      "output_mode": "fiction",
+      "aliases": [],
+      "syntax": "/pov @character [\"scene intent\"]",
+      "generation_only": true,
+      "action": "insert",
+      "runtime_version": "1.2.5a1",
+      "role": "modifier",
+      "arguments": [
+        {
+          "name": "character",
+          "kind": "reference",
+          "description": "",
+          "required": true,
+          "variadic": false,
+          "resource_types": [
+            "entity_variant"
+          ]
+        }
+      ],
+      "options": [],
+      "why_use": "Temporarily set the epistemic anchor for one request without mutating the active scene.",
+      "examples": [
+        "/pov @Fila"
+      ],
+      "execution_contract": {
+        "runtime_version": "1.2.5a1",
+        "retrieval_profile": "modifier",
+        "retrieval_weights": {
+          "continuity": 0.0,
+          "state": 0.0,
+          "relationships": 0.0,
+          "events": 0.0,
+          "spatial": 0.0,
+          "threads": 0.0,
+          "pov": 0.0,
+          "source": 0.0
+        },
+        "deliberation_profile": "character",
+        "realization_profile": "modifier",
+        "capabilities": [
+          "read_context",
+          "deliberate",
+          "generate"
+        ],
+        "authority": "generation_only",
+        "mutates_authority": false,
+        "writer_calls_hint": 1
+      }
+    },
+    {
+      "id": "pace",
+      "label": "/pace",
+      "category": "Writing",
+      "description": "Temporarily steer narrative pacing for this generation",
+      "text": "/pace slow \"scene goal\" ",
+      "planner_intent": "continue",
+      "deliberation_mode": "scene",
+      "output_mode": "fiction",
+      "aliases": [],
+      "syntax": "/pace [immediate|fast|natural|slow|lingering] [\"goal\"]",
+      "generation_only": true,
+      "action": "insert",
+      "runtime_version": "1.2.5a1",
+      "role": "modifier",
+      "arguments": [],
+      "options": [
+        {
+          "name": "pace",
+          "kind": "enum",
+          "description": "",
+          "choices": [
+            "auto",
+            "immediate",
+            "fast",
+            "natural",
+            "slow",
+            "lingering"
+          ],
+          "default": "natural",
+          "minimum": null,
+          "maximum": null
+        }
+      ],
+      "why_use": "Apply pacing as structured request metadata rather than repeating prose instructions.",
+      "examples": [
+        "/pace slow"
+      ],
+      "execution_contract": {
+        "runtime_version": "1.2.5a1",
+        "retrieval_profile": "modifier",
+        "retrieval_weights": {
+          "continuity": 0.0,
+          "state": 0.0,
+          "relationships": 0.0,
+          "events": 0.0,
+          "spatial": 0.0,
+          "threads": 0.0,
+          "pov": 0.0,
+          "source": 0.0
+        },
+        "deliberation_profile": "scene",
+        "realization_profile": "modifier",
+        "capabilities": [
+          "read_context",
+          "deliberate",
+          "generate"
+        ],
+        "authority": "generation_only",
+        "mutates_authority": false,
+        "writer_calls_hint": 1
+      }
+    }
+  ]
+}

@@ -1,0 +1,685 @@
+{
+  "profiles": {
+    "story_writer": {
+      "id": "story_writer",
+      "task_type": "story",
+      "system_contract": "Write narrative prose from the supplied active scene and admitted evidence. Treat retrieved material as evidence, preserve uncertainty, and never alter canon directly.",
+      "context_recipe_id": "RECIPE-STORY",
+      "context_lens": "scene",
+      "output_mode": "prose",
+      "output_schema_id": null,
+      "temperature": 0.85,
+      "max_output_tokens": 8192,
+      "reasoning_mode": "off",
+      "allow_creative_inference": true,
+      "allow_cross_scope_evidence": false,
+      "may_create_proposal": true,
+      "may_commit_canon": false,
+      "inherit_hidden_history": false,
+      "retry_policy": "validate_once_then_retry_once",
+      "validation_policy": "scope_identity_time_provenance"
+    },
+    "dialogue_writer": {
+      "id": "dialogue_writer",
+      "task_type": "dialogue",
+      "system_contract": "Write dialogue using only admitted speaker voice, relationship state, scene facts, and knowledge available to the participating characters.",
+      "context_recipe_id": "RECIPE-DIALOGUE",
+      "context_lens": "pov",
+      "output_mode": "prose",
+      "output_schema_id": null,
+      "temperature": 0.9,
+      "max_output_tokens": 4096,
+      "reasoning_mode": "off",
+      "allow_creative_inference": true,
+      "allow_cross_scope_evidence": false,
+      "may_create_proposal": true,
+      "may_commit_canon": false,
+      "inherit_hidden_history": false,
+      "retry_policy": "validate_once_then_retry_once",
+      "validation_policy": "scope_identity_time_provenance"
+    },
+    "structure_extractor": {
+      "id": "structure_extractor",
+      "task_type": "extract",
+      "system_contract": "Extract only claims explicitly supported by the supplied source spans. Do not complete missing detail; return empty arrays when nothing is supported.",
+      "context_recipe_id": "RECIPE-EXTRACT",
+      "context_lens": "scene",
+      "output_mode": "structured",
+      "output_schema_id": "memory_proposals_v1",
+      "temperature": 0.05,
+      "max_output_tokens": 4096,
+      "reasoning_mode": "off",
+      "allow_creative_inference": false,
+      "allow_cross_scope_evidence": false,
+      "may_create_proposal": true,
+      "may_commit_canon": false,
+      "inherit_hidden_history": false,
+      "retry_policy": "validate_once_then_retry_once",
+      "validation_policy": "scope_identity_time_provenance"
+    },
+    "memory_summarizer": {
+      "id": "memory_summarizer",
+      "task_type": "summarize",
+      "system_contract": "Summarize only supplied evidence. Keep explicit facts separate from inference and uncertainty, and return the source chunk IDs used.",
+      "context_recipe_id": "RECIPE-SUMMARY",
+      "context_lens": "scene",
+      "output_mode": "structured",
+      "output_schema_id": "memory_summary_v1",
+      "temperature": 0.15,
+      "max_output_tokens": 3072,
+      "reasoning_mode": "off",
+      "allow_creative_inference": false,
+      "allow_cross_scope_evidence": false,
+      "may_create_proposal": false,
+      "may_commit_canon": false,
+      "inherit_hidden_history": false,
+      "retry_policy": "validate_once_then_retry_once",
+      "validation_policy": "scope_identity_time_provenance"
+    },
+    "evidence_analyst": {
+      "id": "evidence_analyst",
+      "task_type": "analysis",
+      "system_contract": "Analyze admitted evidence, separate fact from inference, preserve disagreements, cite provenance, and abstain when support is insufficient.",
+      "context_recipe_id": "RECIPE-ANALYSIS",
+      "context_lens": "author",
+      "output_mode": "analysis",
+      "output_schema_id": null,
+      "temperature": 0.15,
+      "max_output_tokens": 4096,
+      "reasoning_mode": "optional",
+      "allow_creative_inference": false,
+      "allow_cross_scope_evidence": true,
+      "may_create_proposal": false,
+      "may_commit_canon": false,
+      "inherit_hidden_history": false,
+      "retry_policy": "validate_once_then_retry_once",
+      "validation_policy": "scope_identity_time_provenance"
+    },
+    "continuity_explainer": {
+      "id": "continuity_explainer",
+      "task_type": "explain_issue",
+      "system_contract": "Explain a deterministic continuity issue already detected by Arline. Do not create, dismiss, or resolve the issue yourself.",
+      "context_recipe_id": "RECIPE-CONTINUITY",
+      "context_lens": "scene",
+      "output_mode": "explanation",
+      "output_schema_id": null,
+      "temperature": 0.1,
+      "max_output_tokens": 2048,
+      "reasoning_mode": "off",
+      "allow_creative_inference": false,
+      "allow_cross_scope_evidence": false,
+      "may_create_proposal": false,
+      "may_commit_canon": false,
+      "inherit_hidden_history": false,
+      "retry_policy": "validate_once_then_retry_once",
+      "validation_policy": "scope_identity_time_provenance"
+    },
+    "branch_comparison": {
+      "id": "branch_comparison",
+      "task_type": "branch_compare",
+      "system_contract": "Explain deterministic differences between explicitly supplied branches. Never merge branches; any suggested reconciliation remains a proposal.",
+      "context_recipe_id": "RECIPE-BRANCH-COMPARE",
+      "context_lens": "author",
+      "output_mode": "analysis",
+      "output_schema_id": null,
+      "temperature": 0.1,
+      "max_output_tokens": 3072,
+      "reasoning_mode": "off",
+      "allow_creative_inference": false,
+      "allow_cross_scope_evidence": true,
+      "may_create_proposal": true,
+      "may_commit_canon": false,
+      "inherit_hidden_history": false,
+      "retry_policy": "validate_once_then_retry_once",
+      "validation_policy": "scope_identity_time_provenance"
+    },
+    "ambiguous_query_router": {
+      "id": "ambiguous_query_router",
+      "task_type": "route",
+      "system_contract": "Choose exactly one supported query route and resolved anchors. Do not retrieve evidence and do not answer the user.",
+      "context_recipe_id": "RECIPE-ROUTER",
+      "context_lens": "scene",
+      "output_mode": "route",
+      "output_schema_id": null,
+      "temperature": 0.0,
+      "max_output_tokens": 256,
+      "reasoning_mode": "off",
+      "allow_creative_inference": false,
+      "allow_cross_scope_evidence": false,
+      "may_create_proposal": false,
+      "may_commit_canon": false,
+      "inherit_hidden_history": false,
+      "retry_policy": "validate_once_then_retry_once",
+      "validation_policy": "scope_identity_time_provenance"
+    }
+  },
+  "schemas": {
+    "memory_proposals_v1": {
+      "$defs": {
+        "EpistemicChangeProposal": {
+          "additionalProperties": false,
+          "properties": {
+            "character_variant_id": {
+              "minLength": 1,
+              "title": "Character Variant Id",
+              "type": "string"
+            },
+            "topic_type": {
+              "minLength": 1,
+              "title": "Topic Type",
+              "type": "string"
+            },
+            "topic_id": {
+              "minLength": 1,
+              "title": "Topic Id",
+              "type": "string"
+            },
+            "state_type": {
+              "enum": [
+                "knowledge_acquired",
+                "knowledge_revealed",
+                "belief_formed",
+                "belief_revised",
+                "misinformation_received",
+                "suspicion_formed",
+                "secret_shared"
+              ],
+              "title": "State Type",
+              "type": "string"
+            },
+            "value": {
+              "title": "Value"
+            },
+            "evidence": {
+              "items": {
+                "$ref": "#/$defs/EvidenceSpan"
+              },
+              "minItems": 1,
+              "title": "Evidence",
+              "type": "array"
+            },
+            "confidence": {
+              "default": 1.0,
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "title": "Confidence",
+              "type": "number"
+            }
+          },
+          "required": [
+            "character_variant_id",
+            "topic_type",
+            "topic_id",
+            "state_type",
+            "value",
+            "evidence"
+          ],
+          "title": "EpistemicChangeProposal",
+          "type": "object"
+        },
+        "EventProposal": {
+          "additionalProperties": false,
+          "properties": {
+            "event_type": {
+              "minLength": 1,
+              "title": "Event Type",
+              "type": "string"
+            },
+            "summary": {
+              "minLength": 1,
+              "title": "Summary",
+              "type": "string"
+            },
+            "participants": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Participants",
+              "type": "array"
+            },
+            "state_patch": {
+              "additionalProperties": true,
+              "title": "State Patch",
+              "type": "object"
+            },
+            "evidence": {
+              "items": {
+                "$ref": "#/$defs/EvidenceSpan"
+              },
+              "minItems": 1,
+              "title": "Evidence",
+              "type": "array"
+            },
+            "confidence": {
+              "default": 1.0,
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "title": "Confidence",
+              "type": "number"
+            }
+          },
+          "required": [
+            "event_type",
+            "summary",
+            "evidence"
+          ],
+          "title": "EventProposal",
+          "type": "object"
+        },
+        "EvidenceSpan": {
+          "additionalProperties": false,
+          "properties": {
+            "source_id": {
+              "minLength": 1,
+              "title": "Source Id",
+              "type": "string"
+            },
+            "start_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Start Id"
+            },
+            "end_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "End Id"
+            },
+            "quote": {
+              "default": "",
+              "title": "Quote",
+              "type": "string"
+            }
+          },
+          "required": [
+            "source_id"
+          ],
+          "title": "EvidenceSpan",
+          "type": "object"
+        },
+        "RelationshipChangeProposal": {
+          "additionalProperties": false,
+          "properties": {
+            "subject_variant_id": {
+              "minLength": 1,
+              "title": "Subject Variant Id",
+              "type": "string"
+            },
+            "object_variant_id": {
+              "minLength": 1,
+              "title": "Object Variant Id",
+              "type": "string"
+            },
+            "relation_type": {
+              "minLength": 1,
+              "title": "Relation Type",
+              "type": "string"
+            },
+            "status": {
+              "default": "current",
+              "title": "Status",
+              "type": "string"
+            },
+            "attributes": {
+              "additionalProperties": true,
+              "title": "Attributes",
+              "type": "object"
+            },
+            "evidence": {
+              "items": {
+                "$ref": "#/$defs/EvidenceSpan"
+              },
+              "minItems": 1,
+              "title": "Evidence",
+              "type": "array"
+            },
+            "confidence": {
+              "default": 1.0,
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "title": "Confidence",
+              "type": "number"
+            }
+          },
+          "required": [
+            "subject_variant_id",
+            "object_variant_id",
+            "relation_type",
+            "evidence"
+          ],
+          "title": "RelationshipChangeProposal",
+          "type": "object"
+        },
+        "StateChangeProposal": {
+          "additionalProperties": false,
+          "properties": {
+            "owner_type": {
+              "minLength": 1,
+              "title": "Owner Type",
+              "type": "string"
+            },
+            "owner_id": {
+              "minLength": 1,
+              "title": "Owner Id",
+              "type": "string"
+            },
+            "path": {
+              "minLength": 1,
+              "title": "Path",
+              "type": "string"
+            },
+            "proposed_value": {
+              "title": "Proposed Value"
+            },
+            "old_value": {
+              "default": null,
+              "title": "Old Value"
+            },
+            "evidence": {
+              "items": {
+                "$ref": "#/$defs/EvidenceSpan"
+              },
+              "minItems": 1,
+              "title": "Evidence",
+              "type": "array"
+            },
+            "confidence": {
+              "default": 1.0,
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "title": "Confidence",
+              "type": "number"
+            }
+          },
+          "required": [
+            "owner_type",
+            "owner_id",
+            "path",
+            "proposed_value",
+            "evidence"
+          ],
+          "title": "StateChangeProposal",
+          "type": "object"
+        },
+        "StoryThreadProposal": {
+          "additionalProperties": false,
+          "properties": {
+            "thread_type": {
+              "minLength": 1,
+              "title": "Thread Type",
+              "type": "string"
+            },
+            "title": {
+              "minLength": 1,
+              "title": "Title",
+              "type": "string"
+            },
+            "description": {
+              "default": "",
+              "title": "Description",
+              "type": "string"
+            },
+            "status": {
+              "default": "open",
+              "enum": [
+                "open",
+                "developing",
+                "resolved",
+                "abandoned",
+                "invalidated"
+              ],
+              "title": "Status",
+              "type": "string"
+            },
+            "related_resource_ids": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Related Resource Ids",
+              "type": "array"
+            },
+            "evidence": {
+              "items": {
+                "$ref": "#/$defs/EvidenceSpan"
+              },
+              "minItems": 1,
+              "title": "Evidence",
+              "type": "array"
+            },
+            "confidence": {
+              "default": 1.0,
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "title": "Confidence",
+              "type": "number"
+            }
+          },
+          "required": [
+            "thread_type",
+            "title",
+            "evidence"
+          ],
+          "title": "StoryThreadProposal",
+          "type": "object"
+        },
+        "UncertaintyRecord": {
+          "additionalProperties": false,
+          "properties": {
+            "description": {
+              "minLength": 1,
+              "title": "Description",
+              "type": "string"
+            },
+            "evidence": {
+              "items": {
+                "$ref": "#/$defs/EvidenceSpan"
+              },
+              "title": "Evidence",
+              "type": "array"
+            }
+          },
+          "required": [
+            "description"
+          ],
+          "title": "UncertaintyRecord",
+          "type": "object"
+        },
+        "UnresolvedReference": {
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "minLength": 1,
+              "title": "Text",
+              "type": "string"
+            },
+            "source_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Source Id"
+            },
+            "candidates": {
+              "items": {
+                "type": "string"
+              },
+              "title": "Candidates",
+              "type": "array"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "title": "UnresolvedReference",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "events": {
+          "items": {
+            "$ref": "#/$defs/EventProposal"
+          },
+          "title": "Events",
+          "type": "array"
+        },
+        "state_changes": {
+          "items": {
+            "$ref": "#/$defs/StateChangeProposal"
+          },
+          "title": "State Changes",
+          "type": "array"
+        },
+        "knowledge_changes": {
+          "items": {
+            "$ref": "#/$defs/EpistemicChangeProposal"
+          },
+          "title": "Knowledge Changes",
+          "type": "array"
+        },
+        "belief_changes": {
+          "items": {
+            "$ref": "#/$defs/EpistemicChangeProposal"
+          },
+          "title": "Belief Changes",
+          "type": "array"
+        },
+        "relationship_changes": {
+          "items": {
+            "$ref": "#/$defs/RelationshipChangeProposal"
+          },
+          "title": "Relationship Changes",
+          "type": "array"
+        },
+        "story_threads": {
+          "items": {
+            "$ref": "#/$defs/StoryThreadProposal"
+          },
+          "title": "Story Threads",
+          "type": "array"
+        },
+        "uncertainties": {
+          "items": {
+            "$ref": "#/$defs/UncertaintyRecord"
+          },
+          "title": "Uncertainties",
+          "type": "array"
+        },
+        "unresolved_references": {
+          "items": {
+            "$ref": "#/$defs/UnresolvedReference"
+          },
+          "title": "Unresolved References",
+          "type": "array"
+        }
+      },
+      "title": "MemoryProposalsV1",
+      "type": "object"
+    },
+    "memory_summary_v1": {
+      "additionalProperties": false,
+      "properties": {
+        "summary_type": {
+          "minLength": 1,
+          "title": "Summary Type",
+          "type": "string"
+        },
+        "subject_type": {
+          "minLength": 1,
+          "title": "Subject Type",
+          "type": "string"
+        },
+        "subject_id": {
+          "minLength": 1,
+          "title": "Subject Id",
+          "type": "string"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "explicit_facts": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Explicit Facts",
+          "type": "array"
+        },
+        "inferences": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Inferences",
+          "type": "array"
+        },
+        "uncertainties": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Uncertainties",
+          "type": "array"
+        },
+        "source_chunk_ids": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Source Chunk Ids",
+          "type": "array"
+        },
+        "story_order_from": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Story Order From"
+        },
+        "story_order_to": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Story Order To"
+        }
+      },
+      "required": [
+        "summary_type",
+        "subject_type",
+        "subject_id",
+        "text",
+        "source_chunk_ids"
+      ],
+      "title": "MemorySummaryV1",
+      "type": "object"
+    }
+  }
+}

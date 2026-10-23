@@ -54,6 +54,7 @@ export interface RuntimeConfig extends JsonMap {
   context_length: number;
   input_mode: string;
   reasoning: string;
+  planning_enabled?: boolean;
   projection_mode: string;
   temperature: number;
   top_p: number;

@@ -14,7 +14,7 @@ import re
 import sqlite3
 from pathlib import Path
 from threading import RLock
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Query
@@ -40,7 +40,7 @@ from src.discovery.store import DiscoveryStore
 from src.version import __version__
 from src.directives import COMMAND_REGISTRY_VERSION, DYNAMIC_REFERENCES, REFERENCE_SELECTORS, DirectiveEngine
 from src.memory.web import create_memory_router
-from src.workspace.store import WORKSPACE_SCHEMA_VERSION
+from src.workspace.store import MAX_FOLDER_DEPTH, WORKSPACE_SCHEMA_VERSION, build_folder_tree
 from src.workspace import (
     BRANCH_KINDS,
     CANON_STATUSES,
@@ -54,7 +54,7 @@ from src.workspace import (
     FoundationStore,
     parse_quick_create,
 )
-from src.conversation import extract_blueprint, recipe_for_mode, resolve_presence, story_lab_requests_prose, validate_user_agency
+from src.conversation import extract_blueprint, recipe_for_mode, resolve_presence, story_lab_prose_intent_warnings, story_lab_requests_prose, validate_user_agency
 from src.profile import build_personalization_context, extract_profile_draft
 
 
@@ -119,6 +119,13 @@ def _conversation_contract(mode: str, profile: dict[str, Any]) -> str:
         ])
         if not personalization.get("learn_from_chat", True):
             lines.append("Do not infer or retain new personal facts from this conversation.")
+        partner_name = str(personalization.get("partner_name") or "").strip()
+        if partner_name:
+            lines.extend([
+                f"Assistant alias: {json.dumps(partner_name, ensure_ascii=False)}",
+                "When the author directly uses this alias, resolve it as addressing you. Do not treat it as a story entity unless the author explicitly says it names a character.",
+                "Show this alias as your conversation name. It changes neither your behavior nor story canon or the Arline Studio product name.",
+            ])
     if safe_mode == "story_lab":
         lines.extend([
             f"Story Lab focus: {profile.get('story_lab_focus') or 'plot'}",
@@ -127,6 +134,8 @@ def _conversation_contract(mode: str, profile: dict[str, Any]) -> str:
             "Answer the author's actual design question before asking at most one useful follow-up.",
             "Do not default to a numbered option list, formal report, scene narration, or invented dialogue.",
         ])
+        if profile.get("response_kind") == "prose":
+            lines.append("This turn explicitly requests prose. Output the fiction itself immediately; do not discuss or restate the writing request.")
     if safe_mode == "interactive":
         lines.extend([
             f"Presence: {json.dumps(presence, ensure_ascii=False)}",
@@ -146,13 +155,14 @@ def _conversation_contract(mode: str, profile: dict[str, Any]) -> str:
 
 
 class RuntimePayload(BaseModel):
-    server_url: str = "http://127.0.0.1:1234"
+    server_url: str | None = None
     api_key: str | None = None
-    model: str = ""
+    model: str | None = None
     gpu_ratio: float = Field(1.0, ge=0.0, le=1.0)
     context_length: int = Field(32768, gt=0)
     input_mode: str = "smart_hybrid"
     reasoning: str = "off"
+    deliberation_mode: Literal["auto", "on", "off"] = "auto"
     projection_mode: str = "balanced"
     temperature: float = Field(0.8, ge=0.0, le=2.0)
     top_p: float = Field(0.95, ge=0.0, le=1.0)
@@ -788,6 +798,37 @@ class StateProposalPayload(BaseModel):
     turn_id: str | None = None
 
 
+class StoryLabSheetProposalPayload(BaseModel):
+    project_id: str
+    source_text: str
+    prompt_text: str = ""
+    kind: str = "plot"
+    name: str = ""
+    world_id: str | None = None
+    branch_id: str | None = None
+    session_id: str | None = None
+    turn_id: str | None = None
+
+
+class StoryLabSheetApplyPayload(BaseModel):
+    action: str = "accept"
+    proposal: dict[str, Any] = Field(default_factory=dict)
+    branch_name: str = ""
+    target_branch_id: str | None = None
+
+
+class StoryLabSheetBundleItem(BaseModel):
+    change_id: str
+    proposal: dict[str, Any] = Field(default_factory=dict)
+    selected: bool = True
+
+
+class StoryLabSheetBundleApplyPayload(BaseModel):
+    action: str = "accept"
+    items: list[StoryLabSheetBundleItem] = Field(default_factory=list)
+    branch_name: str = ""
+
+
 @dataclass(slots=True)
 class CachedRun:
     config: RuntimeConfig
@@ -853,14 +894,21 @@ def _apply_payload(cfg: RuntimeConfig, payload: RuntimePayload) -> RuntimeConfig
     if payload.projection_mode not in VALID_PROJECTION_MODES:
         raise ValueError(f"Unsupported projection mode: {payload.projection_mode}")
 
-    cfg.lmstudio.base_url = RuntimeConfig.normalize_server_url(payload.server_url)
+    if payload.server_url and payload.server_url.strip():
+        cfg.lmstudio.base_url = RuntimeConfig.normalize_server_url(payload.server_url)
     if payload.api_key is not None:
         cfg.lmstudio.api_key = payload.api_key
-    cfg.lmstudio.model = payload.model or ""
+    # An omitted model means "use the configured model". React normally sends
+    # the selected key, but scripts and integrations should not erase a valid
+    # config value merely because RuntimePayload's optional override is blank.
+    if payload.model and payload.model.strip():
+        cfg.lmstudio.model = payload.model.strip()
     cfg.model_load.gpu_ratio = float(payload.gpu_ratio)
     cfg.model_load.context_length = int(payload.context_length)
     cfg.writer.input_mode = payload.input_mode
     cfg.generation.reasoning = payload.reasoning
+    if payload.deliberation_mode != "auto":
+        cfg.deliberation.enabled = payload.deliberation_mode == "on"
     cfg.projection.mode = payload.projection_mode
     cfg.generation.temperature = float(payload.temperature)
     cfg.generation.top_p = float(payload.top_p)
@@ -949,6 +997,7 @@ def _public_config(cfg: RuntimeConfig) -> dict[str, Any]:
         "context_length": cfg.model_load.context_length,
         "input_mode": cfg.writer.input_mode,
         "reasoning": cfg.generation.reasoning,
+        "planning_enabled": cfg.deliberation.enabled,
         "projection_mode": cfg.projection.mode,
         "temperature": cfg.generation.temperature,
         "top_p": cfg.generation.top_p,
@@ -990,15 +1039,7 @@ def _public_config(cfg: RuntimeConfig) -> dict[str, Any]:
 
 
 def _folder_tree_from_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    by_parent: dict[str | None, list[dict[str, Any]]] = {}
-    for raw in rows:
-        row = dict(raw)
-        by_parent.setdefault(row.get("parent_id"), []).append(row)
-    for values in by_parent.values():
-        values.sort(key=lambda item: (item.get("sort_order", 0), str(item.get("name", "")).casefold()))
-    def build(parent_id: str | None) -> list[dict[str, Any]]:
-        return [{**item, "children": build(item.get("id"))} for item in by_parent.get(parent_id, [])]
-    return build(None)
+    return build_folder_tree(rows)
 
 
 def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
@@ -1057,21 +1098,24 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         document/entity row or producing orphaned children in search/results.
         """
         by_id = {row["id"]: row for row in rows}
-        memo: dict[str, bool] = {}
-
-        def visible(folder_id: str) -> bool:
-            if folder_id in memo:
-                return memo[folder_id]
-            row = by_id.get(folder_id)
-            if row is None or foundation.is_hidden("folder", folder_id):
-                memo[folder_id] = False
-                return False
-            parent_id = row.get("parent_id")
-            result = True if not parent_id else visible(parent_id)
-            memo[folder_id] = result
-            return result
-
-        return [row for row in rows if visible(row["id"])]
+        depths: dict[str, int | None] = {}
+        for row in rows:
+            path: list[str] = []
+            seen: set[str] = set()
+            current = row["id"]
+            while current is not None and current not in depths:
+                ancestor = by_id.get(current)
+                if current in seen or ancestor is None or foundation.is_hidden("folder", current):
+                    depths[current] = None
+                    break
+                seen.add(current)
+                path.append(current)
+                current = ancestor.get("parent_id")
+            depth = 0 if current is None else depths[current]
+            for folder_id in reversed(path):
+                depth = depth + 1 if depth is not None else None
+                depths[folder_id] = depth if depth is not None and depth <= MAX_FOLDER_DEPTH else None
+        return [row for row in rows if depths[row["id"]] is not None]
 
     def resource_folder_visible(resource: dict[str, Any], visible_folder_ids: set[str]) -> bool:
         folder_id = resource.get("folder_id")
@@ -1612,6 +1656,11 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             history.delete_session(resource_id)
             foundation.forget_resource(resource_type, resource_id)
             return
+        if resource_type == "folder":
+            for folder_id in workspace.delete_folder(resource_id):
+                history.clear_folder_reference(folder_id)
+                foundation.forget_resource("folder", folder_id)
+            return
         if resource_type == "project":
             history.delete_sessions_by_scope(project_id=resource_id)
             workspace.delete_project(resource_id)
@@ -1623,7 +1672,6 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             workspace.delete_branch(resource_id)
         else:
             deleters = {
-                "folder": workspace.delete_folder,
                 "document": workspace.delete_document,
                 "entity_family": workspace.delete_entity_family,
                 "entity_variant": workspace.delete_variant,
@@ -1969,6 +2017,431 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             "conflicts": events.get("conflicts", []),
             "uncertainties": (result.analysis or {}).get("uncertainties", []),
         }
+
+    def _story_lab_character_name(prompt: str, response: str) -> str:
+        combined = f"{prompt}\n{response}"
+        patterns = (
+            r"\b(?i:character|karakter)\s+(?i:named|called|bernama|namanya)\s+([A-ZÀ-ÖØ-Þ][\wÀ-ÖØ-öø-ÿ'’-]*(?:\s+[A-ZÀ-ÖØ-Þ][\wÀ-ÖØ-öø-ÿ'’-]*){0,2})(?=\s+(?i:who|yang|should|is|has|wants|ingin|merupakan)|[,.:;?!]|$)",
+            r"\b(?i:develop|explore|about|for|whether|apakah)\s+([A-ZÀ-ÖØ-Þ][\wÀ-ÖØ-öø-ÿ'’-]{1,30})(?=\s+(?i:who|yang|should|is|has|wants|ingin|merupakan)|[,.:;?!]|$)",
+            r"\b(?i:character|karakter)\s+([A-ZÀ-ÖØ-Þ][\wÀ-ÖØ-öø-ÿ'’-]{1,30})(?=\s+(?i:who|yang|is|ingin)|[,.:;?!]|$)",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, combined)
+            if match:
+                candidate = match.group(1).strip(" .,:;!?*`\t")
+                if candidate.casefold() not in {"a", "an", "the", "seorang", "ini", "named"}:
+                    return candidate
+        return ""
+
+    def _story_lab_plot_title(prompt: str) -> str:
+        text = " ".join(prompt.strip().split())
+        quoted = re.search(r"[\"“]([^\"”]{3,64})[\"”]", text)
+        if quoted:
+            return quoted.group(1).strip()
+        text = re.sub(
+            r"^(?:please\s+|tolong\s+)?(?:help me\s+|bantu (?:gue|aku|saya)\s+|talk through\s+|explore\s+|outline\s+|diagnose\s+|write\s+|draft\s+|bantu\s+)?",
+            "", text, flags=re.IGNORECASE,
+        )
+        text = re.sub(r"^(?:a|an|the|this|our|sebuah|suatu)\s+", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"^(?:plot|story|scene|idea|image|inciting incident)\s+(?:about|where|of|for)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"^(?:a|an|the|this|our|sebuah|suatu)\s+", "", text, flags=re.IGNORECASE)
+        if re.match(r"^(?:i only have an image|i have an image|ngetes world rule ini)\s*:", text, flags=re.IGNORECASE):
+            text = text.split(":", 1)[1].strip()
+        text = re.split(r"[.!?;]", text, maxsplit=1)[0]
+        text = re.sub(r"\b(?:keep it|without|under)\b.*$", "", text, flags=re.IGNORECASE).strip(" ,:-")
+        words = text.split()
+        if len(words) > 9:
+            words = words[:9]
+        small_words = {"a", "an", "the", "and", "or", "of", "to", "in", "at", "with", "for", "between", "where", "dan", "yang", "di", "ke", "dengan", "satu"}
+        while words and words[-1].casefold().strip(" ,:-") in small_words:
+            words.pop()
+        title_words = [
+            word if index > 0 and word.casefold().strip(" ,:-") in small_words else word[:1].upper() + word[1:]
+            for index, word in enumerate(words)
+        ]
+        title = " ".join(title_words).strip()
+        return title[:72].strip()
+
+    def _story_lab_sheet_name(text: str, kind: str, prompt: str = "") -> str:
+        if kind == "character":
+            character_name = _story_lab_character_name(prompt, text)
+            if character_name:
+                return character_name
+        elif prompt:
+            plot_title = _story_lab_plot_title(prompt)
+            if plot_title:
+                return plot_title
+        heading = re.search(r"(?m)^#{1,4}\s+(.{2,80})$", text)
+        if heading:
+            return heading.group(1).strip(" *`\t")
+        emphasized = re.search(r"\*\*([^*\n]{2,60})\*\*", text)
+        if emphasized:
+            return emphasized.group(1).strip()
+        first_line = next((line.strip(" -*#\t") for line in text.splitlines() if line.strip()), "")
+        if first_line and len(first_line) <= 72:
+            return first_line
+        return "Untitled character" if kind == "character" else "Story Lab plot"
+
+    def _stage_story_lab_sheet_proposal(payload: StoryLabSheetProposalPayload):
+        """Stage one editable Story Lab resource without mutating the Library."""
+        source_text = payload.source_text.strip()
+        kind = payload.kind.strip().lower()
+        if not source_text:
+            raise HTTPException(400, "Proposal text is empty")
+        if kind not in {"character", "location", "relationship", "plot"}:
+            raise HTTPException(400, "Sheet kind must be character, location, relationship, or plot")
+        prompt_text = payload.prompt_text.strip()
+        name = payload.name.strip() or _story_lab_sheet_name(source_text, kind, prompt_text)
+        matches: list[dict[str, Any]] = []
+        target: dict[str, Any] | None = None
+        world_id = payload.world_id or WORLD_BIBLE_WORLD_ID
+        branch_id = None if payload.branch_id == WORLD_BIBLE_BRANCH_ID else payload.branch_id
+
+        if kind in {"character", "location"}:
+            for family in foundation.filter_visible("entity_family", workspace.list_entity_families(None, entity_type=kind)):
+                score = SequenceMatcher(None, name.casefold(), str(family.get("name") or "").casefold()).ratio()
+                if score < 0.58:
+                    continue
+                variant = workspace.resolve_variant(family["id"], world_id, branch_id)
+                revision_type = "entity_variant" if variant else "entity_family"
+                revision_id = variant["id"] if variant else family["id"]
+                revisions = workspace.list_revisions(revision_type, revision_id)
+                candidate = {
+                    "resource_type": "entity_variant" if variant else "entity_family",
+                    "id": variant["id"] if variant else family["id"],
+                    "family_id": family["id"],
+                    "label": family["name"],
+                    "score": round(score, 3),
+                    "updated_at": (variant or family).get("updated_at"),
+                    "base_revision": max((int(item.get("version") or 0) for item in revisions), default=0),
+                    "old_value": (variant or family).get("summary") or family.get("description") or "",
+                }
+                matches.append(candidate)
+            families_by_id = {
+                family["id"]: family
+                for family in foundation.filter_visible(
+                    "entity_family", workspace.list_entity_families(None, entity_type=kind)
+                )
+            }
+            for alias in foundation.alias_matches(name, limit=20):
+                if alias.get("resource_type") != "entity_family" or alias.get("resource_id") not in families_by_id:
+                    continue
+                family = families_by_id[alias["resource_id"]]
+                score = SequenceMatcher(None, name.casefold(), str(alias.get("alias") or "").casefold()).ratio()
+                if score < 0.58:
+                    continue
+                variant = workspace.resolve_variant(family["id"], world_id, branch_id)
+                revision_type = "entity_variant" if variant else "entity_family"
+                revision_id = variant["id"] if variant else family["id"]
+                revisions = workspace.list_revisions(revision_type, revision_id)
+                candidate = {
+                    "resource_type": revision_type, "id": revision_id, "family_id": family["id"],
+                    "label": family["name"], "alias": alias.get("alias"), "score": round(score, 3),
+                    "updated_at": (variant or family).get("updated_at"),
+                    "base_revision": max((int(item.get("version") or 0) for item in revisions), default=0),
+                    "old_value": (variant or family).get("summary") or family.get("description") or "",
+                }
+                previous = next((item for item in matches if item["id"] == revision_id), None)
+                if previous is None:
+                    matches.append(candidate)
+                elif candidate["score"] > previous["score"]:
+                    matches[matches.index(previous)] = candidate
+        elif kind == "plot":
+            for document in workspace.list_documents(payload.project_id):
+                if document.get("document_type") != "outline":
+                    continue
+                if payload.world_id and document.get("world_id") not in {None, payload.world_id}:
+                    continue
+                score = SequenceMatcher(None, name.casefold(), str(document.get("title") or "").casefold()).ratio()
+                if score < 0.58:
+                    continue
+                matches.append({
+                    "resource_type": "document", "id": document["id"], "label": document["title"],
+                    "score": round(score, 3), "updated_at": document.get("updated_at"),
+                    "base_revision": max((int(item.get("version") or 0) for item in workspace.list_revisions("document", document["id"])), default=0),
+                    "old_value": document.get("content") or "",
+                })
+        matches.sort(key=lambda item: item["score"], reverse=True)
+        if matches and matches[0]["score"] >= 0.84:
+            target = matches[0]
+        proposal = {
+            "workflow": "story_lab_sheet", "kind": kind, "name": name, "content": source_text,
+            "source_prompt": prompt_text,
+            "operation": "update" if target else "create",
+            "target_id": target.get("id") if target else None,
+            "target_family_id": target.get("family_id") if target else None,
+            "base_updated_at": target.get("updated_at") if target else None,
+            "base_revision": target.get("base_revision", 0) if target else 0,
+            "document_type": "outline" if kind == "plot" else None,
+            "entity_type": kind if kind in {"character", "location"} else None,
+        }
+        change = workspace.stage_change(
+            project_id=payload.project_id,
+            owner_type=target.get("resource_type") if target else "story_sheet",
+            owner_id=target.get("id") if target else payload.project_id,
+            path=f"story_lab.{kind}_sheet",
+            proposed_value=proposal,
+            old_value=target.get("old_value") if target else None,
+            confidence=target.get("score", 0.7) if target else 0.7,
+            world_id=world_id,
+            branch_id=branch_id,
+            session_id=payload.session_id,
+            turn_id=payload.turn_id,
+            source_text=source_text,
+        )
+        return {"change": change, "proposal": proposal, "matches": matches[:5]}
+
+    def _explicit_story_lab_entities(prompt: str, response: str = "", *, world_id: str, branch_id: str | None) -> list[dict[str, Any]]:
+        """Extract only named identities and places; kinship words alone never invent an entity."""
+        found: list[dict[str, Any]] = []
+
+        def add(kind: str, name: str, **extra: Any) -> None:
+            clean = re.sub(r"\s+", " ", name).strip(" .,:;!?\"'“”")
+            if not clean or clean.casefold() in {"his sister", "her sister", "their sister", "the city", "the place"}:
+                return
+            key = (kind, clean.casefold())
+            if any((item["kind"], item["name"].casefold()) == key for item in found):
+                return
+            found.append({"kind": kind, "name": clean, **extra})
+
+        name_atom = r"[A-ZÀ-ÖØ-Þ][\wÀ-ÖØ-öø-ÿ'’-]*(?:\s+[A-ZÀ-ÖØ-Þ][\wÀ-ÖØ-öø-ÿ'’-]*){0,2}"
+        for match in re.finditer(rf"\b(?i:character|karakter)\s+(?i:named|called|bernama|namanya)\s+({name_atom})", prompt):
+            add("character", match.group(1))
+        for match in re.finditer(rf"\b(?:(?i:his|her|their)\s+)?(?i:sister|brother|sibling|saudari|saudara)\s+(?:(?i:is\s+named|is\s+called|named|called|bernama)\s+)?({name_atom})", prompt):
+            add("character", match.group(1))
+        for match in re.finditer(rf"\b(?i:city|town|village|place|location|kota|desa|tempat)\s+(?i:named|called|bernama)\s+({name_atom})", prompt):
+            add("location", match.group(1))
+        for match in re.finditer(rf"\b(?i:lives?|resides?|tinggal)\s+(?i:in|at|di)\s+({name_atom})", prompt):
+            add("location", match.group(1))
+
+        # Existing Library names are safe references even without "named" syntax.
+        reference_text = f"{prompt}\n{response}"
+        for family in foundation.filter_visible("entity_family", workspace.list_entity_families(None)):
+            family_type = str(family.get("entity_type") or "")
+            if family_type not in {"character", "location"}:
+                continue
+            family_name = str(family.get("name") or "").strip()
+            if family_name and re.search(rf"(?<!\w){re.escape(family_name)}(?!\w)", reference_text, re.IGNORECASE):
+                add(family_type, family_name)
+
+        characters = [item for item in found if item["kind"] == "character"]
+        locations = [item for item in found if item["kind"] == "location"]
+        variant_language = bool(re.search(r"\b(?:variant|version|form|timeline|alternate|versi|varian)\b", prompt, re.IGNORECASE))
+        if variant_language:
+            for item in characters:
+                item["variant_mode"] = True
+
+        if len(characters) >= 2 and re.search(r"\b(?:sister|brother|sibling|saudari|saudara)\b", prompt, re.IGNORECASE):
+            add("relationship", f"{characters[0]['name']} ↔ {characters[1]['name']}", subject_name=characters[0]["name"], object_name=characters[1]["name"], relation_type="sibling")
+        if locations:
+            for character in characters:
+                add("relationship", f"{character['name']} → {locations[0]['name']}", subject_name=character["name"], object_name=locations[0]["name"], relation_type="lives_in")
+        return found
+
+    @app.post("/api/story-lab/sheet-proposals")
+    def create_story_lab_sheet_proposal(payload: StoryLabSheetProposalPayload):
+        """Stage a reviewable bundle of identities, places, and relationships."""
+        prompt = payload.prompt_text.strip()
+        world_id = payload.world_id or WORLD_BIBLE_WORLD_ID
+        branch_id = None if payload.branch_id == WORLD_BIBLE_BRANCH_ID else payload.branch_id
+        specs = _explicit_story_lab_entities(prompt, payload.source_text, world_id=world_id, branch_id=branch_id) if prompt else []
+        if not specs:
+            result = _stage_story_lab_sheet_proposal(payload)
+            return {**result, "items": [result]}
+        items: list[dict[str, Any]] = []
+        for spec in specs:
+            staged = _stage_story_lab_sheet_proposal(StoryLabSheetProposalPayload(
+                project_id=payload.project_id, source_text=payload.source_text,
+                prompt_text=prompt, kind=spec["kind"], name=spec["name"],
+                world_id=payload.world_id, branch_id=payload.branch_id,
+                session_id=payload.session_id, turn_id=payload.turn_id,
+            ))
+            staged["proposal"].update({key: value for key, value in spec.items() if key not in {"kind", "name"}})
+            items.append(staged)
+        return {**items[0], "items": items}
+
+    @app.post("/api/story-lab/sheet-proposals/{change_id}/apply")
+    def apply_story_lab_sheet_proposal(change_id: str, payload: StoryLabSheetApplyPayload):
+        """Accept, reject, or apply an edited proposal on a new sandbox branch."""
+        try:
+            change = workspace.get_staged_change(change_id)
+        except KeyError as exc:
+            raise HTTPException(404, "Sheet proposal not found") from exc
+        if change.get("status") != "pending":
+            raise HTTPException(409, "Sheet proposal is already resolved")
+        stored = change.get("proposed_value") or {}
+        if stored.get("workflow") != "story_lab_sheet":
+            raise HTTPException(400, "Staged change is not a Story Lab sheet proposal")
+        action = payload.action.strip().lower()
+        if action == "reject":
+            return {"change": workspace.finalize_staged_change(change_id, status="rejected"), "resource": None, "branch": None}
+        if action not in {"accept", "branch"}:
+            raise HTTPException(400, "Action must be accept, reject, or branch")
+        proposal = {**stored, **payload.proposal}
+        kind = str(proposal.get("kind") or "").strip().lower()
+        operation = str(proposal.get("operation") or "create").strip().lower()
+        name = str(proposal.get("name") or "").strip()
+        content = str(proposal.get("content") or "").strip()
+        if kind not in {"character", "location", "relationship", "plot"} or operation not in {"create", "update"}:
+            raise HTTPException(400, "Invalid sheet proposal")
+        if not name or (kind != "relationship" and not content):
+            raise HTTPException(400, "Sheet name and content are required")
+
+        world_id = change.get("world_id") or WORLD_BIBLE_WORLD_ID
+        branch_id = change.get("branch_id")
+        created_branch: dict[str, Any] | None = None
+        if action == "branch" and payload.target_branch_id:
+            branch_id = payload.target_branch_id
+        elif action == "branch":
+            branch_name = payload.branch_name.strip() or f"{name} proposal"
+            try:
+                created_branch = workspace.create_branch(
+                    world_id, branch_name, parent_branch_id=branch_id,
+                    kind="sandbox", canon_status="what_if",
+                    description=f"Story Lab sheet proposal: {name}",
+                )
+            except (KeyError, ValueError, sqlite3.IntegrityError) as exc:
+                raise HTTPException(400, str(exc)) from exc
+            branch_id = created_branch["id"]
+
+        try:
+            resource: dict[str, Any]
+            if kind in {"character", "location"}:
+                target_id = str(proposal.get("target_id") or "")
+                target_family_id = str(proposal.get("target_family_id") or "")
+                if operation == "update" and target_id.startswith("FAM-"):
+                    target_family_id = target_id
+                    target_id = ""
+                if operation == "update" and target_id:
+                    current = workspace.get_variant(target_id)
+                    current_revision = max((int(item.get("version") or 0) for item in workspace.list_revisions("entity_variant", target_id)), default=0)
+                    if action == "accept" and int(proposal.get("base_revision") or 0) != current_revision:
+                        raise HTTPException(409, f"This {kind} changed after the proposal was created. Reopen the proposal to review the latest version.")
+                    target_family_id = current["family_id"]
+                    if action == "branch" and current.get("branch_id") != branch_id:
+                        resource = workspace.create_variant(
+                            target_family_id, world_id, branch_id=branch_id,
+                            display_name=name, summary=content, canon_status="what_if",
+                            inherit_from_variant_id=current["id"],
+                            inherit_sections=["attributes", "voice", "knowledge", "beliefs", "current_state"],
+                        )
+                    else:
+                        resource = workspace.update_variant(
+                            current["id"], display_name=name, summary=content,
+                            note="Accepted Story Lab sheet proposal",
+                        )
+                elif operation == "update" and target_family_id:
+                    resource = workspace.create_variant(
+                        target_family_id, world_id, branch_id=branch_id,
+                        display_name=name, summary=content,
+                        canon_status="what_if" if action == "branch" else "draft",
+                    )
+                else:
+                    family = workspace.create_entity_family(
+                        None, name, entity_type=kind, description=content,
+                        create_variant_in_world=world_id, branch_id=branch_id,
+                    )
+                    resource = next(iter(family.get("variants") or []), family)
+                    if resource.get("id", "").startswith("VAR-"):
+                        resource = workspace.update_variant(
+                            resource["id"], summary=content,
+                            canon_status="what_if" if action == "branch" else "draft",
+                            note="Accepted Story Lab sheet proposal",
+                        )
+                    workspace.set_project_manifest_ref(change["project_id"], "entity_family", family["id"], label=family["name"], priority=1)
+            elif kind == "plot":
+                target_id = str(proposal.get("target_id") or "")
+                if operation == "update" and target_id:
+                    current = workspace.get_document(target_id)
+                    current_revision = max((int(item.get("version") or 0) for item in workspace.list_revisions("document", target_id)), default=0)
+                    if action == "accept" and int(proposal.get("base_revision") or 0) != current_revision:
+                        raise HTTPException(409, "This plot sheet changed after the proposal was created. Reopen the proposal to review the latest version.")
+                    if action == "branch" and current.get("branch_id") != branch_id:
+                        resource = workspace.create_document(
+                            change["project_id"], name, document_type="outline", content=content,
+                            world_id=world_id, branch_id=branch_id, status="planned",
+                        )
+                    else:
+                        resource = workspace.update_document(
+                            current["id"], title=name, content=content,
+                            note="Accepted Story Lab sheet proposal",
+                        )
+                else:
+                    resource = workspace.create_document(
+                        change["project_id"], name, document_type="outline", content=content,
+                        world_id=world_id, branch_id=branch_id, status="planned",
+                    )
+                memory_service.schedule_document_refresh(resource["id"])
+            else:
+                subject_variant_id = str(proposal.get("subject_variant_id") or "")
+                object_variant_id = str(proposal.get("object_variant_id") or "")
+                relation_type = str(proposal.get("relation_type") or "related_to").strip()
+                if not subject_variant_id or not object_variant_id:
+                    raise HTTPException(400, "Relationship endpoints must resolve to two entity variants")
+                resource = workspace.create_relationship(
+                    world_id, subject_variant_id, object_variant_id, relation_type,
+                    branch_id=branch_id, canon_status="what_if" if action == "branch" else "draft",
+                    attributes={"source": "story_lab"},
+                )
+        except HTTPException:
+            raise
+        except (KeyError, ValueError, sqlite3.IntegrityError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+        resolved = workspace.finalize_staged_change(change_id, status="accepted")
+        return {"change": resolved, "resource": resource, "branch": created_branch}
+
+    @app.post("/api/story-lab/sheet-proposal-bundles/apply")
+    def apply_story_lab_sheet_bundle(payload: StoryLabSheetBundleApplyPayload):
+        """Apply selected bundle items in dependency order and use one sandbox branch."""
+        action = payload.action.strip().lower()
+        if action not in {"accept", "reject", "branch"}:
+            raise HTTPException(400, "Action must be accept, reject, or branch")
+        selected = [item for item in payload.items if item.selected]
+        unselected = [item for item in payload.items if not item.selected]
+        results: list[dict[str, Any]] = []
+        for item in unselected:
+            results.append(apply_story_lab_sheet_proposal(item.change_id, StoryLabSheetApplyPayload(action="reject")))
+        if action == "reject":
+            for item in selected:
+                results.append(apply_story_lab_sheet_proposal(item.change_id, StoryLabSheetApplyPayload(action="reject")))
+            return {"results": results, "branch": None}
+
+        ordered = sorted(selected, key=lambda item: str(item.proposal.get("kind")) == "relationship")
+        variants_by_name: dict[str, str] = {}
+        shared_branch_id: str | None = None
+        shared_branch: dict[str, Any] | None = None
+
+        def resolve_named_variant(name: str, world_id: str, branch_id: str | None) -> str:
+            cached = variants_by_name.get(name.casefold())
+            if cached:
+                return cached
+            for family in foundation.filter_visible("entity_family", workspace.list_entity_families(None)):
+                if str(family.get("name") or "").casefold() != name.casefold():
+                    continue
+                variant = workspace.resolve_variant(family["id"], world_id, branch_id)
+                if variant:
+                    return str(variant["id"])
+            return ""
+
+        for item in ordered:
+            proposal = dict(item.proposal)
+            change = workspace.get_staged_change(item.change_id)
+            if proposal.get("kind") == "relationship":
+                world_id = str(change.get("world_id") or WORLD_BIBLE_WORLD_ID)
+                proposal["subject_variant_id"] = resolve_named_variant(str(proposal.get("subject_name") or ""), world_id, shared_branch_id or change.get("branch_id"))
+                proposal["object_variant_id"] = resolve_named_variant(str(proposal.get("object_name") or ""), world_id, shared_branch_id or change.get("branch_id"))
+            result = apply_story_lab_sheet_proposal(item.change_id, StoryLabSheetApplyPayload(
+                action=action, proposal=proposal, branch_name=payload.branch_name,
+                target_branch_id=shared_branch_id,
+            ))
+            if action == "branch" and not shared_branch_id and result.get("branch"):
+                shared_branch = result["branch"]
+                shared_branch_id = str(shared_branch["id"])
+            resource = result.get("resource") or {}
+            if proposal.get("kind") in {"character", "location"} and str(resource.get("id") or "").startswith("VAR-"):
+                variants_by_name[str(proposal.get("name") or "").casefold()] = str(resource["id"])
+            results.append(result)
+        return {"results": results, "branch": shared_branch}
 
     @app.post("/api/library/entity-merge/preview")
     def entity_merge_preview(payload: EntityFamilyMergePayload):
@@ -2354,16 +2827,19 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     @app.patch("/api/folders/{folder_id}")
     def patch_folder(folder_id: str, payload: FolderPatchPayload):
         try:
-            return workspace.update_folder(folder_id, **payload.model_dump(exclude_none=True))
+            data = payload.model_dump(exclude_none=True)
+            if "parent_id" in payload.model_fields_set:
+                data["parent_id"] = payload.parent_id
+            return workspace.update_folder(folder_id, **data)
         except KeyError as exc:
             raise HTTPException(404, "Folder not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @app.delete("/api/folders/{folder_id}")
     def delete_folder(folder_id: str):
         try:
-            deleted_folder_ids = workspace.delete_folder(folder_id)
-            for deleted_folder_id in deleted_folder_ids:
-                history.clear_folder_reference(deleted_folder_id)
+            _permanent_delete("folder", folder_id)
         except KeyError as exc:
             raise HTTPException(404, "Folder not found") from exc
         return {"ok": True}
@@ -2400,6 +2876,8 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     @app.patch("/api/documents/{document_id}")
     def patch_document(document_id: str, payload: DocumentPatchPayload):
         data = payload.model_dump(exclude_none=True)
+        if "folder_id" in payload.model_fields_set:
+            data["folder_id"] = payload.folder_id
         note = data.pop("note", "updated")
         try:
             document = workspace.update_document(document_id, note=note, **data)
@@ -2407,6 +2885,8 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             return document
         except KeyError as exc:
             raise HTTPException(404, "Document not found") from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @app.delete("/api/documents/{document_id}")
     def delete_document(document_id: str):
@@ -2441,6 +2921,8 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
     @app.patch("/api/entities/families/{family_id}")
     def patch_entity_family(family_id: str, payload: EntityFamilyPatchPayload):
         data = payload.model_dump(exclude_none=True)
+        if "folder_id" in payload.model_fields_set:
+            data["folder_id"] = payload.folder_id
         note = data.pop("note", "updated")
         try:
             return workspace.update_entity_family(family_id, note=note, **data)
@@ -3257,6 +3739,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                 "user_boundaries": user_profile.get("boundaries") or {},
                 "memory_policy": user_profile.get("memory_policy") or {},
                 "personalization_context": build_personalization_context(user_profile, conversation_mode, payload.prompt),
+                "response_kind": "discussion" if conversation_mode == "story_lab" and not story_lab_requests_prose(payload.prompt) else "prose",
             }
             contract = _conversation_contract(conversation_mode, conversation_profile)
             session_context = f"{contract}\n\n{session_context}" if session_context else contract
@@ -3293,7 +3776,10 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
                     quality_report = event["quality"]
                     post = bundle.post_validation.to_dict() if bundle.post_validation else {}
                     post["quality_report"] = quality_report
-                    post["conversation_validation"] = validate_user_agency(bundle.story, conversation_profile)
+                    post["conversation_validation"] = [
+                        *validate_user_agency(bundle.story, conversation_profile),
+                        *story_lab_prose_intent_warnings(payload.prompt, bundle.story),
+                    ]
                     saved_cache.put(CachedRun(config=cfg, bundle=bundle, run_id=run_id))
                     lineage = {
                         "application_version": STUDIO_VERSION,
@@ -3449,6 +3935,7 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
             "user_boundaries": user_profile.get("boundaries") or {},
             "memory_policy": user_profile.get("memory_policy") or {},
             "personalization_context": build_personalization_context(user_profile, conversation_mode, payload.prompt),
+            "response_kind": "discussion" if conversation_mode == "story_lab" and not story_lab_requests_prose(payload.prompt) else "prose",
         }
         contract = _conversation_contract(conversation_mode, conversation_profile)
         session_context = f"{contract}\n\n{session_context}" if session_context else contract
@@ -3496,7 +3983,10 @@ def create_app(config_path: Path | str = DEFAULT_CONFIG_PATH) -> FastAPI:
         saved_cache.put(CachedRun(config=cfg, bundle=bundle, run_id=run_id))
 
         post = bundle.post_validation.to_dict() if bundle.post_validation else {}
-        post["conversation_validation"] = validate_user_agency(bundle.story, conversation_profile)
+        post["conversation_validation"] = [
+            *validate_user_agency(bundle.story, conversation_profile),
+            *story_lab_prose_intent_warnings(payload.prompt, bundle.story),
+        ]
         quality_report = ProseQualityAnalyzer().analyze(bundle.story) if not story_lab_discussion else {"mode": "discussion", "skipped": True}
         post["quality_report"] = quality_report
         if existing_session is not None:

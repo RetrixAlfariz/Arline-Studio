@@ -14,6 +14,8 @@ from src.domain_events import emit_domain_event
 
 
 WORKSPACE_SCHEMA_VERSION = 7
+# Keep nested HTTP serialization bounded as well as folder traversal.
+MAX_FOLDER_DEPTH = 100
 WORLD_BIBLE_PROJECT_ID = "PROJ-WORLD-BIBLE"
 WORLD_BIBLE_WORLD_ID = "WORLD-BIBLE-MAIN"
 WORLD_BIBLE_BRANCH_ID = "BRANCH-BIBLE-MAIN"
@@ -52,6 +54,31 @@ def _loads(value: str | None, fallback: Any) -> Any:
         return json.loads(value)
     except (TypeError, json.JSONDecodeError):
         return fallback
+
+
+def build_folder_tree(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Project only rooted, bounded paths; never rewrite corrupt stored rows."""
+    by_parent: dict[str | None, list[dict[str, Any]]] = {}
+    for raw in rows:
+        row = dict(raw)
+        by_parent.setdefault(row.get("parent_id"), []).append(row)
+    for children in by_parent.values():
+        children.sort(key=lambda row: (row.get("sort_order", 0), str(row.get("name", "")).casefold()))
+    roots: list[dict[str, Any]] = []
+    pending = [(None, roots, 1)]
+    seen: set[str] = set()
+    while pending:
+        parent_id, target, depth = pending.pop()
+        if depth > MAX_FOLDER_DEPTH:
+            continue
+        for row in by_parent.get(parent_id, []):
+            if row["id"] in seen:
+                continue
+            seen.add(row["id"])
+            node = {**row, "children": []}
+            target.append(node)
+            pending.append((row["id"], node["children"], depth + 1))
+    return roots
 
 
 @dataclass(slots=True)
@@ -1850,6 +1877,54 @@ class WorkspaceStore:
 
         return {"source": source, "target": target, "merged": merged, "skipped": skipped}
 
+    @staticmethod
+    def _validate_folder_owner_tx(con: sqlite3.Connection, project_id: str, folder_id: str | None) -> None:
+        if folder_id is None:
+            return
+        folder = con.execute("SELECT project_id FROM workspace_folders WHERE id=?", (folder_id,)).fetchone()
+        if folder is None:
+            raise ValueError("Folder not found")
+        if folder["project_id"] != project_id:
+            raise ValueError("Folder must belong to the same project")
+
+    @staticmethod
+    def _validate_folder_parent_tx(
+        con: sqlite3.Connection, project_id: str, folder_id: str, parent_id: str | None
+    ) -> None:
+        parents = {
+            row["id"]: row["parent_id"] for row in con.execute(
+                "SELECT id,parent_id FROM workspace_folders WHERE project_id=?", (project_id,)
+            )
+        }
+        parents[folder_id] = parent_id
+        seen = {folder_id}
+        ancestor = parent_id
+        depth = 1
+        while ancestor is not None:
+            if ancestor in seen:
+                raise ValueError("Folder hierarchy cannot contain a cycle")
+            if ancestor not in parents:
+                raise ValueError("Parent folder must exist in the same project")
+            seen.add(ancestor)
+            depth += 1
+            if depth > MAX_FOLDER_DEPTH:
+                raise ValueError(f"Folder nesting cannot exceed {MAX_FOLDER_DEPTH} levels")
+            ancestor = parents[ancestor]
+        # Moving a subtree must leave its deepest descendant within the limit.
+        children: dict[str | None, list[str]] = {}
+        for child_id, ancestor in parents.items():
+            children.setdefault(ancestor, []).append(child_id)
+        pending = [(folder_id, depth)]
+        visited: set[str] = set()
+        while pending:
+            child_id, child_depth = pending.pop()
+            if child_id in visited:
+                raise ValueError("Folder hierarchy cannot contain a cycle")
+            visited.add(child_id)
+            if child_depth > MAX_FOLDER_DEPTH:
+                raise ValueError(f"Folder nesting cannot exceed {MAX_FOLDER_DEPTH} levels")
+            pending.extend((child, child_depth + 1) for child in children.get(child_id, []))
+
     def create_folder(
         self,
         project_id: str,
@@ -1865,7 +1940,11 @@ class WorkspaceStore:
         name = name.strip()
         if not name:
             raise ValueError("Folder name cannot be blank")
-        with self._lock, self._connection() as con:
+        with self._lock, self._connection() as con, con:
+            con.execute("BEGIN IMMEDIATE")
+            if con.execute("SELECT id FROM projects WHERE id=?", (project_id,)).fetchone() is None:
+                raise ValueError("Project not found")
+            self._validate_folder_parent_tx(con, project_id, folder_id, parent_id)
             con.execute(
                 "INSERT INTO workspace_folders(id,project_id,world_id,branch_id,parent_id,name,kind,created_at,updated_at) "
                 "VALUES(?,?,?,?,?,?,?,?,?)",
@@ -1900,54 +1979,62 @@ class WorkspaceStore:
         return [dict(row) for row in rows]
 
     def folder_tree(self, project_id: str, *, world_id: str | None = None, branch_id: str | None = None) -> list[dict[str, Any]]:
-        rows = self.list_folders(project_id, world_id=world_id, branch_id=branch_id)
-        by_parent: dict[str | None, list[dict[str, Any]]] = {}
-        for row in rows:
-            by_parent.setdefault(row.get("parent_id"), []).append(row)
-        def build(parent: str | None):
-            return [
-                {**row, "children": build(row["id"])}
-                for row in by_parent.get(parent, [])
-            ]
-        return build(None)
+        return build_folder_tree(self.list_folders(project_id, world_id=world_id, branch_id=branch_id))
 
     def update_folder(self, folder_id: str, **changes: Any) -> dict[str, Any]:
+        if "name" in changes:
+            changes["name"] = str(changes["name"] or "").strip()
+            if not changes["name"]:
+                raise ValueError("Folder name cannot be blank")
         fields: list[str] = []
         params: list[Any] = []
         for key in ("name", "parent_id", "world_id", "branch_id", "kind", "sort_order"):
             if key in changes:
                 fields.append(f"{key}=?")
                 params.append(changes[key])
-        if fields:
-            fields.append("updated_at=?")
-            params.extend([utc_now(), folder_id])
-            with self._lock, self._connection() as con:
-                cur = con.execute(
-                    f"UPDATE workspace_folders SET {', '.join(fields)} WHERE id=?", params
-                )
-                if cur.rowcount == 0:
-                    raise KeyError(folder_id)
+        with self._lock, self._connection() as con, con:
+            con.execute("BEGIN IMMEDIATE")
+            folder = con.execute("SELECT project_id FROM workspace_folders WHERE id=?", (folder_id,)).fetchone()
+            if folder is None:
+                raise KeyError(folder_id)
+            if "parent_id" in changes:
+                self._validate_folder_parent_tx(con, folder["project_id"], folder_id, changes["parent_id"])
+            if fields:
+                fields.append("updated_at=?")
+                params.extend([utc_now(), folder_id])
+                con.execute(f"UPDATE workspace_folders SET {', '.join(fields)} WHERE id=?", params)
         return self.get_folder(folder_id)
 
     def delete_folder(self, folder_id: str) -> list[str]:
-        with self._lock, self._connection() as con:
-            descendants = [folder_id]
+        with self._lock, self._connection() as con, con:
+            con.execute("BEGIN IMMEDIATE")
+            folder = con.execute("SELECT project_id FROM workspace_folders WHERE id=?", (folder_id,)).fetchone()
+            if folder is None:
+                raise KeyError(folder_id)
+            children: dict[str | None, list[str]] = {}
+            for row in con.execute(
+                "SELECT id,parent_id FROM workspace_folders WHERE project_id=?", (folder["project_id"],)
+            ):
+                children.setdefault(row["parent_id"], []).append(row["id"])
+            descendants: list[str] = []
+            visited: set[str] = set()
             pending = [folder_id]
             while pending:
-                child_rows = con.execute(
-                    f"SELECT id FROM workspace_folders WHERE parent_id IN ({','.join('?' for _ in pending)})",
-                    pending,
-                ).fetchall()
-                pending = [row["id"] for row in child_rows]
-                descendants.extend(pending)
-            placeholders = ",".join("?" for _ in descendants)
-            con.execute(
-                f"UPDATE entity_families SET folder_id=NULL WHERE folder_id IN ({placeholders})",
-                descendants,
+                current = pending.pop()
+                if current in visited:
+                    continue
+                visited.add(current)
+                descendants.append(current)
+                pending.extend(children.get(current, []))
+            # Break legacy cycles/deep cascades before deleting. Invalid children
+            # owned by another project survive as roots instead of cascading away.
+            con.executemany(
+                "UPDATE workspace_folders SET parent_id=NULL WHERE parent_id=?",
+                ((item,) for item in descendants),
             )
-            cur = con.execute("DELETE FROM workspace_folders WHERE id=?", (folder_id,))
-            if cur.rowcount == 0:
-                raise KeyError(folder_id)
+            for item in descendants:
+                self._purge_resource_refs_tx(con, "folder", item)
+            con.executemany("DELETE FROM workspace_folders WHERE id=?", ((item,) for item in descendants))
             return descendants
 
     def create_document(
@@ -1971,7 +2058,9 @@ class WorkspaceStore:
             raise ValueError("Unsupported document type")
         document_id = make_id("DOC")
         now = utc_now()
-        with self._lock, self._connection() as con:
+        with self._lock, self._connection() as con, con:
+            con.execute("BEGIN IMMEDIATE")
+            self._validate_folder_owner_tx(con, project_id, folder_id)
             con.execute(
                 "INSERT INTO workspace_documents(id,project_id,world_id,branch_id,folder_id,document_type,title,"
                 "content,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
@@ -2026,7 +2115,7 @@ class WorkspaceStore:
         fields: list[str] = []
         params: list[Any] = []
         for key, value in changes.items():
-            if key in allowed and value is not None:
+            if key in allowed and (value is not None or key == "folder_id"):
                 if key == "status":
                     value = {"draft": "writing", "provisional": "revising", "canon": "final"}.get(value, value)
                 fields.append(f"{key}=?")
@@ -2034,6 +2123,11 @@ class WorkspaceStore:
         with self._lock, self._connection() as con:
             con.execute("BEGIN IMMEDIATE")
             try:
+                document = con.execute("SELECT project_id FROM workspace_documents WHERE id=?", (document_id,)).fetchone()
+                if document is None:
+                    raise KeyError(document_id)
+                if "folder_id" in changes:
+                    self._validate_folder_owner_tx(con, document["project_id"], changes["folder_id"])
                 if fields:
                     fields.append("updated_at=?")
                     params.extend([utc_now(), document_id])
@@ -2093,11 +2187,6 @@ class WorkspaceStore:
         # Library folders are organizational only; they do not make a sheet
         # project-owned.  v1.1 keeps the global ownership boundary while allowing
         # a family to live in the Bible folder tree.
-        if folder_id:
-            with self._connection() as check_con:
-                folder = check_con.execute("SELECT project_id FROM workspace_folders WHERE id=?", (folder_id,)).fetchone()
-            if folder is None or folder["project_id"] != WORLD_BIBLE_PROJECT_ID:
-                raise ValueError("Library entity folders must belong to the Library")
         with self._lock, self._connection() as con:
             slug = self._unique_slug(
                 con, "entity_families", slugify(name),
@@ -2106,6 +2195,7 @@ class WorkspaceStore:
             )
             con.execute("BEGIN IMMEDIATE")
             try:
+                self._validate_folder_owner_tx(con, owner_project_id, folder_id)
                 con.execute(
                     "INSERT INTO entity_families(id,project_id,folder_id,entity_type,name,slug,description,shared_core_json,"
                     "created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
@@ -2169,16 +2259,22 @@ class WorkspaceStore:
         fields: list[str] = []
         params: list[Any] = []
         for key in ("name", "description", "folder_id"):
-            if key in changes and changes[key] is not None:
+            if key in changes and (changes[key] is not None or key == "folder_id"):
                 fields.append(f"{key}=?")
-                value = str(changes[key]).strip()
-                params.append((value or None) if key == "folder_id" else value)
+                value = str(changes[key] or "").strip()
+                if key == "folder_id":
+                    changes[key] = value or None
+                    params.append(changes[key])
+                else:
+                    params.append(value)
         if "shared_core" in changes and changes["shared_core"] is not None:
             fields.append("shared_core_json=?")
             params.append(_dumps(changes["shared_core"]))
         with self._lock, self._connection() as con:
             con.execute("BEGIN IMMEDIATE")
             try:
+                if "folder_id" in changes:
+                    self._validate_folder_owner_tx(con, before["project_id"], changes["folder_id"])
                 if fields:
                     fields.append("updated_at=?")
                     params.extend([utc_now(), family_id])
@@ -3656,6 +3752,24 @@ class WorkspaceStore:
                 path=change["path"], value=change["proposed_value"], status="canon",
                 authority="user_promoted", source_type="staged_change", source_id=change_id,
             )
+        with self._lock, self._connection() as con:
+            con.execute(
+                "UPDATE staged_changes SET status=?,updated_at=? WHERE id=?",
+                (status, utc_now(), change_id),
+            )
+        return self.get_staged_change(change_id)
+
+    def finalize_staged_change(self, change_id: str, *, status: str) -> dict[str, Any]:
+        """Close a staged workflow that applies its own typed mutation.
+
+        Generic staged changes become facts when accepted. Typed workflows such
+        as Story Lab sheet proposals create or revise their resource directly,
+        then use this method to preserve the proposal audit trail without also
+        emitting a duplicate canon fact.
+        """
+        if status not in {"accepted", "rejected"}:
+            raise ValueError("Unsupported staged change status")
+        self.get_staged_change(change_id)
         with self._lock, self._connection() as con:
             con.execute(
                 "UPDATE staged_changes SET status=?,updated_at=? WHERE id=?",

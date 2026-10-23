@@ -146,8 +146,13 @@ def build_personalization_context(
     """Compile only personal data allowed by the user's memory policy."""
     normalized = normalize_user_profile(profile)
     policy = normalized["memory_policy"]
+    collaboration = normalized["collaboration"]
+    partner_name = re.sub(r"\s+", " ", str(collaboration.get("partner_name") or "")).strip()[:80]
     if not policy["enabled"]:
-        return {"memory_enabled": False, "learn_from_chat": False}
+        result = {"memory_enabled": False, "learn_from_chat": False}
+        if partner_name:
+            result["partner_name"] = partner_name
+        return result
     categories = policy["categories"]
     context_name = {
         "story_lab": "casual", "analyst": "formal", "interactive": "story_presence", "character_room": "casual",
@@ -159,9 +164,11 @@ def build_personalization_context(
         "name_context": context_name,
         "prevent_personal_canon": policy["behavior"]["prevent_personal_canon"],
     }
+    if partner_name:
+        result["partner_name"] = partner_name
     if categories["collaboration_preferences"]["enabled"]:
         result["creative_profile"] = normalized["creative_profile"]
-        result["collaboration"] = normalized["collaboration"]
+        result["collaboration"] = collaboration
         result["boundaries"] = normalized["boundaries"]
     if categories["about_you"]["enabled"]:
         result["about"] = normalized["about"]

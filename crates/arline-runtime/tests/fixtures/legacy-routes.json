@@ -1,0 +1,3376 @@
+[
+  {
+    "method": "GET",
+    "path": "/",
+    "function": "index",
+    "source": "src/interface/web/app.py",
+    "line": 1197,
+    "parameters": []
+  },
+  {
+    "method": "POST",
+    "path": "/api/ablation",
+    "function": "ablation",
+    "source": "src/interface/web/app.py",
+    "line": 4086,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "AblationPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/activity",
+    "function": "activity",
+    "source": "src/interface/web/app.py",
+    "line": 1881,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "limit",
+        "annotation": "int"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/aliases",
+    "function": "list_aliases",
+    "source": "src/interface/web/app.py",
+    "line": 1778,
+    "parameters": [
+      {
+        "name": "resource_type",
+        "annotation": "str"
+      },
+      {
+        "name": "resource_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/aliases",
+    "function": "add_alias",
+    "source": "src/interface/web/app.py",
+    "line": 1768,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "AliasPayload"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/aliases/{alias_id}",
+    "function": "delete_alias",
+    "source": "src/interface/web/app.py",
+    "line": 1782,
+    "parameters": [
+      {
+        "name": "alias_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/analyze",
+    "function": "analyze",
+    "source": "src/interface/web/app.py",
+    "line": 3609,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "PromptPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/backlinks/{resource_type}/{resource_id}",
+    "function": "backlinks",
+    "source": "src/interface/web/app.py",
+    "line": 2698,
+    "parameters": [
+      {
+        "name": "resource_type",
+        "annotation": "str"
+      },
+      {
+        "name": "resource_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/backups",
+    "function": "list_backups",
+    "source": "src/interface/web/app.py",
+    "line": 1214,
+    "parameters": []
+  },
+  {
+    "method": "POST",
+    "path": "/api/branches",
+    "function": "create_branch",
+    "source": "src/interface/web/app.py",
+    "line": 2761,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "BranchPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/branches/compare/{left_branch_id}/{right_branch_id}",
+    "function": "compare_branches",
+    "source": "src/interface/web/app.py",
+    "line": 2787,
+    "parameters": [
+      {
+        "name": "left_branch_id",
+        "annotation": "str"
+      },
+      {
+        "name": "right_branch_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/branches/{branch_id}",
+    "function": "delete_branch",
+    "source": "src/interface/web/app.py",
+    "line": 2807,
+    "parameters": [
+      {
+        "name": "branch_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/branches/{branch_id}",
+    "function": "patch_branch",
+    "source": "src/interface/web/app.py",
+    "line": 2777,
+    "parameters": [
+      {
+        "name": "branch_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "BranchPatchPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/branches/{source_branch_id}/merge",
+    "function": "merge_branch",
+    "source": "src/interface/web/app.py",
+    "line": 2796,
+    "parameters": [
+      {
+        "name": "source_branch_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "BranchMergePayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/canon/promote",
+    "function": "promote_to_canon",
+    "source": "src/interface/web/app.py",
+    "line": 3147,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "FactPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/collections",
+    "function": "list_collections",
+    "source": "src/interface/web/app.py",
+    "line": 1790,
+    "parameters": [
+      {
+        "name": "scope_type",
+        "annotation": "str"
+      },
+      {
+        "name": "scope_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/collections",
+    "function": "create_collection",
+    "source": "src/interface/web/app.py",
+    "line": 1794,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "CollectionPayload"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/collections/{collection_id}",
+    "function": "collection_delete",
+    "source": "src/interface/web/app.py",
+    "line": 1813,
+    "parameters": [
+      {
+        "name": "collection_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/collections/{collection_id}/links",
+    "function": "collection_add",
+    "source": "src/interface/web/app.py",
+    "line": 1798,
+    "parameters": [
+      {
+        "name": "collection_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "CollectionLinkPayload"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/collections/{collection_id}/links/{resource_type}/{resource_id}",
+    "function": "collection_remove",
+    "source": "src/interface/web/app.py",
+    "line": 1808,
+    "parameters": [
+      {
+        "name": "collection_id",
+        "annotation": "str"
+      },
+      {
+        "name": "resource_type",
+        "annotation": "str"
+      },
+      {
+        "name": "resource_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/commands",
+    "function": "commands",
+    "source": "src/interface/web/app.py",
+    "line": 3299,
+    "parameters": [
+      {
+        "name": "q",
+        "annotation": "str"
+      },
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/config",
+    "function": "get_config",
+    "source": "src/interface/web/app.py",
+    "line": 1201,
+    "parameters": []
+  },
+  {
+    "method": "GET",
+    "path": "/api/conflicts",
+    "function": "list_conflicts",
+    "source": "src/interface/web/app.py",
+    "line": 3067,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      },
+      {
+        "name": "world_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "status",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/conflicts",
+    "function": "create_conflict",
+    "source": "src/interface/web/app.py",
+    "line": 3076,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "ConflictPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/conflicts/{conflict_id}/resolve",
+    "function": "resolve_conflict",
+    "source": "src/interface/web/app.py",
+    "line": 3083,
+    "parameters": [
+      {
+        "name": "conflict_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "ConflictResolutionPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/context-stack",
+    "function": "get_context_stack",
+    "source": "src/interface/web/app.py",
+    "line": 1860,
+    "parameters": [
+      {
+        "name": "stack_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "PUT",
+    "path": "/api/context-stack",
+    "function": "set_context_stack",
+    "source": "src/interface/web/app.py",
+    "line": 1864,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "ContextStackPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/context/pins",
+    "function": "pin_context",
+    "source": "src/interface/web/app.py",
+    "line": 3241,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "ContextPinPayload"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/context/pins/{pin_id}",
+    "function": "unpin_context",
+    "source": "src/interface/web/app.py",
+    "line": 3245,
+    "parameters": [
+      {
+        "name": "pin_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/context/recipes",
+    "function": "context_recipes",
+    "source": "src/interface/web/app.py",
+    "line": 2687,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/contract",
+    "function": "get_contract",
+    "source": "src/interface/web/app.py",
+    "line": 3598,
+    "parameters": []
+  },
+  {
+    "method": "POST",
+    "path": "/api/contract",
+    "function": "save_contract",
+    "source": "src/interface/web/app.py",
+    "line": 3603,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "ContractPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/conversation/blueprint/extract",
+    "function": "extract_conversation_blueprint",
+    "source": "src/interface/web/app.py",
+    "line": 3438,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "BlueprintExtractPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/conversation/promote-presence",
+    "function": "promote_presence",
+    "source": "src/interface/web/app.py",
+    "line": 3442,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "PresencePromotionPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/dataset/export/{kind}",
+    "function": "export_dataset",
+    "source": "src/interface/web/app.py",
+    "line": 3573,
+    "parameters": [
+      {
+        "name": "kind",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/dataset/stats",
+    "function": "dataset_stats",
+    "source": "src/interface/web/app.py",
+    "line": 3569,
+    "parameters": []
+  },
+  {
+    "method": "POST",
+    "path": "/api/directives/parse",
+    "function": "parse_directive",
+    "source": "src/interface/web/app.py",
+    "line": 1205,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "PromptPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/documents",
+    "function": "list_documents",
+    "source": "src/interface/web/app.py",
+    "line": 2853,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      },
+      {
+        "name": "world_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "folder_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "document_type",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/documents",
+    "function": "create_document",
+    "source": "src/interface/web/app.py",
+    "line": 2844,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "DocumentPayload"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/documents/{document_id}",
+    "function": "delete_document",
+    "source": "src/interface/web/app.py",
+    "line": 2888,
+    "parameters": [
+      {
+        "name": "document_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/documents/{document_id}",
+    "function": "get_document",
+    "source": "src/interface/web/app.py",
+    "line": 2864,
+    "parameters": [
+      {
+        "name": "document_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/documents/{document_id}",
+    "function": "patch_document",
+    "source": "src/interface/web/app.py",
+    "line": 2873,
+    "parameters": [
+      {
+        "name": "document_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "DocumentPatchPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/entities/families",
+    "function": "list_entity_families",
+    "source": "src/interface/web/app.py",
+    "line": 2905,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "entity_type",
+        "annotation": "str | None"
+      },
+      {
+        "name": "search",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/entities/families",
+    "function": "create_entity_family",
+    "source": "src/interface/web/app.py",
+    "line": 2898,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "EntityFamilyPayload"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/entities/families/{family_id}",
+    "function": "delete_entity_family",
+    "source": "src/interface/web/app.py",
+    "line": 2931,
+    "parameters": [
+      {
+        "name": "family_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/entities/families/{family_id}",
+    "function": "get_entity_family",
+    "source": "src/interface/web/app.py",
+    "line": 2911,
+    "parameters": [
+      {
+        "name": "family_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/entities/families/{family_id}",
+    "function": "patch_entity_family",
+    "source": "src/interface/web/app.py",
+    "line": 2918,
+    "parameters": [
+      {
+        "name": "family_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "EntityFamilyPatchPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/entities/variants",
+    "function": "list_entity_variants",
+    "source": "src/interface/web/app.py",
+    "line": 2946,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "family_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "world_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "entity_type",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/entities/variants",
+    "function": "create_entity_variant",
+    "source": "src/interface/web/app.py",
+    "line": 2939,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "EntityVariantPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/entities/variants/compare/{left_variant_id}/{right_variant_id}",
+    "function": "compare_entity_variants",
+    "source": "src/interface/web/app.py",
+    "line": 2981,
+    "parameters": [
+      {
+        "name": "left_variant_id",
+        "annotation": "str"
+      },
+      {
+        "name": "right_variant_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/entities/variants/{variant_id}",
+    "function": "delete_entity_variant",
+    "source": "src/interface/web/app.py",
+    "line": 2973,
+    "parameters": [
+      {
+        "name": "variant_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/entities/variants/{variant_id}",
+    "function": "get_entity_variant",
+    "source": "src/interface/web/app.py",
+    "line": 2957,
+    "parameters": [
+      {
+        "name": "variant_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/entities/variants/{variant_id}",
+    "function": "patch_entity_variant",
+    "source": "src/interface/web/app.py",
+    "line": 2964,
+    "parameters": [
+      {
+        "name": "variant_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "EntityVariantPatchPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/export/project/{project_id}",
+    "function": "export_project_bundle",
+    "source": "src/interface/web/app.py",
+    "line": 1419,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/export/world-bible",
+    "function": "export_world_bible_bundle",
+    "source": "src/interface/web/app.py",
+    "line": 1441,
+    "parameters": [
+      {
+        "name": "world_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/facts",
+    "function": "list_facts",
+    "source": "src/interface/web/app.py",
+    "line": 3128,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "world_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "owner_type",
+        "annotation": "str | None"
+      },
+      {
+        "name": "owner_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/facts",
+    "function": "create_fact",
+    "source": "src/interface/web/app.py",
+    "line": 3121,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "FactPayload"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/facts/{fact_id}",
+    "function": "delete_fact",
+    "source": "src/interface/web/app.py",
+    "line": 3139,
+    "parameters": [
+      {
+        "name": "fact_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/favorites",
+    "function": "unfavorite",
+    "source": "src/interface/web/app.py",
+    "line": 1876,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "resource_type",
+        "annotation": "str"
+      },
+      {
+        "name": "resource_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/favorites",
+    "function": "favorites",
+    "source": "src/interface/web/app.py",
+    "line": 1868,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/favorites",
+    "function": "favorite",
+    "source": "src/interface/web/app.py",
+    "line": 1872,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "FavoritePayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/feedback/comparisons",
+    "function": "feedback_comparisons",
+    "source": "src/interface/web/app.py",
+    "line": 3565,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "limit",
+        "annotation": "int"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/feedback/queue",
+    "function": "feedback_queue",
+    "source": "src/interface/web/app.py",
+    "line": 3561,
+    "parameters": [
+      {
+        "name": "status",
+        "annotation": "str"
+      },
+      {
+        "name": "limit",
+        "annotation": "int"
+      },
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/folders",
+    "function": "create_folder",
+    "source": "src/interface/web/app.py",
+    "line": 2817,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "FolderPayload"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/folders/{folder_id}",
+    "function": "delete_folder",
+    "source": "src/interface/web/app.py",
+    "line": 2836,
+    "parameters": [
+      {
+        "name": "folder_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/folders/{folder_id}",
+    "function": "patch_folder",
+    "source": "src/interface/web/app.py",
+    "line": 2824,
+    "parameters": [
+      {
+        "name": "folder_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "FolderPatchPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/generate",
+    "function": "generate",
+    "source": "src/interface/web/app.py",
+    "line": 3857,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "PromptPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/generate/stream",
+    "function": "generate_stream",
+    "source": "src/interface/web/app.py",
+    "line": 3670,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "PromptPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/home",
+    "function": "home",
+    "source": "src/interface/web/app.py",
+    "line": 1959,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "world_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/import/manuscript",
+    "function": "import_manuscript",
+    "source": "src/interface/web/app.py",
+    "line": 1389,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "ManuscriptImportPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/import/manuscript/preview",
+    "function": "preview_manuscript_import",
+    "source": "src/interface/web/app.py",
+    "line": 1380,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "ManuscriptImportPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/issues",
+    "function": "issues",
+    "source": "src/interface/web/app.py",
+    "line": 1885,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "world_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "status",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/issues",
+    "function": "create_issue",
+    "source": "src/interface/web/app.py",
+    "line": 1889,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "IssuePayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/issues/{issue_id}/resolve",
+    "function": "resolve_issue",
+    "source": "src/interface/web/app.py",
+    "line": 1893,
+    "parameters": [
+      {
+        "name": "issue_id",
+        "annotation": "str"
+      },
+      {
+        "name": "status",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/jobs",
+    "function": "jobs",
+    "source": "src/interface/web/app.py",
+    "line": 1900,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/library/entity-merge",
+    "function": "entity_merge",
+    "source": "src/interface/web/app.py",
+    "line": 2450,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "EntityFamilyMergePayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/library/entity-merge/preview",
+    "function": "entity_merge_preview",
+    "source": "src/interface/web/app.py",
+    "line": 2443,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "EntityFamilyMergePayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/lifecycle/archive",
+    "function": "archive_resource",
+    "source": "src/interface/web/app.py",
+    "line": 1697,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "LifecyclePayload"
+      },
+      {
+        "name": "archived",
+        "annotation": "bool"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/lifecycle/restore",
+    "function": "restore_resource",
+    "source": "src/interface/web/app.py",
+    "line": 1705,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "LifecyclePayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/lifecycle/trash",
+    "function": "trash_resource",
+    "source": "src/interface/web/app.py",
+    "line": 1686,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "LifecyclePayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/media",
+    "function": "list_media",
+    "source": "src/interface/web/app.py",
+    "line": 4167,
+    "parameters": [
+      {
+        "name": "resource_type",
+        "annotation": "str | None"
+      },
+      {
+        "name": "resource_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "cover_only",
+        "annotation": "bool"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/media",
+    "function": "create_media",
+    "source": "src/interface/web/app.py",
+    "line": 4177,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "MediaCreatePayload"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/media/{media_id}",
+    "function": "delete_media",
+    "source": "src/interface/web/app.py",
+    "line": 4224,
+    "parameters": [
+      {
+        "name": "media_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/media/{media_id}",
+    "function": "patch_media",
+    "source": "src/interface/web/app.py",
+    "line": 4216,
+    "parameters": [
+      {
+        "name": "media_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "MediaPatchPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/media/{media_id}/content",
+    "function": "media_content",
+    "source": "src/interface/web/app.py",
+    "line": 4205,
+    "parameters": [
+      {
+        "name": "media_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/media/{media_id}/describe",
+    "function": "describe_media",
+    "source": "src/interface/web/app.py",
+    "line": 4234,
+    "parameters": [
+      {
+        "name": "media_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "MediaDescribePayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/memory/backfill",
+    "function": "backfill",
+    "source": "src/memory/web.py",
+    "line": 201,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "MemoryBackfillPayload"
+      },
+      {
+        "name": "background_tasks",
+        "annotation": "BackgroundTasks"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/chunks",
+    "function": "chunks",
+    "source": "src/memory/web.py",
+    "line": 127,
+    "parameters": [
+      {
+        "name": "resource_type",
+        "annotation": "str | None"
+      },
+      {
+        "name": "resource_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "source_type",
+        "annotation": "str | None"
+      },
+      {
+        "name": "source_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "limit",
+        "annotation": "int"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/discoveries",
+    "function": "list_discoveries",
+    "source": "src/discovery/web.py",
+    "line": 253,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "world_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "session_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "include_dismissed",
+        "annotation": "bool"
+      },
+      {
+        "name": "include_orphaned",
+        "annotation": "bool"
+      },
+      {
+        "name": "limit",
+        "annotation": "int"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/memory/discoveries/backfill",
+    "function": "backfill_discovery_history",
+    "source": "src/discovery/web.py",
+    "line": 288,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "limit_sessions",
+        "annotation": "int"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/memory/discoveries/capture-turn/{turn_id}",
+    "function": "recapture_turn",
+    "source": "src/discovery/web.py",
+    "line": 436,
+    "parameters": [
+      {
+        "name": "turn_id",
+        "annotation": "str"
+      },
+      {
+        "name": "source_kind",
+        "annotation": "str"
+      },
+      {
+        "name": "force",
+        "annotation": "bool"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/discoveries/continuity/conflicts",
+    "function": "continuity_conflicts",
+    "source": "src/discovery/web.py",
+    "line": 330,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "world_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "session_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "include_resolved",
+        "annotation": "bool"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/memory/discoveries/continuity/conflicts/{conflict_id}/resolve",
+    "function": "resolve_continuity_conflict",
+    "source": "src/discovery/web.py",
+    "line": 341,
+    "parameters": [
+      {
+        "name": "conflict_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "ContinuityConflictResolutionPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/discoveries/continuity/status",
+    "function": "continuity_status",
+    "source": "src/discovery/web.py",
+    "line": 326,
+    "parameters": []
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/discoveries/resource/{resource_type}/{resource_id}",
+    "function": "discovery_resource_view",
+    "source": "src/discovery/web.py",
+    "line": 299,
+    "parameters": [
+      {
+        "name": "resource_type",
+        "annotation": "str"
+      },
+      {
+        "name": "resource_id",
+        "annotation": "str"
+      },
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "world_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "session_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "story_order",
+        "annotation": "float | None"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/discoveries/turn/{turn_id}/report",
+    "function": "discovery_turn_report",
+    "source": "src/discovery/web.py",
+    "line": 277,
+    "parameters": [
+      {
+        "name": "turn_id",
+        "annotation": "str"
+      },
+      {
+        "name": "source_kind",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/discoveries/{proposition_id}",
+    "function": "get_discovery",
+    "source": "src/discovery/web.py",
+    "line": 354,
+    "parameters": [
+      {
+        "name": "proposition_id",
+        "annotation": "str"
+      },
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "world_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "session_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/memory/discoveries/{proposition_id}/canon",
+    "function": "promote_discovery",
+    "source": "src/discovery/web.py",
+    "line": 389,
+    "parameters": [
+      {
+        "name": "proposition_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "DiscoveryDecisionPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/memory/discoveries/{proposition_id}/dismiss",
+    "function": "dismiss_discovery",
+    "source": "src/discovery/web.py",
+    "line": 406,
+    "parameters": [
+      {
+        "name": "proposition_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "DiscoveryDecisionPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/memory/discoveries/{proposition_id}/edit",
+    "function": "edit_discovery",
+    "source": "src/discovery/web.py",
+    "line": 371,
+    "parameters": [
+      {
+        "name": "proposition_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "DiscoveryEditPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/memory/discoveries/{proposition_id}/reset",
+    "function": "reset_discovery",
+    "source": "src/discovery/web.py",
+    "line": 421,
+    "parameters": [
+      {
+        "name": "proposition_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "DiscoveryDecisionPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/index-generations",
+    "function": "index_generations",
+    "source": "src/memory/web.py",
+    "line": 123,
+    "parameters": [
+      {
+        "name": "limit",
+        "annotation": "int"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/jobs/{job_id}",
+    "function": "memory_job",
+    "source": "src/memory/web.py",
+    "line": 214,
+    "parameters": [
+      {
+        "name": "job_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/profiles",
+    "function": "profiles",
+    "source": "src/memory/web.py",
+    "line": 173,
+    "parameters": []
+  },
+  {
+    "method": "POST",
+    "path": "/api/memory/query",
+    "function": "query",
+    "source": "src/memory/web.py",
+    "line": 91,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "MemoryQueryPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/memory/refresh",
+    "function": "refresh",
+    "source": "src/memory/web.py",
+    "line": 223,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "MemoryRefreshPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/retrieval/{run_id}",
+    "function": "retrieval_trace",
+    "source": "src/memory/web.py",
+    "line": 116,
+    "parameters": [
+      {
+        "name": "run_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/schemas",
+    "function": "schemas",
+    "source": "src/memory/web.py",
+    "line": 177,
+    "parameters": []
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/schemas/{schema_id}",
+    "function": "schema",
+    "source": "src/memory/web.py",
+    "line": 181,
+    "parameters": [
+      {
+        "name": "schema_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/spatial/neighborhood",
+    "function": "spatial_neighborhood",
+    "source": "src/memory/web.py",
+    "line": 141,
+    "parameters": [
+      {
+        "name": "world_id",
+        "annotation": "str"
+      },
+      {
+        "name": "resource_type",
+        "annotation": "str"
+      },
+      {
+        "name": "resource_id",
+        "annotation": "str"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "depth",
+        "annotation": "int"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/status",
+    "function": "status",
+    "source": "src/memory/web.py",
+    "line": 80,
+    "parameters": []
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/threads",
+    "function": "threads",
+    "source": "src/memory/web.py",
+    "line": 157,
+    "parameters": [
+      {
+        "name": "world_id",
+        "annotation": "str"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "status",
+        "annotation": "str | None"
+      },
+      {
+        "name": "resource_type",
+        "annotation": "str | None"
+      },
+      {
+        "name": "resource_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/mentions",
+    "function": "mentions",
+    "source": "src/interface/web/app.py",
+    "line": 3250,
+    "parameters": [
+      {
+        "name": "q",
+        "annotation": "str"
+      },
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "world_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "limit",
+        "annotation": "int"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/model/reload",
+    "function": "reload_model",
+    "source": "src/interface/web/app.py",
+    "line": 1344,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "RuntimePayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/models",
+    "function": "get_models",
+    "source": "src/interface/web/app.py",
+    "line": 1271,
+    "parameters": [
+      {
+        "name": "server_url",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/models/query",
+    "function": "query_models",
+    "source": "src/interface/web/app.py",
+    "line": 1303,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "ModelsPayload"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/overlays/{overlay_id}",
+    "function": "delete_overlay",
+    "source": "src/interface/web/app.py",
+    "line": 2604,
+    "parameters": [
+      {
+        "name": "overlay_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/preferences",
+    "function": "preferences",
+    "source": "src/interface/web/app.py",
+    "line": 1904,
+    "parameters": [
+      {
+        "name": "scope_type",
+        "annotation": "str"
+      },
+      {
+        "name": "scope_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "PUT",
+    "path": "/api/preferences",
+    "function": "set_preference",
+    "source": "src/interface/web/app.py",
+    "line": 1908,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "PreferencePayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/presence-bindings/{scope_type}/{scope_id}",
+    "function": "get_presence_binding",
+    "source": "src/interface/web/app.py",
+    "line": 3424,
+    "parameters": [
+      {
+        "name": "scope_type",
+        "annotation": "str"
+      },
+      {
+        "name": "scope_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "PUT",
+    "path": "/api/presence-bindings/{scope_type}/{scope_id}",
+    "function": "save_presence_binding",
+    "source": "src/interface/web/app.py",
+    "line": 3431,
+    "parameters": [
+      {
+        "name": "scope_type",
+        "annotation": "str"
+      },
+      {
+        "name": "scope_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "PresenceBindingPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects",
+    "function": "list_projects",
+    "source": "src/interface/web/app.py",
+    "line": 1518,
+    "parameters": [
+      {
+        "name": "search",
+        "annotation": "str"
+      },
+      {
+        "name": "include_archived",
+        "annotation": "bool"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects",
+    "function": "create_project",
+    "source": "src/interface/web/app.py",
+    "line": 1523,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "ProjectPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/world-link",
+    "function": "link_project_world",
+    "source": "src/interface/web/app.py",
+    "line": 1978,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "ProjectWorldLinkPayload"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/projects/{project_id}",
+    "function": "delete_project",
+    "source": "src/interface/web/app.py",
+    "line": 1550,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/{project_id}",
+    "function": "get_project",
+    "source": "src/interface/web/app.py",
+    "line": 1530,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/projects/{project_id}",
+    "function": "patch_project",
+    "source": "src/interface/web/app.py",
+    "line": 1541,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "ProjectPatchPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/{project_id}/active-scene",
+    "function": "get_active_scene",
+    "source": "src/interface/web/app.py",
+    "line": 2612,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "PUT",
+    "path": "/api/projects/{project_id}/active-scene",
+    "function": "set_active_scene",
+    "source": "src/interface/web/app.py",
+    "line": 2616,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "ActiveScenePayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/{project_id}/context-recipes",
+    "function": "save_context_recipe",
+    "source": "src/interface/web/app.py",
+    "line": 2691,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "ContextRecipePayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/{project_id}/continuity",
+    "function": "continuity",
+    "source": "src/interface/web/app.py",
+    "line": 2623,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      },
+      {
+        "name": "world_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/{project_id}/manifest",
+    "function": "project_manifest",
+    "source": "src/interface/web/app.py",
+    "line": 2573,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/projects/{project_id}/manifest/refs",
+    "function": "remove_manifest_ref",
+    "source": "src/interface/web/app.py",
+    "line": 2592,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      },
+      {
+        "name": "resource_type",
+        "annotation": "str"
+      },
+      {
+        "name": "resource_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/{project_id}/manifest/refs",
+    "function": "add_manifest_ref",
+    "source": "src/interface/web/app.py",
+    "line": 2585,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "ManifestRefPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/{project_id}/overlays",
+    "function": "upsert_overlay",
+    "source": "src/interface/web/app.py",
+    "line": 2597,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "ProjectOverlayPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/{project_id}/scene-cards",
+    "function": "list_scene_cards",
+    "source": "src/interface/web/app.py",
+    "line": 2630,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/projects/{project_id}/scene-cards/{document_id}",
+    "function": "delete_scene_card",
+    "source": "src/interface/web/app.py",
+    "line": 2649,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      },
+      {
+        "name": "document_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "PUT",
+    "path": "/api/projects/{project_id}/scene-cards/{document_id}",
+    "function": "set_scene_card",
+    "source": "src/interface/web/app.py",
+    "line": 2638,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      },
+      {
+        "name": "document_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "SceneCardPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/{project_id}/staged-changes",
+    "function": "list_staged",
+    "source": "src/interface/web/app.py",
+    "line": 2661,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      },
+      {
+        "name": "status",
+        "annotation": "str"
+      },
+      {
+        "name": "world_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/projects/{project_id}/staged-changes",
+    "function": "stage_change",
+    "source": "src/interface/web/app.py",
+    "line": 2654,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "StagedChangePayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects/{project_id}/tree",
+    "function": "project_tree",
+    "source": "src/interface/web/app.py",
+    "line": 1558,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      },
+      {
+        "name": "world_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/quick-create",
+    "function": "quick_create",
+    "source": "src/interface/web/app.py",
+    "line": 2514,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "QuickCreatePayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/quick-create/preview",
+    "function": "quick_create_preview",
+    "source": "src/interface/web/app.py",
+    "line": 2468,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "QuickCreatePayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/relationships",
+    "function": "list_relationships",
+    "source": "src/interface/web/app.py",
+    "line": 2995,
+    "parameters": [
+      {
+        "name": "world_id",
+        "annotation": "str"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "variant_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/relationships",
+    "function": "create_relationship",
+    "source": "src/interface/web/app.py",
+    "line": 2988,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "RelationshipPayload"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/relationships/{relationship_id}",
+    "function": "delete_relationship",
+    "source": "src/interface/web/app.py",
+    "line": 3019,
+    "parameters": [
+      {
+        "name": "relationship_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/relationships/{relationship_id}",
+    "function": "get_relationship",
+    "source": "src/interface/web/app.py",
+    "line": 3003,
+    "parameters": [
+      {
+        "name": "relationship_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/relationships/{relationship_id}",
+    "function": "patch_relationship",
+    "source": "src/interface/web/app.py",
+    "line": 3010,
+    "parameters": [
+      {
+        "name": "relationship_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "RelationshipPatchPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/resources/{resource_type}/{resource_id}",
+    "function": "inspect_resource",
+    "source": "src/interface/web/app.py",
+    "line": 1737,
+    "parameters": [
+      {
+        "name": "resource_type",
+        "annotation": "str"
+      },
+      {
+        "name": "resource_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/retcon/apply",
+    "function": "retcon_apply",
+    "source": "src/interface/web/app.py",
+    "line": 3194,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "RetconPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/retcon/preview",
+    "function": "retcon_preview",
+    "source": "src/interface/web/app.py",
+    "line": 3183,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "RetconPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/revisions/{resource_type}/{resource_id}",
+    "function": "list_revisions",
+    "source": "src/interface/web/app.py",
+    "line": 3201,
+    "parameters": [
+      {
+        "name": "resource_type",
+        "annotation": "str"
+      },
+      {
+        "name": "resource_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/revisions/{revision_id}/restore",
+    "function": "restore_revision",
+    "source": "src/interface/web/app.py",
+    "line": 3205,
+    "parameters": [
+      {
+        "name": "revision_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "RevisionRestorePayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/run-profiles",
+    "function": "run_profiles",
+    "source": "src/interface/web/app.py",
+    "line": 1839,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/run-profiles",
+    "function": "save_run_profile",
+    "source": "src/interface/web/app.py",
+    "line": 1843,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "RunProfilePayload"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/run-profiles/{profile_id}",
+    "function": "delete_run_profile",
+    "source": "src/interface/web/app.py",
+    "line": 1850,
+    "parameters": [
+      {
+        "name": "profile_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/save",
+    "function": "save_run",
+    "source": "src/interface/web/app.py",
+    "line": 4106,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "SavePayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/saved-views",
+    "function": "saved_views",
+    "source": "src/interface/web/app.py",
+    "line": 1821,
+    "parameters": [
+      {
+        "name": "scope_type",
+        "annotation": "str"
+      },
+      {
+        "name": "scope_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/saved-views",
+    "function": "save_view",
+    "source": "src/interface/web/app.py",
+    "line": 1825,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "SavedViewPayload"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/saved-views/{view_id}",
+    "function": "delete_view",
+    "source": "src/interface/web/app.py",
+    "line": 1829,
+    "parameters": [
+      {
+        "name": "view_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/scenes/dependencies",
+    "function": "create_scene_dependency",
+    "source": "src/interface/web/app.py",
+    "line": 3052,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "SceneDependencyPayload"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/scenes/dependencies/{dependency_id}",
+    "function": "delete_scene_dependency",
+    "source": "src/interface/web/app.py",
+    "line": 3059,
+    "parameters": [
+      {
+        "name": "dependency_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/scenes/{scene_document_id}/dependencies",
+    "function": "list_scene_dependencies",
+    "source": "src/interface/web/app.py",
+    "line": 3048,
+    "parameters": [
+      {
+        "name": "scene_document_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/search",
+    "function": "global_search",
+    "source": "src/interface/web/app.py",
+    "line": 1913,
+    "parameters": [
+      {
+        "name": "q",
+        "annotation": "str"
+      },
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "world_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "limit",
+        "annotation": "int"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/sessions",
+    "function": "list_sessions",
+    "source": "src/interface/web/app.py",
+    "line": 3309,
+    "parameters": [
+      {
+        "name": "search",
+        "annotation": "str"
+      },
+      {
+        "name": "limit",
+        "annotation": "int"
+      },
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "world_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "folder_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "tag",
+        "annotation": "str | None"
+      },
+      {
+        "name": "session_kind",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/sessions/{session_id}",
+    "function": "delete_session",
+    "source": "src/interface/web/app.py",
+    "line": 3511,
+    "parameters": [
+      {
+        "name": "session_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/sessions/{session_id}",
+    "function": "get_session",
+    "source": "src/interface/web/app.py",
+    "line": 3460,
+    "parameters": [
+      {
+        "name": "session_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/sessions/{session_id}",
+    "function": "update_session",
+    "source": "src/interface/web/app.py",
+    "line": 3485,
+    "parameters": [
+      {
+        "name": "session_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "SessionPatchPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/sessions/{session_id}/fork",
+    "function": "fork_session",
+    "source": "src/interface/web/app.py",
+    "line": 3467,
+    "parameters": [
+      {
+        "name": "session_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "SessionForkPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/sessions/{session_id}/forks",
+    "function": "session_forks",
+    "source": "src/interface/web/app.py",
+    "line": 3478,
+    "parameters": [
+      {
+        "name": "session_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/settings",
+    "function": "save_settings",
+    "source": "src/interface/web/app.py",
+    "line": 1338,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "RuntimePayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/snapshots",
+    "function": "list_snapshots",
+    "source": "src/interface/web/app.py",
+    "line": 3221,
+    "parameters": [
+      {
+        "name": "world_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/snapshots",
+    "function": "create_snapshot",
+    "source": "src/interface/web/app.py",
+    "line": 3214,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "SnapshotPayload"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/snapshots/{snapshot_id}",
+    "function": "delete_snapshot",
+    "source": "src/interface/web/app.py",
+    "line": 3225,
+    "parameters": [
+      {
+        "name": "snapshot_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/snapshots/{snapshot_id}/restore",
+    "function": "restore_snapshot",
+    "source": "src/interface/web/app.py",
+    "line": 3233,
+    "parameters": [
+      {
+        "name": "snapshot_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "RestoreSnapshotPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/staged-changes/{change_id}/resolve",
+    "function": "resolve_staged",
+    "source": "src/interface/web/app.py",
+    "line": 2665,
+    "parameters": [
+      {
+        "name": "change_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "StagedResolvePayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/state-proposals",
+    "function": "state_proposals",
+    "source": "src/interface/web/app.py",
+    "line": 1988,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "StateProposalPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/storage/reset",
+    "function": "reset_local_storage",
+    "source": "src/interface/web/app.py",
+    "line": 1232,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "StorageResetPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/story-lab/sheet-proposal-bundles/apply",
+    "function": "apply_story_lab_sheet_bundle",
+    "source": "src/interface/web/app.py",
+    "line": 2390,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "StoryLabSheetBundleApplyPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/story-lab/sheet-proposals",
+    "function": "create_story_lab_sheet_proposal",
+    "source": "src/interface/web/app.py",
+    "line": 2238,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "StoryLabSheetProposalPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/story-lab/sheet-proposals/{change_id}/apply",
+    "function": "apply_story_lab_sheet_proposal",
+    "source": "src/interface/web/app.py",
+    "line": 2260,
+    "parameters": [
+      {
+        "name": "change_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "StoryLabSheetApplyPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/tags",
+    "function": "list_tags",
+    "source": "src/interface/web/app.py",
+    "line": 3099,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/tags",
+    "function": "create_tag",
+    "source": "src/interface/web/app.py",
+    "line": 3092,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "TagPayload"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/tags/{tag_id}",
+    "function": "delete_tag",
+    "source": "src/interface/web/app.py",
+    "line": 3103,
+    "parameters": [
+      {
+        "name": "tag_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/tags/{tag_id}/link",
+    "function": "unlink_tag",
+    "source": "src/interface/web/app.py",
+    "line": 3116,
+    "parameters": [
+      {
+        "name": "tag_id",
+        "annotation": "str"
+      },
+      {
+        "name": "resource_type",
+        "annotation": "str"
+      },
+      {
+        "name": "resource_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/tags/{tag_id}/link",
+    "function": "link_tag",
+    "source": "src/interface/web/app.py",
+    "line": 3111,
+    "parameters": [
+      {
+        "name": "tag_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "TagLinkPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/templates",
+    "function": "list_templates",
+    "source": "src/interface/web/app.py",
+    "line": 3027,
+    "parameters": [
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "entity_type",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/templates",
+    "function": "create_template",
+    "source": "src/interface/web/app.py",
+    "line": 3031,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "TemplatePayload"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/templates/{template_id}",
+    "function": "delete_template",
+    "source": "src/interface/web/app.py",
+    "line": 3038,
+    "parameters": [
+      {
+        "name": "template_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/timeline",
+    "function": "list_timeline",
+    "source": "src/interface/web/app.py",
+    "line": 2679,
+    "parameters": [
+      {
+        "name": "world_id",
+        "annotation": "str"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "owner_type",
+        "annotation": "str | None"
+      },
+      {
+        "name": "owner_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/timeline",
+    "function": "add_timeline",
+    "source": "src/interface/web/app.py",
+    "line": 2672,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "TimelineEventPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/timeline/state",
+    "function": "timeline_state",
+    "source": "src/interface/web/app.py",
+    "line": 2683,
+    "parameters": [
+      {
+        "name": "world_id",
+        "annotation": "str"
+      },
+      {
+        "name": "owner_type",
+        "annotation": "str"
+      },
+      {
+        "name": "owner_id",
+        "annotation": "str"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "at_order",
+        "annotation": "float | None"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/trace/{cache_id}/{trace_id}",
+    "function": "trace",
+    "source": "src/interface/web/app.py",
+    "line": 3656,
+    "parameters": [
+      {
+        "name": "cache_id",
+        "annotation": "str"
+      },
+      {
+        "name": "trace_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/trash",
+    "function": "list_trash",
+    "source": "src/interface/web/app.py",
+    "line": 1713,
+    "parameters": []
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/trash/{resource_type}/{resource_id}",
+    "function": "permanent_delete",
+    "source": "src/interface/web/app.py",
+    "line": 1724,
+    "parameters": [
+      {
+        "name": "resource_type",
+        "annotation": "str"
+      },
+      {
+        "name": "resource_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/turns/{turn_id}",
+    "function": "delete_turn",
+    "source": "src/interface/web/app.py",
+    "line": 3528,
+    "parameters": [
+      {
+        "name": "turn_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/turns/{turn_id}",
+    "function": "get_turn",
+    "source": "src/interface/web/app.py",
+    "line": 3521,
+    "parameters": [
+      {
+        "name": "turn_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/turns/{turn_id}/feedback",
+    "function": "set_turn_feedback",
+    "source": "src/interface/web/app.py",
+    "line": 3542,
+    "parameters": [
+      {
+        "name": "turn_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "FeedbackPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/user-profile",
+    "function": "get_user_profile",
+    "source": "src/interface/web/app.py",
+    "line": 3327,
+    "parameters": []
+  },
+  {
+    "method": "PUT",
+    "path": "/api/user-profile",
+    "function": "save_user_profile",
+    "source": "src/interface/web/app.py",
+    "line": 3331,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "UserProfilePayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/user-profile/entity",
+    "function": "save_user_as_entity",
+    "source": "src/interface/web/app.py",
+    "line": 3339,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "UserEntityPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/user-profile/extract",
+    "function": "extract_user_profile",
+    "source": "src/interface/web/app.py",
+    "line": 3335,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "ProfileExtractPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/workspace/bootstrap",
+    "function": "workspace_bootstrap",
+    "source": "src/interface/web/app.py",
+    "line": 1463,
+    "parameters": [
+      {
+        "name": "create_default",
+        "annotation": "bool"
+      },
+      {
+        "name": "stack_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/world-bible",
+    "function": "world_bible",
+    "source": "src/interface/web/app.py",
+    "line": 1594,
+    "parameters": [
+      {
+        "name": "world_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "branch_id",
+        "annotation": "str | None"
+      },
+      {
+        "name": "search",
+        "annotation": "str"
+      },
+      {
+        "name": "project_id",
+        "annotation": "str | None"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/worlds",
+    "function": "create_world",
+    "source": "src/interface/web/app.py",
+    "line": 2702,
+    "parameters": [
+      {
+        "name": "payload",
+        "annotation": "WorldPayload"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/worlds/compare/{left_world_id}/{right_world_id}",
+    "function": "compare_worlds",
+    "source": "src/interface/web/app.py",
+    "line": 2752,
+    "parameters": [
+      {
+        "name": "left_world_id",
+        "annotation": "str"
+      },
+      {
+        "name": "right_world_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/worlds/{world_id}",
+    "function": "delete_world",
+    "source": "src/interface/web/app.py",
+    "line": 2730,
+    "parameters": [
+      {
+        "name": "world_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/api/worlds/{world_id}",
+    "function": "get_world",
+    "source": "src/interface/web/app.py",
+    "line": 2711,
+    "parameters": [
+      {
+        "name": "world_id",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/worlds/{world_id}",
+    "function": "patch_world",
+    "source": "src/interface/web/app.py",
+    "line": 2721,
+    "parameters": [
+      {
+        "name": "world_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "WorldPatchPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/worlds/{world_id}/fork",
+    "function": "fork_world",
+    "source": "src/interface/web/app.py",
+    "line": 2740,
+    "parameters": [
+      {
+        "name": "world_id",
+        "annotation": "str"
+      },
+      {
+        "name": "payload",
+        "annotation": "WorldPayload"
+      }
+    ]
+  },
+  {
+    "method": "POST",
+    "path": "/api/worlds/{world_id}/sandbox",
+    "function": "create_sandbox",
+    "source": "src/interface/web/app.py",
+    "line": 2770,
+    "parameters": [
+      {
+        "name": "world_id",
+        "annotation": "str"
+      },
+      {
+        "name": "name",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/dataset-downloads/{filename}",
+    "function": "download_dataset",
+    "source": "src/interface/web/app.py",
+    "line": 3588,
+    "parameters": [
+      {
+        "name": "filename",
+        "annotation": "str"
+      }
+    ]
+  },
+  {
+    "method": "GET",
+    "path": "/downloads/{filename}",
+    "function": "download",
+    "source": "src/interface/web/app.py",
+    "line": 4132,
+    "parameters": [
+      {
+        "name": "filename",
+        "annotation": "str"
+      }
+    ]
+  }
+]

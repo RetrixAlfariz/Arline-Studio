@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, LoaderCircle } from "lucide-react";
 import { studioApi } from "./api";
 import { browserStorage, createClientId } from "./browserStorage";
@@ -30,6 +30,14 @@ import type {
 
 const STACK_ID = createClientId("react");
 
+function scopeKey(projectId: string, worldId: string, branchId: string) {
+  return JSON.stringify([projectId, worldId, branchId]);
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
 const DEFAULT_CONFIG: RuntimeConfig = {
   studio_version: "unknown",
   server_url: "http://127.0.0.1:1234",
@@ -38,6 +46,7 @@ const DEFAULT_CONFIG: RuntimeConfig = {
   context_length: 32768,
   input_mode: "smart_hybrid",
   reasoning: "off",
+  planning_enabled: false,
   projection_mode: "balanced",
   temperature: 0.8,
   top_p: 0.95,
@@ -84,7 +93,10 @@ export default function App() {
   const [seedPrompt, setSeedPrompt] = useState("");
   const [booting, setBooting] = useState(true);
   const [scopeLoading, setScopeLoading] = useState(false);
+  const [hydratedScopeKey, setHydratedScopeKey] = useState("");
   const [fatalError, setFatalError] = useState("");
+  const scopeRequestRef = useRef<{ version: number; controller: AbortController | null }>({ version: 0, controller: null });
+  const activeScopeKeyRef = useRef("");
 
   const projects = bootstrap?.projects || [];
   const worlds = bible?.worlds || bootstrap?.worlds || [];
@@ -119,32 +131,56 @@ export default function App() {
     return fresh;
   }, []);
 
+  const currentScopeKey = scopeKey(activeProjectId, activeWorldId, activeBranchId);
+  activeScopeKeyRef.current = currentScopeKey;
+
+  const loadScope = useCallback(async (projectId: string, worldId: string, branchId: string) => {
+    if (!projectId) return true;
+    const requestKey = scopeKey(projectId, worldId, branchId);
+    const version = scopeRequestRef.current.version + 1;
+    scopeRequestRef.current.controller?.abort();
+    const controller = new AbortController();
+    scopeRequestRef.current = { version, controller };
+    setScopeLoading(true);
+    try {
+      const [projectTree, worldBible, sessionResult] = await Promise.all([
+        studioApi.projectTree(projectId, worldId || undefined, branchId || undefined, controller.signal),
+        studioApi.worldBible(projectId, worldId || undefined, branchId || undefined, controller.signal),
+        studioApi.sessions(projectId, worldId || undefined, branchId || undefined, controller.signal),
+      ]);
+      if (controller.signal.aborted || scopeRequestRef.current.version !== version) return false;
+      setTree(projectTree);
+      setBible(worldBible);
+      setSessions(sessionResult.sessions || []);
+      setHydratedScopeKey(requestKey);
+      setFatalError("");
+      return true;
+    } catch (error) {
+      if (isAbortError(error) || controller.signal.aborted) return false;
+      if (scopeRequestRef.current.version === version) setFatalError((error as Error).message);
+      return false;
+    } finally {
+      if (scopeRequestRef.current.version === version) {
+        scopeRequestRef.current.controller = null;
+        setScopeLoading(false);
+      }
+    }
+  }, []);
+
   const refreshSessions = useCallback(async () => {
     if (!activeProjectId) { setSessions([]); return; }
+    const requestKey = scopeKey(activeProjectId, activeWorldId, activeBranchId);
     const result = await studioApi.sessions(activeProjectId, activeWorldId || undefined, activeBranchId || undefined);
-    setSessions(result.sessions || []);
+    if (activeScopeKeyRef.current === requestKey) setSessions(result.sessions || []);
   }, [activeProjectId, activeWorldId, activeBranchId]);
 
   const refreshScope = useCallback(async () => {
     if (!activeProjectId) return;
-    setScopeLoading(true);
-    try {
-      const [projectTree, worldBible, sessionResult] = await Promise.all([
-        studioApi.projectTree(activeProjectId, activeWorldId || undefined, activeBranchId || undefined),
-        studioApi.worldBible(activeProjectId, activeWorldId || undefined, activeBranchId || undefined),
-        studioApi.sessions(activeProjectId, activeWorldId || undefined, activeBranchId || undefined),
-      ]);
-      setTree(projectTree);
-      setBible(worldBible);
-      setSessions(sessionResult.sessions || []);
-    } catch (error) {
-      setFatalError((error as Error).message);
-    } finally {
-      setScopeLoading(false);
-    }
-  }, [activeProjectId, activeWorldId, activeBranchId]);
+    await loadScope(activeProjectId, activeWorldId, activeBranchId);
+  }, [activeProjectId, activeWorldId, activeBranchId, loadScope]);
 
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
       setBooting(true);
       try {
@@ -153,33 +189,47 @@ export default function App() {
           studioApi.bootstrap(STACK_ID),
           studioApi.commands().catch(() => ({ commands: [], command_registry_version: "frontend-fallback" })),
         ]);
-        setConfig(runtime);
-        setBootstrap(boot);
-        setCommands(commandPayload);
+        if (cancelled) return;
         const rememberedProject = browserStorage.get("arline:react:project");
         const project = boot.projects.find((item) => item.id === rememberedProject) || boot.projects[0];
+        let world = undefined;
+        let branch = undefined;
         if (project) {
-          setActiveProjectId(project.id);
           const rememberedWorld = browserStorage.get("arline:react:world");
-          const world = boot.worlds.find((item) => item.id === rememberedWorld)
+          world = boot.worlds.find((item) => item.id === rememberedWorld)
             || boot.worlds.find((item) => item.id === project.default_world_id)
             || boot.worlds[0];
           if (world) {
-            setActiveWorldId(world.id);
             const rememberedBranch = browserStorage.get("arline:react:branch");
-            const branch = world.branches?.find((item) => item.id === rememberedBranch)
+            branch = world.branches?.find((item) => item.id === rememberedBranch)
               || world.branches?.find((item) => item.kind === "main")
               || world.branches?.[0];
-            if (branch) setActiveBranchId(branch.id);
           }
+          const loaded = await loadScope(project.id, world?.id || "", branch?.id || "");
+          if (cancelled || !loaded) return;
+        } else {
+          setTree(null);
+          setBible(null);
+          setSessions([]);
+          setHydratedScopeKey(scopeKey("", "", ""));
         }
+        setConfig(runtime);
+        setBootstrap(boot);
+        setCommands(commandPayload);
+        setActiveProjectId(project?.id || "");
+        setActiveWorldId(world?.id || "");
+        setActiveBranchId(branch?.id || "");
       } catch (error) {
-        setFatalError((error as Error).message);
+        if (!cancelled) setFatalError((error as Error).message);
       } finally {
-        setBooting(false);
+        if (!cancelled) setBooting(false);
       }
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+      scopeRequestRef.current.controller?.abort();
+    };
+  }, [loadScope]);
 
   useEffect(() => {
     const openPalette = (event: KeyboardEvent) => {
@@ -195,8 +245,8 @@ export default function App() {
   useEffect(() => {
     if (!activeProjectId) return;
     browserStorage.set("arline:react:project", activeProjectId);
-    void refreshScope();
-  }, [activeProjectId, activeWorldId, activeBranchId, refreshScope]);
+    if (hydratedScopeKey !== currentScopeKey) void loadScope(activeProjectId, activeWorldId, activeBranchId);
+  }, [activeProjectId, activeWorldId, activeBranchId, currentScopeKey, hydratedScopeKey, loadScope]);
 
   const chooseProject = (projectId: string) => {
     setActiveProjectId(projectId);
@@ -249,10 +299,11 @@ export default function App() {
   const documentTypes = bootstrap?.document_types || ["scene", "chapter", "note", "research", "outline"];
   const entityTypes = bootstrap?.entity_types || ["character", "location", "item", "organization", "lore"];
   const documents = tree?.documents || [];
+  const scopeReady = !activeProjectId || hydratedScopeKey === currentScopeKey;
 
   const mainContent = useMemo(() => {
     if (view === "home") return <HomeView project={activeProject} documents={documents} sessions={sessions} bible={bible} tree={tree} onOpenChat={(id) => id ? void openSession(id) : newChat()} onOpenDocument={openDocument} onManuscript={() => setViewAndPersist("manuscript")} onLibrary={() => setViewAndPersist("library")} onQuickCreate={() => setQuickCreateOpen(true)} onStartPrompt={(prompt) => { setSeedPrompt(prompt); setViewAndPersist("chat"); }} />;
-    if (view === "chat") return <ChatView config={config} activeProjectId={activeProjectId} activeWorldId={activeWorldId} activeBranchId={activeBranchId} projectName={activeProject?.name || "Project"} worldName={activeWorld?.name || "World"} branchName={activeBranch?.name || "Main"} worldBible={bible} activeSession={activeSession} commands={commands.commands || []} onConfig={setConfig} onSession={setActiveSession} onSessionsChanged={refreshSessions} onInspect={inspect} seedPrompt={seedPrompt} onSeedConsumed={() => setSeedPrompt("")} />;
+    if (view === "chat") return <ChatView config={config} activeProjectId={activeProjectId} activeWorldId={activeWorldId} activeBranchId={activeBranchId} projectName={activeProject?.name || "Project"} worldName={activeWorld?.name || "World"} branchName={activeBranch?.name || "Main"} worldBible={bible} activeSession={activeSession} commands={commands.commands || []} onConfig={setConfig} onSession={setActiveSession} onSessionsChanged={refreshSessions} onLibraryChanged={refreshScope} onInspect={inspect} seedPrompt={seedPrompt} onSeedConsumed={() => setSeedPrompt("")} />;
     if (view === "manuscript") return <ManuscriptView projectId={activeProjectId} worldId={activeWorldId} branchId={activeBranchId} documents={documents} folders={tree?.folders || tree?.folder_tree || []} initialDocumentId={activeDocumentId} documentTypes={documentTypes} onDocumentsChanged={refreshScope} onInspect={inspect} />;
     if (view === "library") return <LibraryView projectId={activeProjectId} worldId={activeWorldId} branchId={activeBranchId} bible={bible} entityTypes={entityTypes} onChanged={async () => { await refreshBootstrap(); await refreshScope(); }} onSelect={setSelection} />;
     return <CommandCenterView projectId={activeProjectId} commands={commands.commands || []} registryVersion={commands.command_registry_version} dynamicReferences={commands.dynamic_references} referenceSelectors={commands.reference_selectors} onUse={(command, compiledText) => { setSeedPrompt(compiledText || `/${command.id} `); setViewAndPersist("chat"); }} />;
@@ -265,7 +316,7 @@ export default function App() {
   );
 
   return (
-    <div className="arline-app-theme" data-theme={theme} data-contrast={appearance.contrast} style={appearanceStyle}>
+    <div className="arline-app-theme" data-theme={theme} data-contrast={appearance.contrast} style={appearanceStyle} aria-busy={!scopeReady || scopeLoading}>
       <Shell
         view={view}
         theme={theme}
@@ -292,7 +343,7 @@ export default function App() {
       >
         {scopeLoading ? <div className="scope-progress"><span /></div> : null}
         {fatalError ? <div className="global-error"><AlertTriangle size={13} /><span>{fatalError}</span><button onClick={() => setFatalError("")}>×</button></div> : null}
-        {mainContent}
+        {scopeReady ? mainContent : <div className="scope-loading-state" role="status" aria-live="polite"><LoaderCircle className="spin" size={20} /><strong>{scopeLoading ? "Loading workspace…" : "Workspace data unavailable"}</strong>{!scopeLoading ? <button onClick={() => void refreshScope()}>Retry</button> : null}</div>}
       </Shell>
       <GlobalPalette
         open={paletteOpen}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import writingIllustration from "../assets/writing-island.png";
 import {
   AlertTriangle,
   AtSign,
@@ -11,6 +12,9 @@ import {
   Ban,
   BrainCircuit,
   ChevronDown,
+  ChevronRight,
+  MoreHorizontal,
+  PanelRight,
   Copy,
   CornerUpRight,
   FolderKanban,
@@ -132,6 +136,7 @@ interface ChatViewProps {
   onConfig: (config: RuntimeConfig) => void;
   onSession: (session: Session | null) => void;
   onSessionsChanged: () => Promise<void> | void;
+  onLibraryChanged?: () => Promise<void> | void;
   onInspect: (title: string, data: unknown) => void;
   seedPrompt?: string;
   onSeedConsumed?: () => void;
@@ -155,6 +160,7 @@ export function ChatView({
   onConfig,
   onSession,
   onSessionsChanged,
+  onLibraryChanged,
   onInspect,
   seedPrompt,
   onSeedConsumed,
@@ -170,6 +176,8 @@ export function ChatView({
   const [error, setError] = useState("");
   const [analysis, setAnalysis] = useState<Record<string, unknown> | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
+  const [notebookOpen, setNotebookOpen] = useState(() => window.matchMedia("(min-width: 1200px)").matches);
   const [mentions, setMentions] = useState<Array<Record<string, unknown>>>([]);
   const [mentionsLoading, setMentionsLoading] = useState(false);
   const [mentionsFailed, setMentionsFailed] = useState(false);
@@ -195,11 +203,19 @@ export function ChatView({
   const [blueprintBusy, setBlueprintBusy] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [identityOpen, setIdentityOpen] = useState(false);
+  const [sheetProposal, setSheetProposal] = useState<JsonMap | null>(null);
+  const [sheetProposalBusy, setSheetProposalBusy] = useState(false);
+  const [sheetBranchName, setSheetBranchName] = useState("");
+  const [activeSheetIndex, setActiveSheetIndex] = useState(0);
+  const [selectedSheetIds, setSelectedSheetIds] = useState<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const notebookToggleRef = useRef<HTMLButtonElement | null>(null);
+  const presenceRequestRef = useRef(0);
+  const closeNotebook = () => { setNotebookOpen(false); notebookToggleRef.current?.focus(); };
 
   const turns = useMemo(() => activeSession?.turns || [], [activeSession]);
   const lastPromptToken = prompt.split(/\s+/).at(-1) || "";
@@ -235,6 +251,12 @@ export function ChatView({
   }, []);
 
   useEffect(() => {
+    const syncProfile = (event: Event) => setUserProfile((event as CustomEvent<UserProfile>).detail);
+    window.addEventListener("arline:user-profile-updated", syncProfile);
+    return () => window.removeEventListener("arline:user-profile-updated", syncProfile);
+  }, []);
+
+  useEffect(() => {
     if (activeSession) return;
     void studioApi.userProfile().then((profile) => {
       setUserProfile(profile);
@@ -250,14 +272,21 @@ export function ChatView({
   }, [activeSession]);
 
   useEffect(() => {
-    if (activeSession || (!activeBranchId && !activeWorldId)) return;
+    const requestId = presenceRequestRef.current + 1;
+    presenceRequestRef.current = requestId;
+    let cancelled = false;
+    if (activeSession || (!activeBranchId && !activeWorldId)) return () => { cancelled = true; };
     const loadScopedPresence = async () => {
-      const branch = activeBranchId ? await studioApi.presenceBinding("branch", activeBranchId).catch(() => ({} as JsonMap)) : {} as JsonMap;
-      const world = activeWorldId ? await studioApi.presenceBinding("world", activeWorldId).catch(() => ({} as JsonMap)) : {} as JsonMap;
+      const [branch, world] = await Promise.all([
+        activeBranchId ? studioApi.presenceBinding("branch", activeBranchId).catch(() => ({} as JsonMap)) : {} as JsonMap,
+        activeWorldId ? studioApi.presenceBinding("world", activeWorldId).catch(() => ({} as JsonMap)) : {} as JsonMap,
+      ]);
+      if (cancelled || presenceRequestRef.current !== requestId) return;
       const scoped = ((branch.profile as JsonMap | undefined) && Object.keys(branch.profile as JsonMap).length ? branch.profile : world.profile) as ConversationProfile | undefined;
       if (scoped && Object.keys(scoped).length) setConversationProfile((current) => ({ ...current, ...scoped }));
     };
     void loadScopedPresence();
+    return () => { cancelled = true; };
   }, [activeSession, activeBranchId, activeWorldId]);
 
   useEffect(() => {
@@ -294,9 +323,13 @@ export function ChatView({
   }, [activeProjectId, activeWorldId, activeBranchId]);
 
   useEffect(() => {
-    if (!followLatest) return;
     const viewport = viewportRef.current;
     if (!viewport) return;
+    if (!turns.length && !pendingPrompt && !generating && !liveText) {
+      viewport.scrollTo({ top: 0, behavior: "auto" });
+      return;
+    }
+    if (!followLatest) return;
     viewport.scrollTo({ top: viewport.scrollHeight, behavior: "auto" });
   }, [liveText, generating, pendingPrompt, turns.length, followLatest]);
 
@@ -534,9 +567,13 @@ export function ChatView({
 
   const patchActiveSession = async (payload: Record<string, unknown>) => {
     if (!activeSession) return;
-    await studioApi.updateSession(activeSession.id, payload);
-    onSession(await studioApi.session(activeSession.id));
-    await onSessionsChanged();
+    const updatedSession = await studioApi.updateSession(activeSession.id, payload);
+    onSession(updatedSession);
+    try {
+      await onSessionsChanged();
+    } catch (refreshError) {
+      setError((refreshError as Error).message || "Session saved, but the session list could not be refreshed.");
+    }
   };
 
   const renameSession = async () => {
@@ -551,14 +588,28 @@ export function ChatView({
   };
 
   const changeConversation = async (mode: ConversationMode) => {
+    const previousMode = conversationMode;
     setConversationMode(mode);
-    if (activeSession) await patchActiveSession({ conversation_mode: mode, conversation_profile: conversationProfile });
+    if (!activeSession) return;
+    try {
+      await patchActiveSession({ conversation_mode: mode, conversation_profile: conversationProfile });
+    } catch (persistenceError) {
+      setConversationMode(previousMode);
+      setError((persistenceError as Error).message || "Could not save the conversation mode.");
+    }
   };
 
   const patchConversationProfile = async (patch: ConversationProfile) => {
+    const previousProfile = conversationProfile;
     const next = { ...conversationProfile, ...patch };
     setConversationProfile(next);
-    if (activeSession) await patchActiveSession({ conversation_profile: next });
+    if (!activeSession) return;
+    try {
+      await patchActiveSession({ conversation_profile: next });
+    } catch (persistenceError) {
+      setConversationProfile(previousProfile);
+      setError((persistenceError as Error).message || "Could not save the conversation profile.");
+    }
   };
 
   const patchLivingSession = async (patch: JsonMap) => {
@@ -671,6 +722,122 @@ export function ChatView({
     await studioApi.createFact({ project_id: activeProjectId, world_id: activeWorldId || null, branch_id: branchIdForCanon(activeBranchId), owner_type: ownerId === activeWorldId ? "world" : "entity_family", owner_id: ownerId, path, value: turn.story || "", status: "draft", authority: "user_explicit", source_type: "turn", source_id: turn.id });
   };
 
+  const proposeSheet = async (turn: Turn) => {
+    if (!activeProjectId || sheetProposalBusy) return;
+    setSheetProposalBusy(true);
+    setError("");
+    try {
+      const result = await studioApi.createStoryLabSheetProposal({
+        project_id: activeProjectId,
+        world_id: activeWorldId || null,
+        branch_id: branchIdForCanon(activeBranchId),
+        session_id: activeSession?.id || null,
+        turn_id: turn.id,
+        source_text: turn.story || "",
+        prompt_text: turn.user_prompt || "",
+        kind: conversationProfile.story_lab_focus === "character" ? "character" : "plot",
+      });
+      setSheetProposal(result);
+      const items = ((result.items || [result]) as JsonMap[]);
+      setActiveSheetIndex(0);
+      setSelectedSheetIds(items.map((item) => String(((item.change || {}) as JsonMap).id || "")).filter(Boolean));
+      const proposal = ((items[0]?.proposal || result.proposal || {}) as JsonMap);
+      setSheetBranchName(`${String(proposal.name || "Story Lab")} proposal`);
+    } catch (proposalError) {
+      setError((proposalError as Error).message || "Could not create the sheet proposal.");
+    } finally {
+      setSheetProposalBusy(false);
+    }
+  };
+
+  const updateSheetDraft = (changes: JsonMap) => {
+    setSheetProposal((current) => {
+      if (!current) return current;
+      const items = [...((current.items || [current]) as JsonMap[])];
+      const item = items[activeSheetIndex] || items[0];
+      items[activeSheetIndex] = { ...item, proposal: { ...((item.proposal || {}) as JsonMap), ...changes } };
+      return { ...current, items, ...(activeSheetIndex === 0 ? { proposal: items[0].proposal } : {}) };
+    });
+  };
+
+  const chooseSheetTarget = (targetId: string) => {
+    const matches = activeSheetMatches;
+    const target = matches.find((item) => String(item.id) === targetId);
+    if (!target) {
+      updateSheetDraft({ operation: "create", target_id: null, target_family_id: null, base_updated_at: null, base_revision: 0 });
+      updateActiveSheetChange(null);
+      return;
+    }
+    updateSheetDraft({
+      operation: "update",
+      target_id: target.id,
+      target_family_id: target.family_id || null,
+      base_updated_at: target.updated_at || null,
+      base_revision: target.base_revision || 0,
+    });
+    updateActiveSheetChange(target.old_value || "");
+  };
+
+  const updateActiveSheetChange = (oldValue: unknown) => {
+    setSheetProposal((current) => {
+      if (!current) return current;
+      const items = [...((current.items || [current]) as JsonMap[])];
+      const item = items[activeSheetIndex] || items[0];
+      items[activeSheetIndex] = { ...item, change: { ...((item.change || {}) as JsonMap), old_value: oldValue } };
+      return { ...current, items, ...(activeSheetIndex === 0 ? { change: items[0].change } : {}) };
+    });
+  };
+
+  const toggleSheetSelection = (item: JsonMap, checked: boolean) => {
+    const id = String(((item.change || {}) as JsonMap).id || "");
+    const proposal = (item.proposal || {}) as JsonMap;
+    setSelectedSheetIds((current) => {
+      const next = new Set(current);
+      checked ? next.add(id) : next.delete(id);
+      if (proposal.kind === "relationship" && checked) {
+        const endpoints = new Set([String(proposal.subject_name || "").toLowerCase(), String(proposal.object_name || "").toLowerCase()]);
+        sheetItems.forEach((candidate) => {
+          const draft = (candidate.proposal || {}) as JsonMap;
+          if (endpoints.has(String(draft.name || "").toLowerCase())) next.add(String(((candidate.change || {}) as JsonMap).id || ""));
+        });
+      } else if (proposal.kind !== "relationship" && !checked) {
+        const name = String(proposal.name || "").toLowerCase();
+        sheetItems.forEach((candidate) => {
+          const draft = (candidate.proposal || {}) as JsonMap;
+          if (draft.kind === "relationship" && [draft.subject_name, draft.object_name].some((value) => String(value || "").toLowerCase() === name)) next.delete(String(((candidate.change || {}) as JsonMap).id || ""));
+        });
+      }
+      return Array.from(next).filter(Boolean);
+    });
+  };
+
+  const applySheetProposal = async (action: "accept" | "reject" | "branch") => {
+    const items = ((sheetProposal?.items || (sheetProposal ? [sheetProposal] : [])) as JsonMap[]);
+    if (!items.length || sheetProposalBusy) return;
+    setSheetProposalBusy(true);
+    setError("");
+    try {
+      const result = await studioApi.applyStoryLabSheetBundle({
+        action,
+        items: items.map((item) => ({
+          change_id: String(((item.change || {}) as JsonMap).id || ""),
+          proposal: (item.proposal || {}) as JsonMap,
+          selected: action === "reject" || selectedSheetIds.includes(String(((item.change || {}) as JsonMap).id || "")),
+        })),
+        branch_name: sheetBranchName.trim(),
+      });
+      setSheetProposal(null);
+      if (action !== "reject") {
+        await onLibraryChanged?.();
+        onInspect(action === "branch" ? "Sheet saved to branch" : "Sheet proposal accepted", result);
+      }
+    } catch (proposalError) {
+      setError((proposalError as Error).message || "Could not apply the sheet proposal.");
+    } finally {
+      setSheetProposalBusy(false);
+    }
+  };
+
   const modeMeta = MODE_META[conversationMode];
   const ModeIcon = modeMeta.icon;
   const presence = (conversationProfile.presence || DEFAULT_CONVERSATION_PROFILE.presence || {}) as JsonMap;
@@ -681,15 +848,21 @@ export function ChatView({
     || userProfile?.preferred_names?.find((item) => item.primary)?.value
     || userProfile?.display_name
     || "You";
+  const partnerName = String(userProfile?.collaboration?.partner_name || "Arline").trim() || "Arline";
   const linkedSelfName = String((userProfile?.presence_defaults || {}).display_name || preferredName);
   const presenceSuggestion = /\b(?:what if i was|i want to be in|put me in|play as|enter the story)\b/i.test(prompt);
   const timelineItems = [
     ...turns.map((turn, index) => ({ kind: "turn" as const, createdAt: String(turn.created_at || ""), key: turnKey(turn, index), turn, index })),
     ...(activeSession?.mode_events || []).map((event, index) => ({ kind: "mode" as const, createdAt: String(event.created_at || ""), key: String(event.id || `mode-${index}`), event })),
   ].sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  const sheetItems = ((sheetProposal?.items || (sheetProposal ? [sheetProposal] : [])) as JsonMap[]);
+  const activeSheetItem = sheetItems[activeSheetIndex] || sheetItems[0] || {};
+  const activeSheetDraft = (activeSheetItem.proposal || {}) as JsonMap;
+  const activeSheetChange = (activeSheetItem.change || {}) as JsonMap;
+  const activeSheetMatches = (activeSheetItem.matches || []) as JsonMap[];
 
   return (
-    <div className={`chat-workspace ${["story_lab", "interactive", "character_room"].includes(conversationMode) ? "has-conversation-context" : ""} ${conversationMode === "story_lab" ? "is-story-lab" : ""} ${conversationMode === "story_lab" && conversationProfile.story_lab_focus === "my_presence" ? "has-presence-studio" : ""}`}>
+    <div data-mode={conversationMode} data-notebook-open={notebookOpen && !focusMode} data-focus={focusMode} data-empty={!turns.length && !pendingPrompt && !liveText} className={`chat-workspace writing-studio ${["story_lab", "interactive", "character_room"].includes(conversationMode) ? "has-conversation-context" : ""} ${conversationMode === "story_lab" ? "is-story-lab" : ""} ${conversationMode === "story_lab" && conversationProfile.story_lab_focus === "my_presence" ? "has-presence-studio" : ""}`}>
       <section className="chat-header">
         <div className="chat-header-identity">
           <span className="chat-header-glyph" aria-hidden="true"><MessageSquareText size={18} /></span>
@@ -705,14 +878,30 @@ export function ChatView({
           </div>
         </div>
         <div className="chat-header-actions">
-          {analysis && <button onClick={() => onInspect("Last analysis", analysis)}><BrainCircuit size={14} />Context</button>}
+          <div className="writing-view-controls">
+            <button aria-label="Focus writing" aria-pressed={focusMode} onClick={() => setFocusMode((value) => !value)}><Eye size={15} /><span>Focus</span></button>
+            <button ref={notebookToggleRef} aria-label="Toggle context notebook" aria-expanded={notebookOpen && !focusMode} aria-controls="writing-context-notebook" onClick={() => { setNotebookOpen(focusMode || !notebookOpen); setFocusMode(false); }}><PanelRight size={15} /><span>Notes</span></button>
+          </div>
+          {(activeSession || analysis) && <details className="writing-session-menu" onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
+            <summary aria-label="Conversation actions"><MoreHorizontal size={19} /></summary>
+            <div>{analysis && <button onClick={() => onInspect("Last analysis", analysis)}><BrainCircuit size={14} />Context</button>}
           {activeSession && <button onClick={() => void renameSession()}><Pencil size={14} />Rename</button>}
           {activeSession && <button onClick={() => void patchActiveSession({ pinned: !activeSession.pinned })}><Pin size={14} />{activeSession.pinned ? "Unpin" : "Pin"}</button>}
           {activeSession && <button onClick={fork}><GitFork size={14} />Fork</button>}
-          {activeSession && <button className="danger" onClick={() => setDeleteConfirmOpen(true)}><Trash2 size={14} />Trash</button>}
-          <div className="conversation-mode-control">
+          {activeSession && <button className="danger" onClick={() => setDeleteConfirmOpen(true)}><Trash2 size={14} />Trash</button>}</div>
+          </details>}
+        </div>
+      </section>
+
+      <section className="writing-modebar" aria-label="Writing modes">
+        <nav className="writing-mode-tabs" aria-label="Quick writing modes">
+          <button aria-pressed={conversationMode === "story_writer"} onClick={() => void changeConversation("story_writer")}><PenLine size={14} /><span>Writer</span></button>
+          <button aria-pressed={conversationMode === "story_lab"} onClick={() => void changeConversation("story_lab")}><FlaskConical size={14} /><span>Story Lab</span></button>
+          <button aria-pressed={conversationMode === "interactive"} onClick={() => void changeConversation("interactive")}><UserRound size={14} /><span>Interactive</span></button>
+        </nav>
+        <div className="writing-mode-options"><div className="conversation-mode-control">
             <span>Conversation</span>
-            <ArlineSelect ariaLabel="Conversation mode" density="mode" value={conversationMode} options={MODE_OPTIONS} onValueChange={(value) => void changeConversation(value as ConversationMode)} menuMinWidth={330} />
+            <ArlineSelect ariaLabel="Conversation mode" density="compact" value={conversationMode} options={MODE_OPTIONS} onValueChange={(value) => void changeConversation(value as ConversationMode)} menuMinWidth={330} />
           </div>
           <div className="chat-mode-control">
             <span>Context mode</span>
@@ -720,17 +909,17 @@ export function ChatView({
               <button title="Canon-aware context" aria-pressed={!scratchMode} className={!scratchMode ? "active" : ""} onClick={() => scratchMode && void toggleScratch()}><BrainCircuit size={13} /><span>Canon-aware</span></button>
               <button title="Scratch context" aria-pressed={scratchMode} className={scratchMode ? "active" : ""} onClick={() => !scratchMode && void toggleScratch()}><Ban size={13} /><span>Scratch</span></button>
             </div>
-          </div>
-        </div>
+          </div></div>
       </section>
 
+      <div className="writing-context-tools">
       {(["story_lab", "interactive", "character_room"] as ConversationMode[]).includes(conversationMode) && <section className="conversation-context-bar" aria-label={`${modeMeta.label} controls`}>
         {conversationMode === "story_lab" ? <>
           <div className="story-lab-identity">
             <button className="story-lab-you" onClick={() => setIdentityOpen((value) => !value)}><UserRound size={13} /><span>You: {preferredName}</span><small>Author</small><ChevronDown size={12} /></button>
-            <span>Arline knows you from Personal profile; <strong>@{linkedSelfName.replaceAll(" ", "_")}</strong> is your story projection.</span>
+            <span>{partnerName} knows you from Personal profile; <strong>@{linkedSelfName.replaceAll(" ", "_")}</strong> is your story projection.</span>
             {identityOpen && <div className="identity-popover">
-              <header><strong>What Arline knows</strong><button onClick={() => setIdentityOpen(false)}><X size={13} /></button></header>
+              <header><strong>What {partnerName} knows</strong><button onClick={() => setIdentityOpen(false)}><X size={13} /></button></header>
               <article><ShieldCheck size={15} /><span><strong>Private profile</strong><small>{userProfile?.about || "Personal details remain permission-controlled."}</small></span></article>
               <article><UserRound size={15} /><span><strong>Story projection · @{linkedSelfName.replaceAll(" ", "_")}</strong><small>{String((userProfile?.presence_defaults || {}).entity_variant_id ? "Connected to a Library entity" : "Create or link one in Personalization")}</small></span></article>
               <article><MessageSquareText size={15} /><span><strong>Current session</strong><small>Ideas and decisions from this Story Lab chat only.</small></span></article>
@@ -751,20 +940,38 @@ export function ChatView({
         </> : <><label><span>Participants</span><ArlineSelect density="compact" ariaLabel="Add participant" value="" options={[{ value: "", label: "Add from Library…" }, ...characterVariants.map((variant) => ({ value: variant.id, label: variant.display_name || variant.id }))]} onValueChange={(value) => { const participants = Array.from(new Set([...(conversationProfile.participants as string[] | undefined || []), value])).filter(Boolean); void patchConversationProfile({ participants }); }} /></label><span className="agency-badge"><FlaskConical size={12} />Non-canon rehearsal</span>{((conversationProfile.participants as string[] | undefined) || []).map((id) => <button className="participant-chip" key={id} onClick={() => void patchConversationProfile({ participants: ((conversationProfile.participants as string[]) || []).filter((item) => item !== id) })}>{characterVariants.find((item) => item.id === id)?.display_name || id}<X size={10} /></button>)}</>}
       </section>}
 
-      {conversationMode === "story_lab" && <aside className="living-session-panel" aria-label="Living session">
-        <header><div><span>Living session</span><strong>{activeSession?.title || "Untitled exploration"}</strong></div><span className="session-live-dot">Live</span></header>
-        <section><label><Target size={13} />Current question</label><textarea value={String(livingSession.current_question || "What are we trying to understand?")} onChange={(event) => setConversationProfile((current) => ({ ...current, living_session: { ...(current.living_session || {}), current_question: event.target.value } }))} onBlur={() => void patchLivingSession({ current_question: String(((conversationProfile.living_session || {}) as JsonMap).current_question || "") })} /></section>
-        <section><label><Sparkles size={13} />Emerging idea</label><textarea value={String(livingSession.emerging_idea || "The strongest direction will appear here as you talk.")} onChange={(event) => setConversationProfile((current) => ({ ...current, living_session: { ...(current.living_session || {}), emerging_idea: event.target.value } }))} onBlur={() => void patchLivingSession({ emerging_idea: String(((conversationProfile.living_session || {}) as JsonMap).emerging_idea || "") })} /></section>
-        <section><label><Check size={13} />Decisions</label>{((livingSession.decisions as string[] | undefined) || []).map((item) => <p className="session-decision" key={item}><Check size={11} />{item}</p>)}{!((livingSession.decisions as string[] | undefined) || []).length && <p className="session-empty">Nothing locked in yet.</p>}</section>
-        <section><label><Compass size={13} />Open threads</label>{((livingSession.open_threads as string[] | undefined) || []).map((item) => <button className="session-thread" key={item} onClick={() => setPrompt(item)}>{item}</button>)}{!((livingSession.open_threads as string[] | undefined) || []).length && <p className="session-empty">Questions will collect here.</p>}</section>
-        <footer><small>Session notes are exploratory and never become canon automatically.</small></footer>
-      </aside>}
-
       {conversationMode === "story_lab" && conversationProfile.story_lab_focus === "my_presence" && <section className="presence-studio-panel">
         <header><div><strong>My Presence Blueprint</strong><small>Creative intent only — nothing here becomes canon automatically.</small></div><button disabled={!prompt.trim() || blueprintBusy} onClick={() => void extractPresenceBlueprint()}><Sparkles size={13} />{blueprintBusy ? "Extracting…" : "Extract from prompt"}</button></header>
         <div className="blueprint-columns">{(["wanted", "flexible", "suggested", "avoid"] as const).map((bucket) => <article key={bucket}><h3>{bucket}</h3>{((blueprint[bucket] as string[] | undefined) || []).map((item) => <div key={item}><span>{item}</span>{bucket === "suggested" && <><button onClick={() => void approveSuggestion(item, "wanted")} title="Move to wanted"><Check size={11} /></button><button onClick={() => void approveSuggestion(item, "flexible")} title="Move to flexible"><Compass size={11} /></button></>}</div>)}{!((blueprint[bucket] as string[] | undefined) || []).length && <p>None yet</p>}</article>)}</div>
         <footer><input value={presenceName} onChange={(event) => setPresenceName(event.target.value)} placeholder="Character name for promotion" /><button onClick={() => void promotePresence()}><UserRound size={13} />Save as Library character</button><button className="primary" onClick={() => { void patchConversationProfile({ presence: { ...presence, mode: "self", control_policy: "user_directed" } }); void changeConversation("interactive"); }}><Send size={13} />Enter the story</button></footer>
       </section>}
+
+      </div>
+
+      {conversationMode === "story_lab" && <aside className="living-session-panel" id="writing-context-notebook" aria-label="Living session" onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); closeNotebook(); } }}>
+        <header><div><span>Living session</span><strong>{activeSession?.title || "Untitled exploration"}</strong></div><button aria-label="Close context notebook" onClick={closeNotebook}><X size={15} /></button></header>
+        <section><label><Target size={13} />Current question</label><textarea aria-label="Current question" placeholder="What are we trying to understand?" value={String(livingSession.current_question || "")} onChange={(event) => setConversationProfile((current) => ({ ...current, living_session: { ...(current.living_session || {}), current_question: event.target.value } }))} onBlur={() => void patchLivingSession({ current_question: String(((conversationProfile.living_session || {}) as JsonMap).current_question || "") })} /></section>
+        <section><label><Sparkles size={13} />Emerging idea</label><textarea aria-label="Emerging idea" placeholder="The strongest direction will appear here as you talk." value={String(livingSession.emerging_idea || "")} onChange={(event) => setConversationProfile((current) => ({ ...current, living_session: { ...(current.living_session || {}), emerging_idea: event.target.value } }))} onBlur={() => void patchLivingSession({ emerging_idea: String(((conversationProfile.living_session || {}) as JsonMap).emerging_idea || "") })} /></section>
+        <section><label><Check size={13} />Decisions</label>{((livingSession.decisions as string[] | undefined) || []).map((item) => <p className="session-decision" key={item}><Check size={11} />{item}</p>)}{!((livingSession.decisions as string[] | undefined) || []).length && <p className="session-empty">Nothing locked in yet.</p>}</section>
+        <section><label><Compass size={13} />Open threads</label>{((livingSession.open_threads as string[] | undefined) || []).map((item) => <button className="session-thread" key={item} onClick={() => setPrompt(item)}>{item}</button>)}{!((livingSession.open_threads as string[] | undefined) || []).length && <p className="session-empty">Questions will collect here.</p>}</section>
+        <footer><small>Session notes are exploratory and never become canon automatically.</small></footer>
+      </aside>}
+
+      {conversationMode !== "story_lab" && <aside className="writing-notebook" id="writing-context-notebook" aria-label="Context notebook" onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); closeNotebook(); } }}>
+        <header className="notebook-heading"><div><span>Context notebook</span><strong>In this scene</strong></div><button aria-label="Close context notebook" onClick={closeNotebook}><X size={15} /></button></header>
+        <dl className="notebook-scope">
+          <dt>Project</dt><dd>{projectName}</dd>
+          <dt>World</dt><dd>{worldName}</dd>
+          <dt>Branch</dt><dd>{branchName}</dd>
+          <dt>Scene</dt><dd>{activeScene || "None selected"}</dd>
+        </dl>
+        <section className="notebook-section"><h3><AtSign size={13} />Pinned references <span>{references.length}</span></h3>
+          {references.length ? <ul className="notebook-reference-list">{references.map((ref) => <li key={ref.type + ":" + ref.id}><span>{ref.label}</span><button aria-label={"Remove reference " + ref.label} onClick={() => setReferences((items) => items.filter((item) => item !== ref))}><X size={12} /></button></li>)}</ul> : <p>No references pinned. Bring a character, scene, or document into this conversation.</p>}
+          <button onClick={showReferencePicker}><AtSign size={13} />Add a reference</button>
+        </section>
+        <section className="notebook-section"><h3><BrainCircuit size={13} />Writing context</h3><p>{scratchMode ? "Scratch mode uses this conversation without canon retrieval." : "Canon-aware mode can retrieve context from the selected story scope."}</p><button onClick={() => void analyze()}><CornerUpRight size={13} />Inspect context</button></section>
+        <p className="notebook-note">Drafts stay in this chat. Review and stage a response when you want to develop canon.</p>
+      </aside>}
 
       <div
         ref={viewportRef}
@@ -776,12 +983,17 @@ export function ChatView({
       >
         {!turns.length && !pendingPrompt && !liveText ? (
           <div className="chat-empty">
-            <span className="brand-mark chat-empty-brand-mark" aria-hidden="true" />
-            <span className="chat-empty-scope"><Target size={12} />{worldName} / {branchName}</span>
-            <h2>{modeMeta.label}</h2>
-            <p>{modeMeta.description}. References and memory stay grounded in {worldName} / {branchName}; the active Context Mode remains independent.</p>
+            <div className="writing-welcome">
+              <div className="writing-welcome-copy">
+                <span className="writing-eyebrow"><ModeIcon size={13} />A little space to write</span>
+                <h2>{conversationMode === "story_writer" ? <>Find your <em>next line.</em></> : conversationMode === "story_lab" ? <>Give an idea <em>room to grow.</em></> : conversationMode === "interactive" ? <>The scene is set. <em>Step inside.</em></> : conversationMode === "analyst" ? <>Read between <em>the lines.</em></> : <>Let the characters <em>talk.</em></>}</h2>
+                <p>{conversationMode === "story_writer" ? "Start something new, return to a scene, or follow a thought a little further." : modeMeta.description.replaceAll("Arline", partnerName) + ". Take your time. We can work it out together."}</p>
+                <span className="chat-empty-scope"><Globe2 size={12} />{worldName}<i />{branchName}</span>
+              </div>
+              <img className="writing-illustration" src={writingIllustration} alt="" aria-hidden="true" />
+            </div>
             <div className="starter-grid">
-              {modeMeta.starters.map((starter) => <button key={starter.title} onClick={() => setPrompt(starter.prompt)}><ModeIcon size={18} /><span><strong>{starter.title}</strong><small>{starter.copy}</small></span></button>)}
+              {modeMeta.starters.map((starter, index) => <button key={starter.title} onClick={() => { setPrompt(starter.prompt); composerInputRef.current?.focus(); }}><span className="starter-number">{String(index + 1).padStart(2, "0")}</span><span><strong>{starter.title}</strong><small>{starter.copy}</small></span><ChevronRight size={14} /></button>)}
             </div>
           </div>
         ) : (
@@ -790,7 +1002,7 @@ export function ChatView({
               <article className="turn-block" key={item.key}>
                 <div className="user-turn">{conversationMode === "story_lab" ? <div className="discussion-user-turn"><span>{preferredName.slice(0, 1).toUpperCase()}</span><div><strong>{preferredName}</strong><p>{item.turn.user_prompt || ""}</p></div></div> : <div>{item.turn.user_prompt || ""}</div>}</div>
                 <div className="assistant-turn">
-                  <div className="assistant-meta">{conversationMode === "story_lab" && <i className="brand-mark discussion-arline-mark" aria-hidden="true" />}<span>Arline</span><small>{item.turn.model || "local model"}</small><em>{item.turn.run_id || ""}</em></div>
+                  <div className="assistant-meta"><b className="draft-number">{conversationMode === "story_lab" ? "Note" : "Draft"} {String(item.index + 1).padStart(2, "0")}</b>{conversationMode === "story_lab" && <i className="brand-mark discussion-arline-mark" aria-hidden="true" />}<span>{partnerName}</span><small>{item.turn.model || "local model"}</small><em>{item.turn.run_id || ""}</em></div>
                   <StoryText text={item.turn.story || ""} discussion={conversationMode === "story_lab"} />
                   <div className="turn-actions">
                     <button onClick={() => void navigator.clipboard.writeText(item.turn.story || "")}><Copy size={13} />Copy</button>
@@ -798,6 +1010,7 @@ export function ChatView({
                     {conversationMode === "story_lab" ? <>
                       <button onClick={() => { const insight = (item.turn.story || "").split(/\n{2,}/)[0].slice(0, 300); void patchLivingSession({ emerging_idea: insight, insights: Array.from(new Set([...(livingSession.insights as string[] | undefined || []), insight])) }); }}><Sparkles size={13} />Keep as insight</button>
                       <button onClick={() => setPrompt(`Write a scene draft from this Story Lab direction:\n\n${String(livingSession.emerging_idea || item.turn.story || "")}`)}><PenLine size={13} />Draft from this</button>
+                      <button disabled={sheetProposalBusy} onClick={() => void proposeSheet(item.turn)}>{sheetProposalBusy ? <LoaderCircle className="spin" size={13} /> : <Save size={13} />}Propose sheet</button>
                     </> : <>
                       <button onClick={() => void reviewTurn(item.turn, "accepted")}><Check size={13} />Accept</button>
                       <button onClick={() => void reviewTurn(item.turn, "rejected")}><Ban size={13} />Reject</button>
@@ -815,7 +1028,7 @@ export function ChatView({
             {(generating || liveText) && (
               <article className="turn-block live-turn">
                 <div className="assistant-turn">
-                  <div className="assistant-meta"><span>Arline</span><small>{stage || "Generating"}</small><LoaderCircle size={13} className="spin" /></div>
+                  <div className="assistant-meta"><span>{partnerName}</span><small>{stage || "Generating"}</small><LoaderCircle size={13} className="spin" /></div>
                   {liveText ? <StoryText text={liveText} discussion={conversationMode === "story_lab"} /> : <div className="generation-placeholder">{stage || (conversationMode === "story_lab" ? "Preparing discussion…" : "Preparing generation…")}</div>}
                   {liveReasoning && <details><summary>Reasoning stream</summary><pre>{liveReasoning}</pre></details>}
                 </div>
@@ -893,6 +1106,7 @@ export function ChatView({
 
           <textarea
             ref={composerInputRef}
+            aria-label={"Message " + partnerName}
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
             onKeyDown={(event) => {
@@ -915,7 +1129,7 @@ export function ChatView({
               const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
               if (files.length) void addImages(files);
             }}
-            placeholder={modeMeta.placeholder}
+            placeholder={modeMeta.placeholder.replaceAll("Arline", partnerName)}
             spellCheck
             rows={1}
           />
@@ -925,16 +1139,16 @@ export function ChatView({
               <input ref={imageInputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden onChange={(event) => { void addImages(Array.from(event.target.files || [])); event.currentTarget.value = ""; }} />
               <button title="Attach image" onClick={() => imageInputRef.current?.click()}><Paperclip size={15} /><span>Image</span></button>
               <button title="Reference canon" onClick={showReferencePicker}><AtSign size={15} /><span>Reference</span></button>
-              <button className="profile-button" onClick={() => setSettingsOpen((value) => !value)}>
+              <button className="profile-button" aria-label="Run settings" onClick={() => setSettingsOpen((value) => !value)}>
                 <Sparkles size={13} /><span>{config.input_mode === "smart_hybrid" ? "Smart Hybrid" : config.input_mode} · {Math.round((config.visible_output_tokens || 4096) / 1024)}K</span><ChevronDown size={12} />
               </button>
-              <button className="context-button" onClick={() => void analyze()}><BrainCircuit size={14} /><span>Context</span></button>
+              <button className="context-button" aria-label="Inspect writing context" onClick={() => void analyze()}><BrainCircuit size={14} /><span>Context</span></button>
             </div>
             <div className="composer-right">
               {generating ? (
-                <button className="stop-button" onClick={() => abortRef.current?.abort()} title="Stop generation"><span /></button>
+                <button className="stop-button" onClick={() => abortRef.current?.abort()} title="Stop generation" aria-label="Stop generation"><span /></button>
               ) : (
-                <button className="send-button" disabled={!prompt.trim()} onClick={() => void generate()} title="Generate"><Send size={15} /></button>
+                <button className="send-button" disabled={!prompt.trim()} onClick={() => void generate()} title="Generate" aria-label="Generate"><span>{conversationMode === "story_writer" ? "Write" : "Send"}</span><Send size={15} /></button>
               )}
             </div>
           </div>
@@ -955,9 +1169,17 @@ export function ChatView({
                 </div>
               </section>
 
+              <section className="run-settings-section">
+                <div className="run-setting-heading"><span><BrainCircuit size={13} />Planning</span><small>Plan the scene before writing</small></div>
+                <div className="setting-segments two" role="group" aria-label="Planning">
+                  <button type="button" aria-pressed={!config.planning_enabled} className={!config.planning_enabled ? "active" : ""} onClick={() => onConfig({ ...config, planning_enabled: false })}><strong>Off</strong><small>Write right away</small></button>
+                  <button type="button" aria-pressed={config.planning_enabled === true} className={config.planning_enabled ? "active" : ""} onClick={() => onConfig({ ...config, planning_enabled: true })}><strong>On</strong><small>Plan, then write</small></button>
+                </div>
+              </section>
+
               <div className="run-settings-grid">
                 <section className="run-settings-section compact">
-                  <div className="run-setting-heading"><span><Sparkles size={13} />Reasoning</span><small>Model deliberation</small></div>
+                  <div className="run-setting-heading"><span><Sparkles size={13} />Reasoning</span><small>Model thinking</small></div>
                   <ArlineSelect density="compact" ariaLabel="Reasoning mode" value={config.reasoning} options={(config.reasoning_modes || ["off", "on", "low", "medium", "high"]).map((value) => ({ value, label: value === "off" ? "Off" : value.charAt(0).toUpperCase() + value.slice(1) }))} onValueChange={(reasoning) => onConfig({ ...config, reasoning })} />
                 </section>
                 <section className="run-settings-section compact">
@@ -984,6 +1206,7 @@ export function ChatView({
             </div>
           )}
         </div>
+        <div className="writing-composer-footnote"><span><kbd>Enter</kbd> to send <i>·</i> <kbd>Shift + Enter</kbd> for a new line</span><span>Draft first. Review when ready.</span></div>
       </div>
       {deleteConfirmOpen && activeSession && (
         <div className="modal-backdrop chat-delete-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !deletingSession) setDeleteConfirmOpen(false); }}>
@@ -1008,6 +1231,54 @@ export function ChatView({
                 {deletingSession ? <LoaderCircle size={15} className="spin" /> : <Trash2 size={15} />}
                 {deletingSession ? "Moving…" : "Move to Trash"}
               </button>
+            </footer>
+          </section>
+        </div>
+      )}
+      {sheetProposal && (
+        <div className="modal-backdrop sheet-proposal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !sheetProposalBusy) void applySheetProposal("reject"); }}>
+          <section className="sheet-proposal-modal" role="dialog" aria-modal="true" aria-labelledby="sheet-proposal-title">
+            <header>
+              <span className="sheet-proposal-icon"><GitBranch size={18} /></span>
+              <div><span className="eyebrow">Story Lab · proposal bundle</span><strong id="sheet-proposal-title">Review {sheetItems.length} proposed item{sheetItems.length === 1 ? "" : "s"}</strong></div>
+              <button aria-label="Close and reject sheet proposal" title="Close and reject proposal" disabled={sheetProposalBusy} onClick={() => void applySheetProposal("reject")}><X size={16} /></button>
+            </header>
+            <div className="sheet-proposal-body">
+              {sheetItems.length > 1 && <nav className="sheet-bundle-items" aria-label="Proposed resources">
+                {sheetItems.map((item, index) => {
+                  const draft = (item.proposal || {}) as JsonMap;
+                  const id = String(((item.change || {}) as JsonMap).id || "");
+                  return <button key={id} className={index === activeSheetIndex ? "active" : ""} onClick={() => setActiveSheetIndex(index)}>
+                    <input type="checkbox" checked={selectedSheetIds.includes(id)} onClick={(event) => event.stopPropagation()} onChange={(event) => toggleSheetSelection(item, event.target.checked)} />
+                    <span><strong>{String(draft.name || "Untitled")}</strong><small>{String(draft.kind || "item").replace("_", " ")}</small></span>
+                  </button>;
+                })}
+              </nav>}
+              <div className="sheet-proposal-status">
+                <span className="proposal-status pending">Pending</span>
+                <small>{activeSheetDraft.kind === "relationship" ? "Links two distinct Library entities" : activeSheetDraft.operation === "update" ? `Updates an existing ${activeSheetDraft.kind === "plot" ? "Manuscript outline" : `Library ${activeSheetDraft.kind}`}` : `Creates a new ${activeSheetDraft.kind === "plot" ? "Manuscript outline" : `Library ${activeSheetDraft.kind}`}`}</small>
+                <code>{String(activeSheetChange.id || "")}</code>
+              </div>
+              <div className="sheet-proposal-grid">
+                <label><span>Item type</span><input value={activeSheetDraft.kind === "plot" ? "Plot outline" : String(activeSheetDraft.kind || "Item").replace(/^./, (value) => value.toUpperCase())} disabled /></label>
+                {activeSheetDraft.kind !== "relationship" && <label><span>Change</span><select value={String(activeSheetDraft.target_id || "")} onChange={(event) => chooseSheetTarget(event.target.value)}><option value="">Create new sheet</option>{activeSheetMatches.map((match) => <option key={String(match.id)} value={String(match.id)}>Update {String(match.label)} · {Math.round(Number(match.score || 0) * 100)}% match</option>)}</select></label>}
+              </div>
+              {activeSheetDraft.kind === "relationship" ? <div className="sheet-proposal-grid relationship-fields">
+                <label><span>From</span><input value={String(activeSheetDraft.subject_name || "")} onChange={(event) => updateSheetDraft({ subject_name: event.target.value })} /></label>
+                <label><span>Relationship</span><input value={String(activeSheetDraft.relation_type || "related_to")} onChange={(event) => updateSheetDraft({ relation_type: event.target.value })} /></label>
+                <label><span>To</span><input value={String(activeSheetDraft.object_name || "")} onChange={(event) => updateSheetDraft({ object_name: event.target.value })} /></label>
+              </div> : <label className="sheet-proposal-field"><span>{activeSheetDraft.kind === "character" ? "Character name" : activeSheetDraft.kind === "location" ? "Location name" : "Plot title"}</span><input value={String(activeSheetDraft.name || "")} onChange={(event) => updateSheetDraft({ name: event.target.value })} /></label>}
+              {activeSheetDraft.kind !== "relationship" && <div className="sheet-diff">
+                {activeSheetDraft.operation === "update" && <section className="removed"><header><span>−</span>Current sheet</header><pre>{String(activeSheetChange.old_value || "No current summary")}</pre></section>}
+                <section className="added"><header><span>+</span>Proposed content</header><textarea value={String(activeSheetDraft.content || "")} onChange={(event) => updateSheetDraft({ content: event.target.value })} /></section>
+              </div>}
+              <label className="sheet-proposal-field branch-name"><span>New branch name</span><input value={sheetBranchName} onChange={(event) => setSheetBranchName(event.target.value)} /><small>Used only by “Save to branch”.</small></label>
+            </div>
+            <footer>
+              <button disabled={sheetProposalBusy} onClick={() => void applySheetProposal("reject")}><Ban size={14} />Reject</button>
+              <span />
+              <button disabled={sheetProposalBusy || !sheetBranchName.trim() || !selectedSheetIds.length} onClick={() => void applySheetProposal("branch")}><GitBranch size={14} />Save selected to branch</button>
+              <button className="primary" title="Accept change bundle" disabled={sheetProposalBusy || !selectedSheetIds.length} onClick={() => void applySheetProposal("accept")}>{sheetProposalBusy ? <LoaderCircle className="spin" size={14} /> : <Check size={14} />}Accept selected</button>
             </footer>
           </section>
         </div>

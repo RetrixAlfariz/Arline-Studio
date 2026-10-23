@@ -7,9 +7,10 @@ import unittest
 from fastapi.testclient import TestClient
 
 from src.history.store import HistoryStore
-from src.interface.web.app import _conversation_contract, create_app
-from src.conversation import extract_blueprint, recipe_for_mode, resolve_presence, story_lab_requests_prose, validate_user_agency
+from src.interface.web.app import RuntimePayload, _apply_payload, _conversation_contract, _public_config, create_app
+from src.conversation import extract_blueprint, recipe_for_mode, resolve_presence, story_lab_prose_intent_warnings, story_lab_requests_prose, validate_user_agency
 from src.profile import build_personalization_context, extract_profile_draft, normalize_user_profile, resolve_preferred_name
+from src.runtime_config import RuntimeConfig
 from src.service.arline_service import ArlineService
 
 
@@ -17,6 +18,31 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ConversationModeTests(unittest.TestCase):
+    def test_runtime_payload_keeps_configured_model_when_override_is_blank(self):
+        config = RuntimeConfig.load(ROOT / "config/arline.toml")
+        configured_model = config.lmstudio.model
+        applied = _apply_payload(config, RuntimePayload())
+        self.assertEqual(applied.lmstudio.model, configured_model)
+
+    def test_planning_override_is_independent_of_reasoning_and_preserves_auto(self):
+        for saved, mode, reasoning, expected in [
+            (False, "auto", "on", False),
+            (True, "auto", "off", True),
+            (False, "on", "off", True),
+            (True, "off", "on", False),
+        ]:
+            with self.subTest(saved=saved, mode=mode, reasoning=reasoning):
+                config = RuntimeConfig.load(ROOT / "config/arline.toml")
+                config.deliberation.enabled = saved
+                applied = _apply_payload(config, RuntimePayload(deliberation_mode=mode, reasoning=reasoning))
+                self.assertEqual(applied.deliberation.enabled, expected)
+                self.assertEqual(applied.generation.reasoning, reasoning)
+                self.assertEqual(_public_config(applied)["planning_enabled"], expected)
+
+    def test_invalid_planning_override_is_rejected(self):
+        with self.assertRaises(ValueError):
+            RuntimePayload(deliberation_mode="invalid")
+
     def test_preferred_name_rules_and_personal_memory_policy_migrate(self):
         legacy = normalize_user_profile({
             "display_name": "Vian",
@@ -43,11 +69,19 @@ class ConversationModeTests(unittest.TestCase):
         self.assertEqual(context["personal_details"]["skills"], "Voice acting")
         self.assertNotIn("birth_date", context["personal_details"])
 
+        legacy["collaboration"]["partner_name"] = "  Opheline\nWriter  "
+        context = build_personalization_context(legacy, "story_lab")
+        self.assertEqual(context["partner_name"], "Opheline Writer")
+        contract = _conversation_contract("story_lab", {"personalization_context": context})
+        self.assertIn('Assistant alias: "Opheline Writer"', contract)
+        self.assertIn("resolve it as addressing you", contract)
+        self.assertIn("Do not treat it as a story entity", contract)
+
         legacy["memory_policy"]["behavior"]["forget_inactive_days"] = 0
         self.assertEqual(normalize_user_profile(legacy)["memory_policy"]["behavior"]["forget_inactive_days"], 0)
 
         legacy["memory_policy"]["enabled"] = False
-        self.assertEqual(build_personalization_context(legacy, "story_lab"), {"memory_enabled": False, "learn_from_chat": False})
+        self.assertEqual(build_personalization_context(legacy, "story_lab"), {"memory_enabled": False, "learn_from_chat": False, "partner_name": "Opheline Writer"})
 
     def test_mode_profile_events_and_forks_persist(self):
         with TemporaryDirectory() as directory:
@@ -91,6 +125,14 @@ class ConversationModeTests(unittest.TestCase):
         self.assertTrue(story_lab_requests_prose("Write a scene where the sisters confront each other"))
         self.assertTrue(story_lab_requests_prose("Tolong tuliskan adegan pertengkaran mereka"))
         self.assertTrue(story_lab_requests_prose("/continue @scene"))
+        self.assertTrue(story_lab_prose_intent_warnings(
+            "Write a short scene where Mira opens the door.",
+            "Okay, so let's look at the scene you want.",
+        ))
+        self.assertFalse(story_lab_prose_intent_warnings(
+            "Write a short scene where Mira opens the door.",
+            "The latch gave beneath Mira's thumb. Cold air entered first.",
+        ))
 
         service = object.__new__(ArlineService)
         bundle = SimpleNamespace(directive=None)
@@ -107,7 +149,7 @@ class ConversationModeTests(unittest.TestCase):
         self.assertIn("Do not expose internal context labels", discussion)
         self.assertIn("Do not produce headings", discussion)
         self.assertNotIn("Write the requested fiction", discussion)
-        self.assertIn("Write the requested fiction", prose)
+        self.assertIn("Output only the fiction itself", prose)
 
     def test_user_profile_is_separate_from_library_entities(self):
         with TemporaryDirectory() as directory:
@@ -245,6 +287,149 @@ class ConversationModeTests(unittest.TestCase):
             self.assertIn(token, settings)
         for token in ("Save as Library character", "POV entity", "Non-canon rehearsal", "Extract from prompt"):
             self.assertIn(token, chat)
+
+    def test_story_lab_sheet_proposals_create_update_conflict_and_branch(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = (ROOT / "config/arline.toml").read_text(encoding="utf-8")
+            source = source.replace("auto_load = true", "auto_load = false")
+            source = re.sub(r'(?m)^database_path\s*=.*$', f'database_path = "{(root / "studio.db").as_posix()}"', source)
+            source = re.sub(r'(?m)^dataset_root\s*=.*$', f'dataset_root = "{(root / "datasets").as_posix()}"', source)
+            source = re.sub(r'(?m)^output_root\s*=.*$', f'output_root = "{(root / "output").as_posix()}"', source)
+            source = re.sub(r'(?m)^saved_root\s*=.*$', f'saved_root = "{(root / "saved").as_posix()}"', source)
+            config_path = root / "arline.toml"
+            config_path.write_text(source, encoding="utf-8")
+            client = TestClient(create_app(config_path))
+            active = client.get("/api/workspace/bootstrap").json()["active"]
+            project_id = active["project"]["id"]
+            world_id = active["world"]["id"]
+            branch_id = active["branch"]["id"]
+
+            staged = client.post("/api/story-lab/sheet-proposals", json={
+                "project_id": project_id, "world_id": world_id, "branch_id": branch_id,
+                "kind": "character", "prompt_text": "Help me develop a character named Mira who hides fear behind humor.",
+                "source_text": "Mira hides her fear behind precise humor.",
+            })
+            self.assertEqual(staged.status_code, 200, staged.text)
+            self.assertEqual(staged.json()["proposal"]["operation"], "create")
+            self.assertEqual(staged.json()["proposal"]["name"], "Mira")
+            change_id = staged.json()["change"]["id"]
+            accepted = client.post(f"/api/story-lab/sheet-proposals/{change_id}/apply", json={"action": "accept"})
+            self.assertEqual(accepted.status_code, 200, accepted.text)
+            variant = accepted.json()["resource"]
+            self.assertEqual(variant["summary"], "Mira hides her fear behind precise humor.")
+            self.assertEqual(accepted.json()["change"]["status"], "accepted")
+            revisions = client.get(f"/api/revisions/entity_variant/{variant['id']}").json()["revisions"]
+            self.assertTrue(revisions)
+
+            alias = client.post("/api/aliases", json={
+                "resource_type": "entity_family", "resource_id": variant["family_id"], "alias": "Mirabel",
+            })
+            self.assertEqual(alias.status_code, 200, alias.text)
+            alias_match = client.post("/api/story-lab/sheet-proposals", json={
+                "project_id": project_id, "world_id": world_id, "branch_id": branch_id,
+                "kind": "character", "prompt_text": "Develop a character named Mirabel.",
+                "source_text": "Her public confidence masks the same old fear.",
+            })
+            self.assertEqual(alias_match.status_code, 200, alias_match.text)
+            self.assertEqual(alias_match.json()["proposal"]["operation"], "update")
+            self.assertEqual(alias_match.json()["proposal"]["target_id"], variant["id"])
+            rejected_alias = client.post(
+                f"/api/story-lab/sheet-proposals/{alias_match.json()['change']['id']}/apply",
+                json={"action": "reject"},
+            )
+            self.assertEqual(rejected_alias.status_code, 200, rejected_alias.text)
+
+            update = client.post("/api/story-lab/sheet-proposals", json={
+                "project_id": project_id, "world_id": world_id, "branch_id": branch_id,
+                "kind": "character", "prompt_text": "Revisit the character named Mira.",
+                "source_text": "Mira now uses humor to redirect suspicion.",
+            })
+            self.assertEqual(update.status_code, 200, update.text)
+            self.assertEqual(update.json()["proposal"]["operation"], "update")
+            client.patch(f"/api/entities/variants/{variant['id']}", json={"summary": "A concurrent edit", "note": "test conflict"})
+            conflict = client.post(
+                f"/api/story-lab/sheet-proposals/{update.json()['change']['id']}/apply",
+                json={"action": "accept"},
+            )
+            self.assertEqual(conflict.status_code, 409, conflict.text)
+
+            plot = client.post("/api/story-lab/sheet-proposals", json={
+                "project_id": project_id, "world_id": world_id, "branch_id": branch_id,
+                "kind": "plot", "prompt_text": "Outline a plot where a glass bargain reveals a hidden heir.",
+                "source_text": "The bargain succeeds, but exposes the hidden heir.",
+            })
+            self.assertEqual(plot.json()["proposal"]["name"], "Glass Bargain Reveals a Hidden Heir")
+            branched = client.post(
+                f"/api/story-lab/sheet-proposals/{plot.json()['change']['id']}/apply",
+                json={"action": "branch", "branch_name": "glass-bargain-experiment"},
+            )
+            self.assertEqual(branched.status_code, 200, branched.text)
+            self.assertEqual(branched.json()["resource"]["branch_id"], branched.json()["branch"]["id"])
+            self.assertNotEqual(branched.json()["resource"]["branch_id"], branch_id)
+
+            unnamed = client.post("/api/story-lab/sheet-proposals", json={
+                "project_id": project_id, "world_id": world_id, "branch_id": branch_id,
+                "kind": "character", "prompt_text": "Explore a character named Fano and his sister.",
+                "source_text": "Fano trusts his sister, but she remains deliberately undefined.",
+            })
+            self.assertEqual(unnamed.status_code, 200, unnamed.text)
+            unnamed_items = unnamed.json()["items"]
+            self.assertEqual([(item["proposal"]["kind"], item["proposal"]["name"]) for item in unnamed_items], [("character", "Fano")])
+            create_fano = client.post("/api/story-lab/sheet-proposal-bundles/apply", json={
+                "action": "accept",
+                "items": [{"change_id": item["change"]["id"], "proposal": item["proposal"], "selected": True} for item in unnamed_items],
+            })
+            self.assertEqual(create_fano.status_code, 200, create_fano.text)
+
+            named_later = client.post("/api/story-lab/sheet-proposals", json={
+                "project_id": project_id, "world_id": world_id, "branch_id": branch_id,
+                "kind": "character", "prompt_text": "His sister is named Fila.",
+                "source_text": "Fano's sister Fila challenges his caution.",
+            })
+            self.assertEqual(named_later.status_code, 200, named_later.text)
+            later_items = named_later.json()["items"]
+            later_characters = {item["proposal"]["name"] for item in later_items if item["proposal"]["kind"] == "character"}
+            self.assertEqual(later_characters, {"Fano", "Fila"})
+            self.assertTrue(any(item["proposal"].get("relation_type") == "sibling" for item in later_items))
+            reject_later = client.post("/api/story-lab/sheet-proposal-bundles/apply", json={
+                "action": "reject",
+                "items": [{"change_id": item["change"]["id"], "proposal": item["proposal"], "selected": True} for item in later_items],
+            })
+            self.assertEqual(reject_later.status_code, 200, reject_later.text)
+
+            bundle = client.post("/api/story-lab/sheet-proposals", json={
+                "project_id": project_id, "world_id": world_id, "branch_id": branch_id,
+                "kind": "character",
+                "prompt_text": "Develop a character named Fano and his sister named Fila. They live in a city named Aster Hollow.",
+                "source_text": "Fano and Fila protect each other while Aster Hollow tests their loyalty.",
+            })
+            self.assertEqual(bundle.status_code, 200, bundle.text)
+            items = bundle.json()["items"]
+            entity_keys = {(item["proposal"]["kind"], item["proposal"]["name"]) for item in items}
+            self.assertIn(("character", "Fano"), entity_keys)
+            self.assertIn(("character", "Fila"), entity_keys)
+            self.assertIn(("location", "Aster Hollow"), entity_keys)
+            relationships = [item for item in items if item["proposal"]["kind"] == "relationship"]
+            self.assertTrue(any(item["proposal"]["relation_type"] == "sibling" for item in relationships))
+            self.assertTrue(any(item["proposal"]["relation_type"] == "lives_in" for item in relationships))
+            applied = client.post("/api/story-lab/sheet-proposal-bundles/apply", json={
+                "action": "accept",
+                "items": [{"change_id": item["change"]["id"], "proposal": item["proposal"], "selected": True} for item in items],
+            })
+            self.assertEqual(applied.status_code, 200, applied.text)
+            families = client.get("/api/entities/families").json()["families"]
+            by_name = {item["name"]: item for item in families}
+            self.assertNotEqual(by_name["Fano"]["id"], by_name["Fila"]["id"])
+            self.assertEqual(by_name["Aster Hollow"]["entity_type"], "location")
+            linked = client.get("/api/relationships", params={"world_id": world_id}).json()["relationships"]
+            self.assertGreaterEqual(len(linked), 3)
+
+        chat = (ROOT / "frontend/src/views/ChatView.tsx").read_text(encoding="utf-8")
+        for token in ("Propose sheet", "Accept change", "Save to branch", "Current sheet", "Proposed content"):
+            self.assertIn(token, chat)
+        self.assertIn("Close and reject sheet proposal", chat)
+        self.assertIn("Manuscript outline", chat)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,216 @@
+[
+  {
+    "aif_header": [
+      "@AIF-CORE 0.3 profile=teacher",
+      "@ARLINE 0.6.4"
+    ],
+    "blocked_rules": [],
+    "budget": {
+      "kept_nodes": 5,
+      "max_depth": 4,
+      "max_nodes": 500,
+      "min_confidence": 0.35,
+      "min_relevance": 0.25,
+      "pruned_by_confidence": 0,
+      "pruned_by_depth": 0,
+      "pruned_by_relevance": 0,
+      "version": "0.2"
+    },
+    "claims": [
+      {
+        "epistemic": "explicit",
+        "predicate": "garment.wearing",
+        "scope": {
+          "modality": "asserted",
+          "persistence": "scene_state",
+          "polarity": "positive",
+          "temporal": "current",
+          "temporal_scope": "current_or_unspecified",
+          "truth_scope": "canonical"
+        },
+        "source_segment": "seg_0002"
+      },
+      {
+        "epistemic": "explicit",
+        "predicate": "garment.color",
+        "scope": {
+          "modality": "asserted",
+          "persistence": "persistent",
+          "polarity": "positive",
+          "temporal": "current_or_unspecified",
+          "temporal_scope": "current_or_unspecified",
+          "truth_scope": "canonical"
+        },
+        "source_segment": "seg_0002"
+      },
+      {
+        "epistemic": "explicit",
+        "predicate": "garment.material",
+        "scope": {
+          "modality": "asserted",
+          "persistence": "persistent",
+          "polarity": "positive",
+          "temporal": "current_or_unspecified",
+          "temporal_scope": "current_or_unspecified",
+          "truth_scope": "canonical"
+        },
+        "source_segment": "seg_0002"
+      }
+    ],
+    "derived_predicates": [
+      "garment:gamis_1.soft_flexible_drape",
+      "current_outfit_components"
+    ],
+    "entity_types": [
+      "character",
+      "garment"
+    ],
+    "event_types": [],
+    "prompt": "Namaku Mira. Aku memakai gamis hitam berbahan jersey. Aku masuk kamar.",
+    "trace_count": 3,
+    "unknown_count": 0,
+    "wcf_valid": true
+  },
+  {
+    "aif_header": [
+      "@AIF-CORE 0.3 profile=teacher",
+      "@ARLINE 0.6.4"
+    ],
+    "blocked_rules": [],
+    "budget": {
+      "kept_nodes": 8,
+      "max_depth": 4,
+      "max_nodes": 500,
+      "min_confidence": 0.35,
+      "min_relevance": 0.25,
+      "pruned_by_confidence": 0,
+      "pruned_by_depth": 0,
+      "pruned_by_relevance": 0,
+      "version": "0.2"
+    },
+    "claims": [
+      {
+        "epistemic": "explicit",
+        "predicate": "physical.morphology.presentation",
+        "scope": {
+          "modality": "asserted",
+          "persistence": "persistent",
+          "polarity": "positive",
+          "temporal": "current_or_unspecified",
+          "temporal_scope": "current_or_unspecified",
+          "truth_scope": "canonical"
+        },
+        "source_segment": "seg_0001"
+      },
+      {
+        "epistemic": "explicit",
+        "predicate": "physical.chest.softness",
+        "scope": {
+          "modality": "asserted",
+          "persistence": "persistent",
+          "polarity": "positive",
+          "temporal": "current_or_unspecified",
+          "temporal_scope": "current_or_unspecified",
+          "truth_scope": "canonical"
+        },
+        "source_segment": "seg_0001"
+      },
+      {
+        "epistemic": "explicit",
+        "predicate": "physical.chest.compliance",
+        "scope": {
+          "modality": "asserted",
+          "persistence": "persistent",
+          "polarity": "positive",
+          "temporal": "current_or_unspecified",
+          "temporal_scope": "current_or_unspecified",
+          "truth_scope": "canonical"
+        },
+        "source_segment": "seg_0001"
+      },
+      {
+        "epistemic": "explicit",
+        "predicate": "hair.length_relative",
+        "scope": {
+          "modality": "asserted",
+          "persistence": "persistent",
+          "polarity": "positive",
+          "temporal": "current_or_unspecified",
+          "temporal_scope": "current_or_unspecified",
+          "truth_scope": "canonical"
+        },
+        "source_segment": "seg_0001"
+      }
+    ],
+    "derived_predicates": [
+      "soft_compliant_chest_tissue",
+      "very_long_hair_body_relative",
+      "high_hair_motion_lag"
+    ],
+    "entity_types": [
+      "character"
+    ],
+    "event_types": [],
+    "prompt": "Tubuhku seperti perempuan, dada empuk, rambut sampai pinggang, dan aku tinggal sendiri.",
+    "trace_count": 4,
+    "unknown_count": 0,
+    "wcf_valid": true
+  },
+  {
+    "aif_header": [
+      "@AIF-CORE 0.3 profile=teacher",
+      "@ARLINE 0.6.4"
+    ],
+    "blocked_rules": [],
+    "budget": {
+      "kept_nodes": 0,
+      "max_depth": 4,
+      "max_nodes": 500,
+      "min_confidence": 0.35,
+      "min_relevance": 0.25,
+      "pruned_by_confidence": 0,
+      "pruned_by_depth": 0,
+      "pruned_by_relevance": 0,
+      "version": "0.2"
+    },
+    "claims": [],
+    "derived_predicates": [],
+    "entity_types": [
+      "character",
+      "garment"
+    ],
+    "event_types": [],
+    "prompt": "Aku tidak memakai dress. Dulu aku memakai gamis. Jika aku memakai khimar, aku akan keluar.",
+    "trace_count": 0,
+    "unknown_count": 0,
+    "wcf_valid": true
+  },
+  {
+    "aif_header": [
+      "@AIF-CORE 0.3 profile=teacher",
+      "@ARLINE 0.6.4"
+    ],
+    "blocked_rules": [],
+    "budget": {
+      "kept_nodes": 0,
+      "max_depth": 4,
+      "max_nodes": 500,
+      "min_confidence": 0.35,
+      "min_relevance": 0.25,
+      "pruned_by_confidence": 0,
+      "pruned_by_depth": 0,
+      "pruned_by_relevance": 0,
+      "version": "0.2"
+    },
+    "claims": [],
+    "derived_predicates": [],
+    "entity_types": [
+      "character"
+    ],
+    "event_types": [],
+    "prompt": "What happens next?",
+    "trace_count": 0,
+    "unknown_count": 0,
+    "wcf_valid": true
+  }
+]

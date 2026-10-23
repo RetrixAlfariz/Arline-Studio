@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -82,7 +83,10 @@ class ArchitectureHardeningTests(unittest.TestCase):
             db = Path(td) / "discovery.db"
             store = DiscoveryStore(db)
             self.assertEqual(store.SCHEMA_VERSION, 4)
-            with sqlite3.connect(db) as con:
+            # sqlite3.Connection's context manager commits/rolls back but does
+            # not close the handle, which prevents TemporaryDirectory cleanup
+            # on Windows.
+            with closing(sqlite3.connect(db)) as con:
                 tables = {
                     row[0]
                     for row in con.execute(

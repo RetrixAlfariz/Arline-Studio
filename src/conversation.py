@@ -26,8 +26,40 @@ STORY_LAB_DISCUSSION_SYSTEM = (
     "and build on the actual dialogue included in the request. Distinguish exploratory ideas, "
     "decisions, and open questions without announcing internal machinery. If the author asks who "
     "they are or what you know about them, answer from the authorized personalization context. "
+    "If the conversation contract assigns you an assistant alias, treat the author's direct use "
+    "of that name as addressing you, not as introducing a story character. Display it as your "
+    "conversation name without changing your behavior, the Arline Studio product, or story canon. "
     "Ask at most one natural question if a decision is genuinely needed."
 )
+
+STORY_LAB_PROSE_SYSTEM = (
+    "This Story Lab turn explicitly asks for fiction. Write the requested prose now. "
+    "Output only the fiction itself: do not discuss the premise, restate the request, "
+    "offer writing advice, explain what you are about to write, or ask a follow-up question. "
+    "Begin inside the requested scene, chapter, passage, dialogue, monologue, or description. "
+    "Honor the requested length, language, point of view, and constraints."
+)
+
+
+def story_lab_prose_intent_warnings(prompt: str, response: str) -> list[dict[str, str]]:
+    """Flag obvious meta-discussion when an explicit Story Lab prose request was made."""
+    if not story_lab_requests_prose(prompt):
+        return []
+    opening = " ".join(response.strip().split())[:320]
+    meta_patterns = (
+        r"^(?:okay|sure|alright)[,!.]?\s+(?:so\s+)?(?:let(?:'s| us)|you want|i(?:'ll| will)|here(?:'s| is))\b",
+        r"^(?:let(?:'s| us)|you want|the (?:idea|concept|request)|this (?:idea|concept|premise))\b",
+        r"^(?:baik|oke|tentu)[,!.]?\s+(?:jadi\s+)?(?:mari|kita|aku akan|saya akan)\b",
+    )
+    for pattern in meta_patterns:
+        match = re.search(pattern, opening, flags=re.IGNORECASE)
+        if match:
+            return [{
+                "type": "story_lab_prose_not_started",
+                "severity": "warning",
+                "example": match.group(0),
+            }]
+    return []
 
 
 def story_lab_requests_prose(prompt: str) -> bool:
@@ -37,7 +69,7 @@ def story_lab_requests_prose(prompt: str) -> bool:
     if command:
         return command.group(1).lower() in _STORY_LAB_PROSE_COMMANDS
     patterns = (
-        r"^(?:please\s+)?(?:write|draft|rewrite)\s+(?:me\s+)?(?:the\s+|a\s+|this\s+)?(?:scene|chapter|passage|prose|dialogue|monologue|description)\b",
+        r"^(?:please\s+)?(?:write|draft|rewrite)\s+(?:me\s+)?(?:the\s+|a\s+|this\s+)?(?:(?:short|brief|long|full|quick|small|complete|polished)\s+){0,2}(?:scene|chapter|passage|prose|dialogue|monologue|description)\b",
         r"^(?:please\s+)?continue\s+(?:the\s+|this\s+)?(?:scene|chapter|story|passage)\b",
         r"^(?:can|could|would)\s+you\s+(?:please\s+)?(?:write|draft|rewrite|continue)\b",
         r"^(?:tolong\s+)?(?:tulis|tuliskan|buatkan|drafkan|draftkan|tulis ulang)\s+(?:sebuah\s+)?(?:adegan|bab|dialog|prosa|monolog|deskripsi)\b",

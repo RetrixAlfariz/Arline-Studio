@@ -1,0 +1,2073 @@
+[
+  {
+    "method": "GET",
+    "path": "/api/workspace/bootstrap",
+    "body": {},
+    "status": 200,
+    "response": {
+      "projects": [
+        {
+          "id": "PROJ-20261023T055258-6BFE4C93",
+          "name": "My Stories",
+          "slug": "my-stories",
+          "description": "Default Arline workspace",
+          "pinned": false,
+          "archived": false,
+          "default_world_id": "WORLD-BIBLE-MAIN",
+          "settings": {
+            "preferred_model": "qwen3.5-4b-uncensored-hauhaucs-aggressive",
+            "reasoning": "off",
+            "projection_mode": "balanced",
+            "language": "follow_prompt"
+          },
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "lifecycle": {
+            "archived_at": null,
+            "trashed_at": null
+          }
+        }
+      ],
+      "worlds": [
+        {
+          "id": "WORLD-BIBLE-MAIN",
+          "project_id": "PROJ-WORLD-BIBLE",
+          "parent_world_id": null,
+          "name": "Main",
+          "slug": "main",
+          "description": "Primary shared world.",
+          "canon_status": "canon",
+          "inheritance_mode": "none",
+          "settings": {
+            "system_seed": true
+          },
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "lifecycle": {
+            "archived_at": null,
+            "trashed_at": null
+          }
+        }
+      ],
+      "active": {
+        "project": {
+          "id": "PROJ-20261023T055258-6BFE4C93",
+          "name": "My Stories",
+          "slug": "my-stories",
+          "description": "Default Arline workspace",
+          "pinned": false,
+          "archived": false,
+          "default_world_id": "WORLD-BIBLE-MAIN",
+          "settings": {
+            "preferred_model": "qwen3.5-4b-uncensored-hauhaucs-aggressive",
+            "reasoning": "off",
+            "projection_mode": "balanced",
+            "language": "follow_prompt"
+          },
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "lifecycle": {
+            "archived_at": null,
+            "trashed_at": null
+          }
+        },
+        "world": {
+          "id": "WORLD-BIBLE-MAIN",
+          "project_id": "PROJ-WORLD-BIBLE",
+          "parent_world_id": null,
+          "name": "Main",
+          "slug": "main",
+          "description": "Primary shared world.",
+          "canon_status": "canon",
+          "inheritance_mode": "none",
+          "settings": {
+            "system_seed": true
+          },
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "lifecycle": {
+            "archived_at": null,
+            "trashed_at": null
+          }
+        },
+        "branch": {
+          "id": "BRANCH-BIBLE-MAIN",
+          "world_id": "WORLD-BIBLE-MAIN",
+          "parent_branch_id": null,
+          "name": "Main",
+          "slug": "main",
+          "description": "Primary timeline",
+          "kind": "main",
+          "canon_status": "canon",
+          "base_snapshot_id": null,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "lifecycle": {
+            "archived_at": null,
+            "trashed_at": null
+          }
+        }
+      },
+      "context_stack": {
+        "id": "default",
+        "project_id": null,
+        "world_id": null,
+        "branch_id": null,
+        "scene_document_id": null,
+        "session_id": null,
+        "recipe_id": null,
+        "run_profile_id": null,
+        "references": [],
+        "overrides": {},
+        "updated_at": null
+      },
+      "run_profiles": [
+        {
+          "id": "PROFILE-DIALOGUE",
+          "project_id": null,
+          "name": "Dialogue",
+          "description": "Character voice and relationship-heavy dialogue.",
+          "builtin": true,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "profile": {
+            "projection_mode": "balanced",
+            "reasoning_reserve_tokens": 4096,
+            "top_p": 0.95,
+            "top_k": 40,
+            "min_p": 0.0,
+            "repeat_penalty": 1.05,
+            "generation_mode": "single",
+            "beat_count": 4,
+            "beat_tokens": 2048,
+            "total_story_target_tokens": 8192,
+            "context_recipe_id": "RECIPE-DIALOGUE",
+            "input_mode": "smart_hybrid",
+            "reasoning": "off",
+            "visible_output_tokens": 2048,
+            "temperature": 0.85
+          }
+        },
+        {
+          "id": "PROFILE-FAST",
+          "project_id": null,
+          "name": "Fast Brainstorm",
+          "description": "Cheap, short exploratory generation.",
+          "builtin": true,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "profile": {
+            "projection_mode": "balanced",
+            "reasoning_reserve_tokens": 4096,
+            "top_p": 0.95,
+            "top_k": 40,
+            "min_p": 0.0,
+            "repeat_penalty": 1.05,
+            "generation_mode": "single",
+            "beat_count": 4,
+            "beat_tokens": 2048,
+            "total_story_target_tokens": 8192,
+            "context_recipe_id": "RECIPE-STORY",
+            "input_mode": "smart_hybrid",
+            "reasoning": "off",
+            "visible_output_tokens": 1024,
+            "temperature": 1.0
+          }
+        },
+        {
+          "id": "PROFILE-LORE",
+          "project_id": null,
+          "name": "Lore Analysis",
+          "description": "Deeper world-state and canon inspection.",
+          "builtin": true,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "profile": {
+            "projection_mode": "balanced",
+            "reasoning_reserve_tokens": 4096,
+            "top_p": 0.95,
+            "top_k": 40,
+            "min_p": 0.0,
+            "repeat_penalty": 1.05,
+            "generation_mode": "single",
+            "beat_count": 4,
+            "beat_tokens": 2048,
+            "total_story_target_tokens": 8192,
+            "context_recipe_id": "RECIPE-LORE",
+            "input_mode": "smart_hybrid",
+            "reasoning": "on",
+            "visible_output_tokens": 4096,
+            "temperature": 0.55
+          }
+        },
+        {
+          "id": "PROFILE-STORY",
+          "project_id": null,
+          "name": "Story Writing",
+          "description": "Balanced long-form prose with scene, canon, and recent continuity.",
+          "builtin": true,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "profile": {
+            "projection_mode": "balanced",
+            "reasoning_reserve_tokens": 4096,
+            "top_p": 0.95,
+            "top_k": 40,
+            "min_p": 0.0,
+            "repeat_penalty": 1.05,
+            "generation_mode": "single",
+            "beat_count": 4,
+            "beat_tokens": 2048,
+            "total_story_target_tokens": 8192,
+            "context_recipe_id": "RECIPE-STORY",
+            "input_mode": "smart_hybrid",
+            "reasoning": "off",
+            "visible_output_tokens": 4096,
+            "temperature": 0.8
+          }
+        }
+      ],
+      "favorites": [],
+      "canon_statuses": [
+        "canon",
+        "deprecated",
+        "draft",
+        "provisional",
+        "retconned",
+        "what_if"
+      ],
+      "entity_types": [
+        "character",
+        "item",
+        "location",
+        "lore",
+        "organization",
+        "world_rule"
+      ],
+      "document_types": [
+        "chapter",
+        "lore",
+        "note",
+        "outline",
+        "research",
+        "scene"
+      ],
+      "branch_kinds": [
+        "main",
+        "sandbox",
+        "what_if"
+      ],
+      "world_bible": {
+        "backing_project_id": "PROJ-WORLD-BIBLE",
+        "default_world_id": "WORLD-BIBLE-MAIN",
+        "default_branch_id": "BRANCH-BIBLE-MAIN"
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/projects",
+    "body": {},
+    "status": 200,
+    "response": {
+      "projects": [
+        {
+          "id": "PROJ-20261023T055258-6BFE4C93",
+          "name": "My Stories",
+          "slug": "my-stories",
+          "description": "Default Arline workspace",
+          "pinned": false,
+          "archived": false,
+          "default_world_id": "WORLD-BIBLE-MAIN",
+          "settings": {
+            "preferred_model": "qwen3.5-4b-uncensored-hauhaucs-aggressive",
+            "reasoning": "off",
+            "projection_mode": "balanced",
+            "language": "follow_prompt"
+          },
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "lifecycle": {
+            "archived_at": null,
+            "trashed_at": null
+          }
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/world-bible",
+    "body": {},
+    "status": 200,
+    "response": {
+      "worlds": [
+        {
+          "id": "WORLD-BIBLE-MAIN",
+          "project_id": "PROJ-WORLD-BIBLE",
+          "parent_world_id": null,
+          "name": "Main",
+          "slug": "main",
+          "description": "Primary shared world.",
+          "canon_status": "canon",
+          "inheritance_mode": "none",
+          "settings": {
+            "system_seed": true
+          },
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "lifecycle": {
+            "archived_at": null,
+            "trashed_at": null
+          }
+        }
+      ],
+      "families": [],
+      "variants": [],
+      "relationships": [],
+      "timeline": [],
+      "recipes": [
+        {
+          "id": "RECIPE-ANALYST",
+          "project_id": null,
+          "name": "Analyst",
+          "description": "Deep evidence and continuity context without narrative continuation.",
+          "recipe_json": "{\"active_scene\":true,\"explicit_refs\":true,\"pins\":true,\"relationships\":true,\"timeline\":true,\"conflicts\":true,\"recent_turns\":12,\"world_canon\":\"deep\",\"project_documents\":\"relevant\"}",
+          "builtin": 1,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "recipe": {
+            "active_scene": true,
+            "explicit_refs": true,
+            "pins": true,
+            "relationships": true,
+            "timeline": true,
+            "conflicts": true,
+            "recent_turns": 12,
+            "world_canon": "deep",
+            "project_documents": "relevant"
+          }
+        },
+        {
+          "id": "RECIPE-CHARACTER-ROOM",
+          "project_id": null,
+          "name": "Character Room",
+          "description": "Deep participant voice and relationships for non-canon rehearsal.",
+          "recipe_json": "{\"active_scene\":false,\"explicit_refs\":true,\"pins\":false,\"relationships\":true,\"recent_turns\":10,\"voice\":\"deep\",\"world_canon\":\"compact\"}",
+          "builtin": 1,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "recipe": {
+            "active_scene": false,
+            "explicit_refs": true,
+            "pins": false,
+            "relationships": true,
+            "recent_turns": 10,
+            "voice": "deep",
+            "world_canon": "compact"
+          }
+        },
+        {
+          "id": "RECIPE-CONTINUITY",
+          "project_id": null,
+          "name": "Continuity Check",
+          "description": "Favor state, timeline, staged changes, and contradictions.",
+          "recipe_json": "{\"active_scene\":true,\"explicit_refs\":true,\"pins\":true,\"relationships\":true,\"timeline\":true,\"conflicts\":true,\"recent_turns\":10,\"world_canon\":\"deep\"}",
+          "builtin": 1,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "recipe": {
+            "active_scene": true,
+            "explicit_refs": true,
+            "pins": true,
+            "relationships": true,
+            "timeline": true,
+            "conflicts": true,
+            "recent_turns": 10,
+            "world_canon": "deep"
+          }
+        },
+        {
+          "id": "RECIPE-DIALOGUE",
+          "project_id": null,
+          "name": "Dialogue",
+          "description": "Prioritize speaker voice, relationship state, and recent dialogue.",
+          "recipe_json": "{\"active_scene\":true,\"explicit_refs\":true,\"pins\":true,\"relationships\":true,\"recent_turns\":8,\"voice\":\"deep\",\"world_canon\":\"compact\"}",
+          "builtin": 1,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "recipe": {
+            "active_scene": true,
+            "explicit_refs": true,
+            "pins": true,
+            "relationships": true,
+            "recent_turns": 8,
+            "voice": "deep",
+            "world_canon": "compact"
+          }
+        },
+        {
+          "id": "RECIPE-INTERACTIVE",
+          "project_id": null,
+          "name": "Interactive Presence",
+          "description": "POV, participants, relationship state, and recent action context.",
+          "recipe_json": "{\"active_scene\":true,\"explicit_refs\":true,\"pins\":true,\"relationships\":true,\"recent_turns\":14,\"voice\":\"deep\",\"world_canon\":\"relevant\"}",
+          "builtin": 1,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "recipe": {
+            "active_scene": true,
+            "explicit_refs": true,
+            "pins": true,
+            "relationships": true,
+            "recent_turns": 14,
+            "voice": "deep",
+            "world_canon": "relevant"
+          }
+        },
+        {
+          "id": "RECIPE-LORE",
+          "project_id": null,
+          "name": "Lore Analysis",
+          "description": "Deep entity history, canon, relationships, and timeline.",
+          "recipe_json": "{\"active_scene\":false,\"explicit_refs\":true,\"pins\":true,\"relationships\":true,\"timeline\":true,\"world_canon\":\"deep\",\"project_documents\":\"relevant\"}",
+          "builtin": 1,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "recipe": {
+            "active_scene": false,
+            "explicit_refs": true,
+            "pins": true,
+            "relationships": true,
+            "timeline": true,
+            "world_canon": "deep",
+            "project_documents": "relevant"
+          }
+        },
+        {
+          "id": "RECIPE-LAB",
+          "project_id": null,
+          "name": "Story Lab",
+          "description": "Wide exploratory context without canon mutation.",
+          "recipe_json": "{\"active_scene\":true,\"explicit_refs\":true,\"pins\":true,\"relationships\":true,\"timeline\":true,\"recent_turns\":8,\"world_canon\":\"relevant\",\"project_documents\":\"relevant\"}",
+          "builtin": 1,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "recipe": {
+            "active_scene": true,
+            "explicit_refs": true,
+            "pins": true,
+            "relationships": true,
+            "timeline": true,
+            "recent_turns": 8,
+            "world_canon": "relevant",
+            "project_documents": "relevant"
+          }
+        },
+        {
+          "id": "RECIPE-STORY",
+          "project_id": null,
+          "name": "Story Writing",
+          "description": "Balanced long-form narrative context.",
+          "recipe_json": "{\"active_scene\":true,\"explicit_refs\":true,\"pins\":true,\"relationships\":true,\"recent_turns\":5,\"world_canon\":\"relevant\",\"project_documents\":\"relevant\"}",
+          "builtin": 1,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "recipe": {
+            "active_scene": true,
+            "explicit_refs": true,
+            "pins": true,
+            "relationships": true,
+            "recent_turns": 5,
+            "world_canon": "relevant",
+            "project_documents": "relevant"
+          }
+        }
+      ],
+      "folders": [],
+      "folder_tree": [],
+      "collections": [],
+      "saved_views": [
+        {
+          "id": "VIEW-WB-ALL",
+          "scope_type": "world_bible",
+          "scope_id": null,
+          "name": "All",
+          "resource_type": "all",
+          "builtin": true,
+          "sort_order": 0,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "query": {}
+        },
+        {
+          "id": "VIEW-WB-CHAR",
+          "scope_type": "world_bible",
+          "scope_id": null,
+          "name": "Characters",
+          "resource_type": "character",
+          "builtin": true,
+          "sort_order": 10,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "query": {}
+        },
+        {
+          "id": "VIEW-WB-LOC",
+          "scope_type": "world_bible",
+          "scope_id": null,
+          "name": "Locations",
+          "resource_type": "location",
+          "builtin": true,
+          "sort_order": 20,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "query": {}
+        },
+        {
+          "id": "VIEW-WB-ITEM",
+          "scope_type": "world_bible",
+          "scope_id": null,
+          "name": "Items",
+          "resource_type": "item",
+          "builtin": true,
+          "sort_order": 30,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "query": {}
+        },
+        {
+          "id": "VIEW-WB-ORG",
+          "scope_type": "world_bible",
+          "scope_id": null,
+          "name": "Organizations",
+          "resource_type": "organization",
+          "builtin": true,
+          "sort_order": 40,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "query": {}
+        },
+        {
+          "id": "VIEW-WB-LORE",
+          "scope_type": "world_bible",
+          "scope_id": null,
+          "name": "Lore",
+          "resource_type": "lore",
+          "builtin": true,
+          "sort_order": 50,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "query": {}
+        },
+        {
+          "id": "VIEW-WB-RECENT",
+          "scope_type": "world_bible",
+          "scope_id": null,
+          "name": "Recently changed",
+          "resource_type": "all",
+          "builtin": true,
+          "sort_order": 60,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "query": {
+            "sort": "updated_at",
+            "direction": "desc"
+          }
+        },
+        {
+          "id": "VIEW-WB-DETAIL",
+          "scope_type": "world_bible",
+          "scope_id": null,
+          "name": "Needs details",
+          "resource_type": "all",
+          "builtin": true,
+          "sort_order": 70,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "query": {
+            "description_empty": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/home",
+    "body": {},
+    "status": 200,
+    "response": {
+      "active_scene": null,
+      "recent_documents": [],
+      "recent_chats": [],
+      "issues": [],
+      "activity": [],
+      "feedback": {
+        "total": 0,
+        "unreviewed": 0,
+        "accepted": 0,
+        "edited_accept": 0,
+        "rejected": 0,
+        "sft_ready": 0,
+        "preference_ready": 0
+      },
+      "favorites": []
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/commands",
+    "body": {},
+    "status": 200,
+    "response": {
+      "results": [
+        {
+          "type": "command",
+          "id": "new_chat",
+          "label": "New chat",
+          "subtitle": "Create a new writing chat"
+        },
+        {
+          "type": "command",
+          "id": "new_project",
+          "label": "New project",
+          "subtitle": "Create a story workspace"
+        },
+        {
+          "type": "command",
+          "id": "new_world",
+          "label": "New world",
+          "subtitle": "Create or fork a world"
+        },
+        {
+          "type": "command",
+          "id": "new_character",
+          "label": "New character",
+          "subtitle": "Create a character family/variant"
+        },
+        {
+          "type": "command",
+          "id": "new_draft",
+          "label": "New manuscript item",
+          "subtitle": "Create a scene, chapter, note, or research document"
+        },
+        {
+          "type": "command",
+          "id": "sandbox",
+          "label": "Open sandbox",
+          "subtitle": "Create a non-canonical what-if branch"
+        },
+        {
+          "type": "command",
+          "id": "snapshot",
+          "label": "Save world snapshot",
+          "subtitle": "Checkpoint current world state"
+        },
+        {
+          "type": "command",
+          "id": "compare_worlds",
+          "label": "Compare worlds",
+          "subtitle": "Open canon diff"
+        },
+        {
+          "type": "command",
+          "id": "dataset",
+          "label": "Open Feedback Lab",
+          "subtitle": "Review prose feedback, comparisons, and exports"
+        },
+        {
+          "type": "command",
+          "id": "runtime",
+          "label": "Model runtime",
+          "subtitle": "Open LM Studio controls"
+        }
+      ],
+      "command_registry_version": "1.2.4a1",
+      "commands": [
+        {
+          "id": "continue",
+          "label": "/continue",
+          "category": "Writing",
+          "description": "Continue the active scene with continuity-aware context",
+          "text": "/continue ",
+          "planner_intent": "continue",
+          "deliberation_mode": "auto",
+          "output_mode": "fiction",
+          "aliases": [],
+          "syntax": "/continue [@refs] [options] [\"goal\"]",
+          "generation_only": true,
+          "action": "insert",
+          "runtime_version": "1.2.5a1",
+          "role": "operation",
+          "arguments": [
+            {
+              "name": "refs",
+              "kind": "reference",
+              "description": "Optional explicit grounding",
+              "required": false,
+              "variadic": true,
+              "resource_types": []
+            },
+            {
+              "name": "goal",
+              "kind": "text",
+              "description": "Semantic continuation goal",
+              "required": false,
+              "variadic": false,
+              "resource_types": []
+            }
+          ],
+          "options": [
+            {
+              "name": "pace",
+              "kind": "enum",
+              "description": "Narrative pacing",
+              "choices": [
+                "auto",
+                "immediate",
+                "fast",
+                "natural",
+                "slow",
+                "lingering"
+              ],
+              "default": "auto",
+              "minimum": null,
+              "maximum": null
+            }
+          ],
+          "why_use": "Continue the active scene without restating continuity, cast, POV, and open threads manually.",
+          "examples": [
+            "/continue @scene",
+            "/continue @scene pace=slow \"let the tension settle naturally\""
+          ],
+          "execution_contract": {
+            "runtime_version": "1.2.5a1",
+            "retrieval_profile": "scene_continue",
+            "retrieval_weights": {
+              "continuity": 1.0,
+              "state": 0.92,
+              "relationships": 0.82,
+              "events": 0.72,
+              "spatial": 0.62,
+              "threads": 0.78,
+              "pov": 0.72,
+              "source": 0.32
+            },
+            "deliberation_profile": "scene",
+            "realization_profile": "fiction",
+            "capabilities": [
+              "read_context",
+              "deliberate",
+              "generate"
+            ],
+            "authority": "generation_only",
+            "mutates_authority": false,
+            "writer_calls_hint": 1
+          }
+        },
+        {
+          "id": "rewrite",
+          "label": "/rewrite",
+          "category": "Writing",
+          "description": "Rewrite current/selected material while preserving requested constraints",
+          "text": "/rewrite ",
+          "planner_intent": "description",
+          "deliberation_mode": "rewrite",
+          "output_mode": "fiction",
+          "aliases": [],
+          "syntax": "/rewrite [@refs] [tone=...] [preserve=...] \"goal\"",
+          "generation_only": true,
+          "action": "insert",
+          "runtime_version": "1.2.5a1",
+          "role": "operation",
+          "arguments": [
+            {
+              "name": "refs",
+              "kind": "reference",
+              "description": "",
+              "required": false,
+              "variadic": true,
+              "resource_types": []
+            },
+            {
+              "name": "goal",
+              "kind": "text",
+              "description": "",
+              "required": false,
+              "variadic": false,
+              "resource_types": []
+            }
+          ],
+          "options": [
+            {
+              "name": "pace",
+              "kind": "enum",
+              "description": "",
+              "choices": [
+                "auto",
+                "immediate",
+                "fast",
+                "natural",
+                "slow",
+                "lingering"
+              ],
+              "default": null,
+              "minimum": null,
+              "maximum": null
+            },
+            {
+              "name": "tone",
+              "kind": "string",
+              "description": "",
+              "choices": [],
+              "default": null,
+              "minimum": null,
+              "maximum": null
+            },
+            {
+              "name": "preserve",
+              "kind": "string",
+              "description": "",
+              "choices": [],
+              "default": null,
+              "minimum": null,
+              "maximum": null
+            }
+          ],
+          "why_use": "Revise prose while keeping current authoritative state and continuity visible to the writer.",
+          "examples": [
+            "/rewrite @scene \"make the exchange less formal\""
+          ],
+          "execution_contract": {
+            "runtime_version": "1.2.5a1",
+            "retrieval_profile": "revision",
+            "retrieval_weights": {
+              "continuity": 1.0,
+              "state": 0.88,
+              "relationships": 0.78,
+              "events": 0.7,
+              "spatial": 0.55,
+              "threads": 0.66,
+              "pov": 0.76,
+              "source": 0.68
+            },
+            "deliberation_profile": "revision",
+            "realization_profile": "fiction_revision",
+            "capabilities": [
+              "read_context",
+              "deliberate",
+              "generate"
+            ],
+            "authority": "generation_only",
+            "mutates_authority": false,
+            "writer_calls_hint": 1
+          }
+        },
+        {
+          "id": "mono",
+          "label": "/mono",
+          "category": "Character Rails",
+          "description": "Character-aware monologue or expression seed",
+          "text": "/mono @characterA \"intent or thought\" ",
+          "planner_intent": "dialogue",
+          "deliberation_mode": "character",
+          "output_mode": "fiction",
+          "aliases": [],
+          "syntax": "/mono @character [internal|spoken] [pacing] \"intent\"",
+          "generation_only": true,
+          "action": "insert",
+          "runtime_version": "1.2.5a1",
+          "role": "operation",
+          "arguments": [
+            {
+              "name": "character",
+              "kind": "reference",
+              "description": "Character to realize",
+              "required": true,
+              "variadic": false,
+              "resource_types": [
+                "entity_variant"
+              ]
+            },
+            {
+              "name": "goal",
+              "kind": "text",
+              "description": "",
+              "required": false,
+              "variadic": false,
+              "resource_types": []
+            }
+          ],
+          "options": [
+            {
+              "name": "pace",
+              "kind": "enum",
+              "description": "",
+              "choices": [
+                "auto",
+                "immediate",
+                "fast",
+                "natural",
+                "slow",
+                "lingering"
+              ],
+              "default": null,
+              "minimum": null,
+              "maximum": null
+            },
+            {
+              "name": "delivery",
+              "kind": "enum",
+              "description": "",
+              "choices": [
+                "internal",
+                "spoken",
+                "whisper",
+                "murmur",
+                "mutter"
+              ],
+              "default": null,
+              "minimum": null,
+              "maximum": null
+            }
+          ],
+          "why_use": "Realize one character's expression through their voice, state, relationships, and POV boundaries.",
+          "examples": [
+            "/mono @Fila internal slow \"why did I say that?\""
+          ],
+          "execution_contract": {
+            "runtime_version": "1.2.5a1",
+            "retrieval_profile": "character_voice",
+            "retrieval_weights": {
+              "continuity": 0.96,
+              "state": 0.82,
+              "relationships": 0.9,
+              "events": 0.48,
+              "spatial": 0.3,
+              "threads": 0.55,
+              "pov": 1.0,
+              "source": 0.2
+            },
+            "deliberation_profile": "character",
+            "realization_profile": "fiction_monologue",
+            "capabilities": [
+              "read_context",
+              "deliberate",
+              "generate"
+            ],
+            "authority": "generation_only",
+            "mutates_authority": false,
+            "writer_calls_hint": 1
+          }
+        },
+        {
+          "id": "dia",
+          "label": "/dia",
+          "category": "Character Rails",
+          "description": "Character-aware adaptive dialogue / interaction",
+          "text": "/dia @characterA @characterB \"topic or interaction goal\" ",
+          "planner_intent": "dialogue",
+          "deliberation_mode": "interaction",
+          "output_mode": "fiction",
+          "aliases": [],
+          "syntax": "/dia @characterA @characterB [pacing] [curve=...] \"topic\"",
+          "generation_only": true,
+          "action": "insert",
+          "runtime_version": "1.2.5a1",
+          "role": "operation",
+          "arguments": [
+            {
+              "name": "participants",
+              "kind": "reference",
+              "description": "Dialogue participants",
+              "required": true,
+              "variadic": true,
+              "resource_types": [
+                "entity_variant"
+              ]
+            },
+            {
+              "name": "goal",
+              "kind": "text",
+              "description": "",
+              "required": false,
+              "variadic": false,
+              "resource_types": []
+            }
+          ],
+          "options": [
+            {
+              "name": "pace",
+              "kind": "enum",
+              "description": "",
+              "choices": [
+                "auto",
+                "immediate",
+                "fast",
+                "natural",
+                "slow",
+                "lingering"
+              ],
+              "default": "natural",
+              "minimum": null,
+              "maximum": null
+            },
+            {
+              "name": "curve",
+              "kind": "enum",
+              "description": "",
+              "choices": [
+                "auto",
+                "flat",
+                "rising",
+                "falling",
+                "wave",
+                "spike"
+              ],
+              "default": "auto",
+              "minimum": null,
+              "maximum": null
+            },
+            {
+              "name": "tension",
+              "kind": "enum",
+              "description": "",
+              "choices": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "default": "medium",
+              "minimum": null,
+              "maximum": null
+            }
+          ],
+          "why_use": "Use a relationship-aware dialogue profile instead of merely asking the model to write dialogue.",
+          "examples": [
+            "/dia @Fila @Mira pace=slow tension=high \"awkward apology\"",
+            "/dia @Fila @Mira curve=wave \"discuss moving away\""
+          ],
+          "execution_contract": {
+            "runtime_version": "1.2.5a1",
+            "retrieval_profile": "character_interaction",
+            "retrieval_weights": {
+              "continuity": 1.0,
+              "state": 0.9,
+              "relationships": 1.0,
+              "events": 0.58,
+              "spatial": 0.42,
+              "threads": 0.65,
+              "pov": 1.0,
+              "source": 0.24
+            },
+            "deliberation_profile": "interaction",
+            "realization_profile": "fiction_dialogue",
+            "capabilities": [
+              "read_context",
+              "deliberate",
+              "generate"
+            ],
+            "authority": "generation_only",
+            "mutates_authority": false,
+            "writer_calls_hint": 1
+          }
+        },
+        {
+          "id": "ambience",
+          "label": "/ambience",
+          "category": "Scene Rails",
+          "description": "Guide atmosphere and sensory emphasis without changing canon",
+          "text": "/ambience @location slow \"scene atmosphere\" ",
+          "planner_intent": "description",
+          "deliberation_mode": "scene",
+          "output_mode": "fiction",
+          "aliases": [],
+          "syntax": "/ambience [@location] [pacing] \"atmosphere\"",
+          "generation_only": true,
+          "action": "insert",
+          "runtime_version": "1.2.5a1",
+          "role": "operation",
+          "arguments": [
+            {
+              "name": "refs",
+              "kind": "reference",
+              "description": "",
+              "required": false,
+              "variadic": true,
+              "resource_types": []
+            },
+            {
+              "name": "goal",
+              "kind": "text",
+              "description": "",
+              "required": false,
+              "variadic": false,
+              "resource_types": []
+            }
+          ],
+          "options": [
+            {
+              "name": "pace",
+              "kind": "enum",
+              "description": "",
+              "choices": [
+                "auto",
+                "immediate",
+                "fast",
+                "natural",
+                "slow",
+                "lingering"
+              ],
+              "default": null,
+              "minimum": null,
+              "maximum": null
+            },
+            {
+              "name": "detail",
+              "kind": "enum",
+              "description": "",
+              "choices": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "default": null,
+              "minimum": null,
+              "maximum": null
+            }
+          ],
+          "why_use": "Steer atmosphere and sensory density without silently creating persistent location facts.",
+          "examples": [
+            "/ambience @location pace=lingering \"quiet after closing time\""
+          ],
+          "execution_contract": {
+            "runtime_version": "1.2.5a1",
+            "retrieval_profile": "scene_description",
+            "retrieval_weights": {
+              "continuity": 0.84,
+              "state": 1.0,
+              "relationships": 0.46,
+              "events": 0.38,
+              "spatial": 1.0,
+              "threads": 0.34,
+              "pov": 0.58,
+              "source": 0.34
+            },
+            "deliberation_profile": "scene",
+            "realization_profile": "fiction_description",
+            "capabilities": [
+              "read_context",
+              "deliberate",
+              "generate"
+            ],
+            "authority": "generation_only",
+            "mutates_authority": false,
+            "writer_calls_hint": 1
+          }
+        },
+        {
+          "id": "intimacy",
+          "label": "/intimacy",
+          "category": "Scene Rails",
+          "description": "Guide character-aware intimate scene dynamics and aftermath",
+          "text": "/intimacy @characterA @characterB slow \"scene intent\" ",
+          "planner_intent": "dialogue",
+          "deliberation_mode": "interaction",
+          "output_mode": "fiction",
+          "aliases": [],
+          "syntax": "/intimacy @characterA [@characterB] [pacing] [curve=...] \"intent\"",
+          "generation_only": true,
+          "action": "insert",
+          "runtime_version": "1.2.5a1",
+          "role": "operation",
+          "arguments": [
+            {
+              "name": "participants",
+              "kind": "reference",
+              "description": "",
+              "required": true,
+              "variadic": true,
+              "resource_types": [
+                "entity_variant"
+              ]
+            },
+            {
+              "name": "goal",
+              "kind": "text",
+              "description": "",
+              "required": false,
+              "variadic": false,
+              "resource_types": []
+            }
+          ],
+          "options": [
+            {
+              "name": "pace",
+              "kind": "enum",
+              "description": "",
+              "choices": [
+                "auto",
+                "immediate",
+                "fast",
+                "natural",
+                "slow",
+                "lingering"
+              ],
+              "default": null,
+              "minimum": null,
+              "maximum": null
+            },
+            {
+              "name": "curve",
+              "kind": "enum",
+              "description": "",
+              "choices": [
+                "auto",
+                "flat",
+                "rising",
+                "falling",
+                "wave",
+                "spike"
+              ],
+              "default": null,
+              "minimum": null,
+              "maximum": null
+            }
+          ],
+          "why_use": "Use the same continuity, agency, POV, relationship, pacing, and aftermath rails as other character interaction.",
+          "examples": [
+            "/intimacy @Fila @Mira pace=slow \"reconciliation and vulnerability\""
+          ],
+          "execution_contract": {
+            "runtime_version": "1.2.5a1",
+            "retrieval_profile": "character_interaction",
+            "retrieval_weights": {
+              "continuity": 1.0,
+              "state": 0.9,
+              "relationships": 1.0,
+              "events": 0.58,
+              "spatial": 0.42,
+              "threads": 0.65,
+              "pov": 1.0,
+              "source": 0.24
+            },
+            "deliberation_profile": "interaction",
+            "realization_profile": "fiction_interaction",
+            "capabilities": [
+              "read_context",
+              "deliberate",
+              "generate"
+            ],
+            "authority": "generation_only",
+            "mutates_authority": false,
+            "writer_calls_hint": 1
+          }
+        },
+        {
+          "id": "intuition",
+          "label": "/intuition",
+          "category": "Deliberation",
+          "description": "Ask the narrative deliberator what most naturally follows from the current state",
+          "text": "/intuition @scene \"what should naturally happen next?\" ",
+          "planner_intent": "deliberate",
+          "deliberation_mode": "inspect",
+          "output_mode": "author_intuition",
+          "aliases": [
+            "think",
+            "next-beat"
+          ],
+          "syntax": "/intuition [@refs] [\"question\"]",
+          "generation_only": true,
+          "action": "insert",
+          "runtime_version": "1.2.5a1",
+          "role": "operation",
+          "arguments": [
+            {
+              "name": "refs",
+              "kind": "reference",
+              "description": "",
+              "required": false,
+              "variadic": true,
+              "resource_types": []
+            },
+            {
+              "name": "question",
+              "kind": "text",
+              "description": "",
+              "required": false,
+              "variadic": false,
+              "resource_types": []
+            }
+          ],
+          "options": [],
+          "why_use": "Ask what most naturally follows before committing to prose. Output remains non-canonical author-facing reasoning.",
+          "examples": [
+            "/intuition @scene \"what naturally happens next?\""
+          ],
+          "execution_contract": {
+            "runtime_version": "1.2.5a1",
+            "retrieval_profile": "author_deliberation",
+            "retrieval_weights": {
+              "continuity": 1.0,
+              "state": 0.92,
+              "relationships": 0.9,
+              "events": 0.9,
+              "spatial": 0.6,
+              "threads": 0.86,
+              "pov": 0.92,
+              "source": 0.42
+            },
+            "deliberation_profile": "inspect",
+            "realization_profile": "author_intuition",
+            "capabilities": [
+              "read_context",
+              "deliberate",
+              "generate"
+            ],
+            "authority": "generation_only",
+            "mutates_authority": false,
+            "writer_calls_hint": 1
+          }
+        },
+        {
+          "id": "alternatives",
+          "label": "/alternatives",
+          "category": "Deliberation",
+          "description": "Generate several non-canonical next-beat alternatives",
+          "text": "/alternatives @scene count=4 \"next beat\" ",
+          "planner_intent": "deliberate",
+          "deliberation_mode": "alternatives",
+          "output_mode": "author_alternatives",
+          "aliases": [
+            "alts",
+            "options"
+          ],
+          "syntax": "/alternatives [@refs] [count=N] [\"goal\"]",
+          "generation_only": true,
+          "action": "insert",
+          "runtime_version": "1.2.5a1",
+          "role": "operation",
+          "arguments": [
+            {
+              "name": "refs",
+              "kind": "reference",
+              "description": "",
+              "required": false,
+              "variadic": true,
+              "resource_types": []
+            },
+            {
+              "name": "goal",
+              "kind": "text",
+              "description": "",
+              "required": false,
+              "variadic": false,
+              "resource_types": []
+            }
+          ],
+          "options": [
+            {
+              "name": "count",
+              "kind": "integer",
+              "description": "Number of alternatives",
+              "choices": [],
+              "default": 4,
+              "minimum": 1,
+              "maximum": 8
+            }
+          ],
+          "why_use": "Generate bounded non-canonical alternatives without silently choosing one.",
+          "examples": [
+            "/alternatives @scene count=5 \"next beat\""
+          ],
+          "execution_contract": {
+            "runtime_version": "1.2.5a1",
+            "retrieval_profile": "author_deliberation",
+            "retrieval_weights": {
+              "continuity": 1.0,
+              "state": 0.92,
+              "relationships": 0.9,
+              "events": 0.9,
+              "spatial": 0.6,
+              "threads": 0.86,
+              "pov": 0.92,
+              "source": 0.42
+            },
+            "deliberation_profile": "alternatives",
+            "realization_profile": "author_alternatives",
+            "capabilities": [
+              "read_context",
+              "deliberate",
+              "generate"
+            ],
+            "authority": "generation_only",
+            "mutates_authority": false,
+            "writer_calls_hint": 1
+          }
+        },
+        {
+          "id": "describe",
+          "label": "/describe",
+          "category": "Writing",
+          "description": "Describe a referenced subject with selector-aware context",
+          "text": "/describe @subject.appearance detail=high ",
+          "planner_intent": "description",
+          "deliberation_mode": "scene",
+          "output_mode": "fiction",
+          "aliases": [],
+          "syntax": "/describe @ref[.selector] [detail=...] [\"focus\"]",
+          "generation_only": true,
+          "action": "insert",
+          "runtime_version": "1.2.5a1",
+          "role": "operation",
+          "arguments": [
+            {
+              "name": "subject",
+              "kind": "reference",
+              "description": "",
+              "required": true,
+              "variadic": false,
+              "resource_types": []
+            },
+            {
+              "name": "focus",
+              "kind": "text",
+              "description": "",
+              "required": false,
+              "variadic": false,
+              "resource_types": []
+            }
+          ],
+          "options": [
+            {
+              "name": "detail",
+              "kind": "enum",
+              "description": "",
+              "choices": [
+                "low",
+                "medium",
+                "high"
+              ],
+              "default": "medium",
+              "minimum": null,
+              "maximum": null
+            }
+          ],
+          "why_use": "Description becomes selector-aware, so @Fila.appearance and @Fila.state can request different evidence.",
+          "examples": [
+            "/describe @Fila.appearance detail=high"
+          ],
+          "execution_contract": {
+            "runtime_version": "1.2.5a1",
+            "retrieval_profile": "scene_description",
+            "retrieval_weights": {
+              "continuity": 0.84,
+              "state": 1.0,
+              "relationships": 0.46,
+              "events": 0.38,
+              "spatial": 1.0,
+              "threads": 0.34,
+              "pov": 0.58,
+              "source": 0.34
+            },
+            "deliberation_profile": "scene",
+            "realization_profile": "fiction_description",
+            "capabilities": [
+              "read_context",
+              "deliberate",
+              "generate"
+            ],
+            "authority": "generation_only",
+            "mutates_authority": false,
+            "writer_calls_hint": 1
+          }
+        },
+        {
+          "id": "pov",
+          "label": "/pov",
+          "category": "Writing",
+          "description": "Temporarily emphasize a POV reference for this generation",
+          "text": "/pov @character \"scene intent\" ",
+          "planner_intent": "continue",
+          "deliberation_mode": "character",
+          "output_mode": "fiction",
+          "aliases": [],
+          "syntax": "/pov @character [\"scene intent\"]",
+          "generation_only": true,
+          "action": "insert",
+          "runtime_version": "1.2.5a1",
+          "role": "modifier",
+          "arguments": [
+            {
+              "name": "character",
+              "kind": "reference",
+              "description": "",
+              "required": true,
+              "variadic": false,
+              "resource_types": [
+                "entity_variant"
+              ]
+            }
+          ],
+          "options": [],
+          "why_use": "Temporarily set the epistemic anchor for one request without mutating the active scene.",
+          "examples": [
+            "/pov @Fila"
+          ],
+          "execution_contract": {
+            "runtime_version": "1.2.5a1",
+            "retrieval_profile": "modifier",
+            "retrieval_weights": {
+              "continuity": 0.0,
+              "state": 0.0,
+              "relationships": 0.0,
+              "events": 0.0,
+              "spatial": 0.0,
+              "threads": 0.0,
+              "pov": 0.0,
+              "source": 0.0
+            },
+            "deliberation_profile": "character",
+            "realization_profile": "modifier",
+            "capabilities": [
+              "read_context",
+              "deliberate",
+              "generate"
+            ],
+            "authority": "generation_only",
+            "mutates_authority": false,
+            "writer_calls_hint": 1
+          }
+        },
+        {
+          "id": "pace",
+          "label": "/pace",
+          "category": "Writing",
+          "description": "Temporarily steer narrative pacing for this generation",
+          "text": "/pace slow \"scene goal\" ",
+          "planner_intent": "continue",
+          "deliberation_mode": "scene",
+          "output_mode": "fiction",
+          "aliases": [],
+          "syntax": "/pace [immediate|fast|natural|slow|lingering] [\"goal\"]",
+          "generation_only": true,
+          "action": "insert",
+          "runtime_version": "1.2.5a1",
+          "role": "modifier",
+          "arguments": [],
+          "options": [
+            {
+              "name": "pace",
+              "kind": "enum",
+              "description": "",
+              "choices": [
+                "auto",
+                "immediate",
+                "fast",
+                "natural",
+                "slow",
+                "lingering"
+              ],
+              "default": "natural",
+              "minimum": null,
+              "maximum": null
+            }
+          ],
+          "why_use": "Apply pacing as structured request metadata rather than repeating prose instructions.",
+          "examples": [
+            "/pace slow"
+          ],
+          "execution_contract": {
+            "runtime_version": "1.2.5a1",
+            "retrieval_profile": "modifier",
+            "retrieval_weights": {
+              "continuity": 0.0,
+              "state": 0.0,
+              "relationships": 0.0,
+              "events": 0.0,
+              "spatial": 0.0,
+              "threads": 0.0,
+              "pov": 0.0,
+              "source": 0.0
+            },
+            "deliberation_profile": "scene",
+            "realization_profile": "modifier",
+            "capabilities": [
+              "read_context",
+              "deliberate",
+              "generate"
+            ],
+            "authority": "generation_only",
+            "mutates_authority": false,
+            "writer_calls_hint": 1
+          }
+        }
+      ],
+      "reference_selectors": [
+        "voice",
+        "state",
+        "appearance",
+        "knowledge",
+        "beliefs",
+        "relationships",
+        "timeline",
+        "evidence",
+        "conflicts"
+      ],
+      "dynamic_references": [
+        "scene",
+        "pov",
+        "location",
+        "cast",
+        "world",
+        "branch",
+        "threads",
+        "recent"
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/preferences",
+    "body": {},
+    "status": 200,
+    "response": {}
+  },
+  {
+    "method": "GET",
+    "path": "/api/run-profiles",
+    "body": {},
+    "status": 200,
+    "response": {
+      "profiles": [
+        {
+          "id": "PROFILE-DIALOGUE",
+          "project_id": null,
+          "name": "Dialogue",
+          "description": "Character voice and relationship-heavy dialogue.",
+          "builtin": true,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "profile": {
+            "projection_mode": "balanced",
+            "reasoning_reserve_tokens": 4096,
+            "top_p": 0.95,
+            "top_k": 40,
+            "min_p": 0.0,
+            "repeat_penalty": 1.05,
+            "generation_mode": "single",
+            "beat_count": 4,
+            "beat_tokens": 2048,
+            "total_story_target_tokens": 8192,
+            "context_recipe_id": "RECIPE-DIALOGUE",
+            "input_mode": "smart_hybrid",
+            "reasoning": "off",
+            "visible_output_tokens": 2048,
+            "temperature": 0.85
+          }
+        },
+        {
+          "id": "PROFILE-FAST",
+          "project_id": null,
+          "name": "Fast Brainstorm",
+          "description": "Cheap, short exploratory generation.",
+          "builtin": true,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "profile": {
+            "projection_mode": "balanced",
+            "reasoning_reserve_tokens": 4096,
+            "top_p": 0.95,
+            "top_k": 40,
+            "min_p": 0.0,
+            "repeat_penalty": 1.05,
+            "generation_mode": "single",
+            "beat_count": 4,
+            "beat_tokens": 2048,
+            "total_story_target_tokens": 8192,
+            "context_recipe_id": "RECIPE-STORY",
+            "input_mode": "smart_hybrid",
+            "reasoning": "off",
+            "visible_output_tokens": 1024,
+            "temperature": 1.0
+          }
+        },
+        {
+          "id": "PROFILE-LORE",
+          "project_id": null,
+          "name": "Lore Analysis",
+          "description": "Deeper world-state and canon inspection.",
+          "builtin": true,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "profile": {
+            "projection_mode": "balanced",
+            "reasoning_reserve_tokens": 4096,
+            "top_p": 0.95,
+            "top_k": 40,
+            "min_p": 0.0,
+            "repeat_penalty": 1.05,
+            "generation_mode": "single",
+            "beat_count": 4,
+            "beat_tokens": 2048,
+            "total_story_target_tokens": 8192,
+            "context_recipe_id": "RECIPE-LORE",
+            "input_mode": "smart_hybrid",
+            "reasoning": "on",
+            "visible_output_tokens": 4096,
+            "temperature": 0.55
+          }
+        },
+        {
+          "id": "PROFILE-STORY",
+          "project_id": null,
+          "name": "Story Writing",
+          "description": "Balanced long-form prose with scene, canon, and recent continuity.",
+          "builtin": true,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "profile": {
+            "projection_mode": "balanced",
+            "reasoning_reserve_tokens": 4096,
+            "top_p": 0.95,
+            "top_k": 40,
+            "min_p": 0.0,
+            "repeat_penalty": 1.05,
+            "generation_mode": "single",
+            "beat_count": 4,
+            "beat_tokens": 2048,
+            "total_story_target_tokens": 8192,
+            "context_recipe_id": "RECIPE-STORY",
+            "input_mode": "smart_hybrid",
+            "reasoning": "off",
+            "visible_output_tokens": 4096,
+            "temperature": 0.8
+          }
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/saved-views",
+    "body": {},
+    "status": 200,
+    "response": {
+      "views": [
+        {
+          "id": "VIEW-WB-ALL",
+          "scope_type": "world_bible",
+          "scope_id": null,
+          "name": "All",
+          "resource_type": "all",
+          "builtin": true,
+          "sort_order": 0,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "query": {}
+        },
+        {
+          "id": "VIEW-WB-CHAR",
+          "scope_type": "world_bible",
+          "scope_id": null,
+          "name": "Characters",
+          "resource_type": "character",
+          "builtin": true,
+          "sort_order": 10,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "query": {}
+        },
+        {
+          "id": "VIEW-WB-LOC",
+          "scope_type": "world_bible",
+          "scope_id": null,
+          "name": "Locations",
+          "resource_type": "location",
+          "builtin": true,
+          "sort_order": 20,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "query": {}
+        },
+        {
+          "id": "VIEW-WB-ITEM",
+          "scope_type": "world_bible",
+          "scope_id": null,
+          "name": "Items",
+          "resource_type": "item",
+          "builtin": true,
+          "sort_order": 30,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "query": {}
+        },
+        {
+          "id": "VIEW-WB-ORG",
+          "scope_type": "world_bible",
+          "scope_id": null,
+          "name": "Organizations",
+          "resource_type": "organization",
+          "builtin": true,
+          "sort_order": 40,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "query": {}
+        },
+        {
+          "id": "VIEW-WB-LORE",
+          "scope_type": "world_bible",
+          "scope_id": null,
+          "name": "Lore",
+          "resource_type": "lore",
+          "builtin": true,
+          "sort_order": 50,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "query": {}
+        },
+        {
+          "id": "VIEW-WB-RECENT",
+          "scope_type": "world_bible",
+          "scope_id": null,
+          "name": "Recently changed",
+          "resource_type": "all",
+          "builtin": true,
+          "sort_order": 60,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "query": {
+            "sort": "updated_at",
+            "direction": "desc"
+          }
+        },
+        {
+          "id": "VIEW-WB-DETAIL",
+          "scope_type": "world_bible",
+          "scope_id": null,
+          "name": "Needs details",
+          "resource_type": "all",
+          "builtin": true,
+          "sort_order": 70,
+          "created_at": "2026-10-23T05:52:58+00:00",
+          "updated_at": "2026-10-23T05:52:58+00:00",
+          "query": {
+            "description_empty": true
+          }
+        }
+      ]
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/context-stack",
+    "body": {},
+    "status": 200,
+    "response": {
+      "id": "default",
+      "project_id": null,
+      "world_id": null,
+      "branch_id": null,
+      "scene_document_id": null,
+      "session_id": null,
+      "recipe_id": null,
+      "run_profile_id": null,
+      "references": [],
+      "overrides": {},
+      "updated_at": null
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/user-profile",
+    "body": {},
+    "status": 200,
+    "response": {
+      "id": "default",
+      "display_name": "",
+      "about": "",
+      "personal_details": {},
+      "creative_profile": {},
+      "collaboration": {},
+      "presence_defaults": {},
+      "story_lab": {},
+      "boundaries": {
+        "prefer": [],
+        "avoid": [],
+        "ask_before": []
+      },
+      "memory_policy": {
+        "schema_version": 2,
+        "enabled": true,
+        "learn_from_chats": true,
+        "categories": {
+          "collaboration_preferences": {
+            "enabled": true,
+            "scope": "private",
+            "retention_days": 90,
+            "fields": {}
+          },
+          "about_you": {
+            "enabled": true,
+            "scope": "private",
+            "retention_days": 180,
+            "fields": {}
+          },
+          "story_presence": {
+            "enabled": false,
+            "scope": "selected_stories",
+            "retention_days": 180,
+            "fields": {}
+          },
+          "conversation_insights": {
+            "enabled": true,
+            "scope": "private",
+            "retention_days": 90,
+            "fields": {}
+          }
+        },
+        "behavior": {
+          "ask_before_sensitive": true,
+          "forget_inactive_days": 90,
+          "prevent_personal_canon": true
+        },
+        "creative_preferences": true,
+        "reusable_personas": false
+      },
+      "preferred_names": []
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/memory/status",
+    "body": {},
+    "status": 200,
+    "response": {
+      "schema_version": 2,
+      "fts_available": true,
+      "active_generation": null,
+      "chunks": 0,
+      "links": 0,
+      "threads": 0,
+      "spatial_edges": 0,
+      "state_intervals": 0,
+      "epistemic_intervals": 0,
+      "enabled": true,
+      "automatic_context": true,
+      "config": {
+        "enabled": true,
+        "fts_enabled": true,
+        "dense_enabled": false,
+        "automatic_context": true,
+        "default_lens": "scene",
+        "chunk_chars": 1800,
+        "chunk_overlap_chars": 180,
+        "max_candidates": 60,
+        "final_k": 12,
+        "max_per_source": 2,
+        "rrf_k": 60,
+        "trace_enabled": true,
+        "max_pack_tokens": 4096,
+        "embedding": {
+          "enabled": false,
+          "provider": "lmstudio",
+          "model": "text-embedding-bge-m3",
+          "dimension": 1024,
+          "query_prefix": "",
+          "passage_prefix": "",
+          "batch_size": 32,
+          "timeout_seconds": 120.0
+        },
+        "reranker": {
+          "enabled": false,
+          "provider": "disabled",
+          "model": "Qwen/Qwen3-Reranker-0.6B",
+          "top_k_input": 20,
+          "top_k_output": 8
+        }
+      },
+      "embedding_available": false,
+      "fallback_active": false,
+      "fallback": "structured indexes + SQLite FTS5",
+      "reranker_requested": false,
+      "reranker_available": false,
+      "context_intelligence_version": "1.2.5a1",
+      "discovery": {
+        "propositions": 0,
+        "instances": 0,
+        "active_instances": 0,
+        "canon": 0,
+        "performance": {
+          "pipeline": "lightweight_extraction",
+          "pipeline_revision": "v121-discovery-light-2",
+          "materialization_revision": "v121-provisional-physical-items-2",
+          "startup_budget_ms": 180,
+          "metrics": {
+            "capture_hits": 0,
+            "capture_misses": 0,
+            "materialization_hits": 0,
+            "materialization_misses": 0,
+            "list_hits": 0,
+            "list_misses": 0,
+            "physical_index_hits": 0,
+            "physical_index_misses": 0,
+            "startup_materialized": 0,
+            "branch_repairs": 0
+          },
+          "list_cache_entries": 0,
+          "physical_item_cache_entries": 0
+        }
+      }
+    }
+  },
+  {
+    "method": "GET",
+    "path": "/api/dataset/stats",
+    "body": {},
+    "status": 200,
+    "response": {
+      "total": 0,
+      "unreviewed": 0,
+      "accepted": 0,
+      "edited_accept": 0,
+      "rejected": 0,
+      "sft_ready": 0,
+      "preference_ready": 0
+    }
+  },
+  {
+    "method": "POST",
+    "path": "/api/import/manuscript/preview",
+    "body": {
+      "project_id": "fixture-project",
+      "text": "Preface\r\n# Part one\r\nMara waits.\r\n## Gate\r\nThe bell rang.",
+      "title": "Book"
+    },
+    "status": 200,
+    "response": {
+      "destination": "project_manuscript",
+      "sections": [
+        {
+          "title": "Book",
+          "document_type": "note",
+          "chars": 7,
+          "words": 1
+        },
+        {
+          "title": "Part one",
+          "document_type": "chapter",
+          "chars": 11,
+          "words": 2
+        },
+        {
+          "title": "Gate",
+          "document_type": "scene",
+          "chars": 14,
+          "words": 3
+        }
+      ],
+      "count": 3
+    }
+  }
+]
