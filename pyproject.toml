@@ -1,7 +1,7 @@
 [project]
 name = "arline-studio"
-version = "1.1.0"
-description = "Arline story workspace with projects, worlds, entity variants, canon workflow, WCF, LM Studio writing, and dataset feedback"
+version = "1.2.5a1"
+description = "Arline story workspace with projects, worlds, entity variants, canon workflow, WCF, LM Studio writing, command runtime, and native storage foundations"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -15,3 +15,4 @@ dependencies = [
 [project.scripts]
 arline = "main:main"
 arline-ui = "app:main"
+arline-shutdown = "src.cli.shutdown:main"

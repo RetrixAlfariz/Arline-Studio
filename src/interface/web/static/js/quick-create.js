@@ -67,7 +67,20 @@
     };
   }
 
-  window.ArlineQuickCreate = { decodeCreateAs, inferRelationship };
+  function replaceSelectOptions(select, rows, valueOf, labelOf, datasetOf = () => ({})) {
+    if (!select) return;
+    const ownerDocument = select.ownerDocument;
+    const options = (rows || []).map((row) => {
+      const option = ownerDocument.createElement("option");
+      option.value = String(valueOf(row) ?? "");
+      option.textContent = String(labelOf(row) ?? "");
+      for (const [key, value] of Object.entries(datasetOf(row) || {})) option.dataset[key] = String(value ?? "");
+      return option;
+    });
+    select.replaceChildren(...options);
+  }
+
+  window.ArlineQuickCreate = { decodeCreateAs, inferRelationship, replaceSelectOptions, preparePayload, previewOverride };
   if (typeof document === "undefined") return;
 
   const originalFetch = window.fetch.bind(window);
@@ -80,6 +93,7 @@
     return byId("quickCreateBranch")?.selectedOptions?.[0]?.dataset.kind || "main";
   }
   function currentScopeValue(id) { return byId(id)?.value || ""; }
+  function runtimeScope() { return window.ArlineRuntime?.getScope?.() || {}; }
 
   async function fetchJSON(url, init = undefined) {
     const response = await originalFetch(url, init);
@@ -104,9 +118,9 @@
   function selectedMode() { return decodeCreateAs(byId("quickCreateKind")?.value || ""); }
 
   function scopePayload(mode = selectedMode()) {
-    const projectId = byId("quickCreateProject")?.value || currentScopeValue("projectSelect") || null;
-    const worldId = byId("quickCreateWorld")?.value || currentScopeValue("worldSelect") || null;
-    const branchId = byId("quickCreateBranch")?.value || currentScopeValue("branchSelect") || null;
+    const projectId = byId("quickCreateProject")?.value || runtimeScope().projectId || null;
+    const worldId = byId("quickCreateWorld")?.value || runtimeScope().worldId || null;
+    const branchId = byId("quickCreateBranch")?.value || runtimeScope().branchId || null;
     const main = activeBranchKind() === "main";
     const folderId = byId("quickCreateFolder")?.value || null;
     if (mode.kind === "project") return { project_id: null, world_id: null, branch_id: null, folder_id: null };
@@ -203,14 +217,14 @@
 
   function fillSelect(select, rows, value, labelOf) {
     if (!select) return;
-    select.innerHTML = (rows || []).map((row) => `<option value="${String(row.id).replaceAll('"','&quot;')}">${labelOf(row)}</option>`).join("");
+    replaceSelectOptions(select, rows, (row) => row.id, labelOf);
     if (value && [...select.options].some((option) => option.value === value)) select.value = value;
   }
 
   async function refreshProjectsAndWorlds() {
     const data = bootstrapCache || await loadBootstrap();
     const projectSelect = byId("quickCreateProject");
-    const currentProject = currentScopeValue("projectSelect") || data.active?.project?.id || data.projects?.[0]?.id || "";
+    const currentProject = runtimeScope().projectId || data.active?.project?.id || data.projects?.[0]?.id || "";
     fillSelect(projectSelect, data.projects || [], currentProject, (row) => row.name);
 
     let worlds = data.worlds || [];
@@ -221,7 +235,7 @@
         if (project.worlds?.length) worlds = project.worlds;
       } catch (_) {}
     }
-    const currentWorld = currentScopeValue("worldSelect") || data.active?.world?.id || data.world_bible?.default_world_id || worlds[0]?.id || "";
+    const currentWorld = runtimeScope().worldId || data.active?.world?.id || data.world_bible?.default_world_id || worlds[0]?.id || "";
     fillSelect(byId("quickCreateWorld"), worlds, currentWorld, (row) => `${row.name}${row.canon_status ? ` · ${row.canon_status}` : ""}`);
     await refreshBranches();
   }
@@ -229,15 +243,21 @@
   async function refreshBranches() {
     const worldId = byId("quickCreateWorld")?.value;
     const branchSelect = byId("quickCreateBranch");
-    if (!worldId) { if (branchSelect) branchSelect.innerHTML = ""; return; }
+    if (!worldId) { branchSelect?.replaceChildren(); return; }
     try {
       const world = await fetchJSON(`/api/worlds/${encodeURIComponent(worldId)}`);
-      const currentBranch = currentScopeValue("branchSelect") || world.branches?.find((b) => b.kind === "main")?.id || world.branches?.[0]?.id || "";
+      const currentBranch = runtimeScope().branchId || world.branches?.find((b) => b.kind === "main")?.id || world.branches?.[0]?.id || "";
       if (branchSelect) {
-        branchSelect.innerHTML = (world.branches || []).map((branch) => `<option value="${branch.id}" data-kind="${branch.kind || "main"}">${branch.name} · ${branch.kind || "main"}</option>`).join("");
+        replaceSelectOptions(
+          branchSelect,
+          world.branches || [],
+          (branch) => branch.id,
+          (branch) => `${branch.name} · ${branch.kind || "main"}`,
+          (branch) => ({ kind: branch.kind || "main" }),
+        );
         if ([...branchSelect.options].some((option) => option.value === currentBranch)) branchSelect.value = currentBranch;
       }
-    } catch (_) { if (branchSelect) branchSelect.innerHTML = ""; }
+    } catch (_) { branchSelect?.replaceChildren(); }
     await refreshFolderOptions();
   }
 
@@ -286,7 +306,12 @@
       } catch (_) {}
       if (folderLabel) folderLabel.childNodes[0].nodeValue = mode.kind === "folder" ? "Parent folder" : "Project folder";
     }
-    folder.innerHTML = `<option value="">${mode.kind === "folder" ? "Project root" : "No folder"}</option>${rows.map((row) => `<option value="${row.id}">${row.path}</option>`).join("")}`;
+    replaceSelectOptions(
+      folder,
+      [{ id: "", path: mode.kind === "folder" ? "Project root" : "No folder" }, ...rows],
+      (row) => row.id,
+      (row) => row.path,
+    );
     folder.disabled = !["entity", "document", "folder"].includes(mode.kind);
     await refreshRelationshipResolver();
     updateDestinationSummary();
@@ -302,9 +327,8 @@
     try { bible = await loadLibraryScope(); } catch (_) { bible = { variants: [] }; }
     const variants = scopedVariants(bible);
     const subject = byId("quickCreateRelationSubject"), object = byId("quickCreateRelationObject");
-    const options = variants.map((variant) => `<option value="${variant.id}">${variant.display_name}</option>`).join("");
-    if (subject) subject.innerHTML = options;
-    if (object) object.innerHTML = options;
+    replaceSelectOptions(subject, variants, (variant) => variant.id, (variant) => variant.display_name);
+    replaceSelectOptions(object, variants, (variant) => variant.id, (variant) => variant.display_name);
     if (object && variants.length > 1) object.value = variants[1].id;
     relationTouched = false;
     applyRelationshipInference(variants);
@@ -357,45 +381,36 @@
     await refreshFolderOptions();
   }
 
-  function relationshipPreviewResponse(body) {
+  function preparePayload(body = {}) {
+    const next = { ...body };
+    const mode = decodeCreateAs(byId("quickCreateKind")?.value || next.forced_kind || "");
+    if (mode.kind) next.forced_kind = mode.kind;
+    if (mode.entity_type) next.entity_type = mode.entity_type;
+    if (mode.document_type) next.document_type = mode.document_type;
+    Object.assign(next, scopePayload(mode));
+    return next;
+  }
+
+  function previewOverride(body = {}) {
+    const mode = decodeCreateAs(byId("quickCreateKind")?.value || body.forced_kind || "");
+    if (mode.kind !== "relationship") return null;
     const variants = scopedVariants(libraryCache || {});
     const inferred = inferRelationship(body.text || "", variants);
     const subject = variants.find((v) => v.id === inferred.subject_id);
     const object = variants.find((v) => v.id === inferred.object_id);
-    const data = {
+    return {
       kind: "relationship",
       entity_type: null,
       name: subject && object ? `${subject.display_name} ↔ ${object.display_name}` : (String(body.text || "").trim() || "Relationship"),
       description: inferred.relation_type || "Choose subject, relation, and object below",
       confidence: inferred.resolved ? 0.95 : 0.55,
-      attributes: {}, shared_core: {}, document_type: null,
+      attributes: {},
+      shared_core: {},
+      document_type: null,
       warnings: inferred.resolved ? [] : ["Resolve two existing entities and a relationship type before creating."],
       detected: inferred.relation_type ? [inferred.relation_type] : [],
     };
-    return new Response(JSON.stringify(data), { status: 200, headers: { "Content-Type": "application/json" } });
   }
-
-  window.fetch = async function (input, init = {}) {
-    const url = typeof input === "string" ? input : input?.url || "";
-    const isQuick = url.includes("/api/quick-create");
-    if (!isQuick || !init?.body || typeof init.body !== "string") return originalFetch(input, init);
-    let body;
-    try { body = JSON.parse(init.body); } catch (_) { return originalFetch(input, init); }
-    const mode = decodeCreateAs(byId("quickCreateKind")?.value || body.forced_kind || "");
-    if (url.includes("/api/quick-create/preview") && mode.kind === "relationship") return relationshipPreviewResponse(body);
-    if (mode.kind) body.forced_kind = mode.kind;
-    if (mode.entity_type) body.entity_type = mode.entity_type;
-    if (mode.document_type) body.document_type = mode.document_type;
-    Object.assign(body, scopePayload(mode));
-    const response = await originalFetch(input, { ...init, body: JSON.stringify(body) });
-    if (url.includes("/api/quick-create/preview") && response.ok && (mode.entity_type || mode.document_type)) {
-      const data = await response.clone().json();
-      if (mode.entity_type) data.entity_type = mode.entity_type;
-      if (mode.document_type) data.document_type = mode.document_type;
-      return new Response(JSON.stringify(data), { status: response.status, statusText: response.statusText, headers: { "Content-Type": "application/json" } });
-    }
-    return response;
-  };
 
   async function submitRelationship(event) {
     if (selectedMode().kind !== "relationship") return;

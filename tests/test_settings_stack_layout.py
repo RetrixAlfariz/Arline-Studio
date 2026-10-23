@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,9 +30,9 @@ class SettingsStackLayoutTests(unittest.TestCase):
 
     def test_static_assets_are_versioned_together(self):
         html = (ROOT / "src/interface/web/static/index.html").read_text(encoding="utf-8")
-        self.assertIn("arline.css?v=1.1.3-media", html)
-        self.assertIn("stream.js?v=1.1.3-media", html)
-        self.assertIn("arline.js?v=1.1.3-media", html)
+        versions = re.findall(r'(?:arline\.css|stream\.js|arline\.js)\?v=([^"\s]+)', html)
+        self.assertEqual(len(versions), 3)
+        self.assertEqual(len(set(versions)), 1, versions)
 
 
 if __name__ == "__main__":

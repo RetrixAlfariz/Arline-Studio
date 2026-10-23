@@ -8,6 +8,7 @@ import sqlite3
 from threading import RLock
 from typing import Any, Callable
 from uuid import uuid4
+from src.domain_events import emit_domain_event
 
 
 def utc_now() -> str:
@@ -341,11 +342,13 @@ class FoundationStore:
     def trash(self, resource_type: str, resource_id: str, *, previous_state: dict[str, Any] | None = None) -> dict[str, Any]:
         result = self.set_lifecycle(resource_type, resource_id, trashed=True, previous_state=previous_state)
         self.log_activity(None, "trashed", resource_type, resource_id)
+        emit_domain_event(self.path,"foundation.resource_trashed",{"resource_type":resource_type,"resource_id":resource_id,"lifecycle":result})
         return result
 
     def restore(self, resource_type: str, resource_id: str) -> dict[str, Any]:
         result = self.set_lifecycle(resource_type, resource_id, trashed=False)
         self.log_activity(None, "restored", resource_type, resource_id)
+        emit_domain_event(self.path,"foundation.resource_restored",{"resource_type":resource_type,"resource_id":resource_id,"lifecycle":result})
         return result
 
     def archive(self, resource_type: str, resource_id: str, archived: bool = True) -> dict[str, Any]:

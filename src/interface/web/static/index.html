@@ -3,9 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#202220" />
+  <meta name="theme-color" content="#1E2120" />
   <title>Arline Studio</title>
-  <link rel="stylesheet" href="/static/arline.css?v=1.1.3-media" />
+  <link rel="stylesheet" href="/static/arline.css?v=1.2.5-brand" />
+  <link rel="stylesheet" href="/static/brand-v125.css?v=1.2.5-brand" />
+  <link rel="stylesheet" href="/static/chat-runtime-v125.css?v=1.2.5-scroll" />
+  <link rel="icon" type="image/svg+xml" href="/static/assets/brand/arline-primary.svg" />
 </head>
 <body>
   <div id="app" class="app-shell">
@@ -13,7 +16,7 @@
       <div class="sidebar-head">
         <button id="brandBtn" class="brand-button" title="Arline Studio">
           <span class="brand-mark">A</span>
-          <span class="brand-copy"><b>Arline</b><small>Studio v1.1</small></span>
+          <span class="brand-copy"><b>Arline</b><small>Studio v1.2.5 α</small></span>
         </button>
         <button id="collapseSidebarBtn" class="icon-btn" title="Collapse sidebar">‹</button>
       </div>
@@ -252,7 +255,7 @@
                 <div class="world-filter-row">
                   <label class="search-field"><span>⌕</span><input id="worldSearch" placeholder="Search the Library…" /></label><div id="libraryViewControls" class="library-view-controls" aria-label="Library view"><button data-library-view="list" title="List view">☷</button><button class="active" data-library-view="grid" title="Grid view">▦</button><button data-library-view="gallery" title="Gallery view">▧</button></div>
                   <div id="worldTagFilters" class="inline-tags"></div>
-                  <div id="worldBulkBar" class="world-bulk-bar hidden"><b id="worldBulkCount">0 selected</b><button id="bulkMoveBtn" class="tiny-btn">Move</button><button id="bulkCollectionBtn" class="tiny-btn">Collection</button><button id="bulkArchiveBtn" class="tiny-btn">Archive</button><button id="bulkClearBtn" class="tiny-btn">Clear</button></div>
+                  <div id="worldBulkBar" class="world-bulk-bar hidden"><b id="worldBulkCount">0 selected</b><button id="bulkMoveBtn" class="tiny-btn">Move</button><button id="bulkCollectionBtn" class="tiny-btn">Collection</button><button id="bulkArchiveBtn" class="tiny-btn">Archive</button><button id="bulkTrashBtn" class="tiny-danger-btn">Trash</button><button id="bulkClearBtn" class="tiny-btn">Clear</button></div>
                 </div>
                 <div id="worldGrid" class="world-grid"></div>
                 <div id="worldEmpty" class="empty-state"><b>Nothing here yet.</b><span>Describe a character, location, item, or idea normally and Arline will structure it underneath.</span><button id="worldEmptyCreateBtn" class="tiny-btn">＋ Quick create</button></div>
@@ -312,8 +315,8 @@
       <div class="inspector-panel" data-inspector-panel="context">
         <label>Projection mode<select id="projectionMode"><option value="off">Off</option><option value="conservative">Conservative</option><option value="balanced" selected>Balanced</option><option value="vivid">Vivid</option></select></label>
         <div id="scopeVisualization" class="scope-visualization">No active context.</div><div id="contextWhy" class="context-why"><div class="empty-note">Analyze to see why each context item was included.</div></div>
-        <div class="subtabs"><button class="active" data-subtab="wcf">WCF</button><button data-subtab="brief">Brief</button><button data-subtab="workspace">Workspace</button><button data-subtab="projection">Projection</button><button data-subtab="aif">AIF</button></div>
-        <pre id="wcfOutput" class="code-output active" data-subpanel="wcf">Analyze first.</pre><pre id="briefOutput" class="code-output" data-subpanel="brief">No brief.</pre><pre id="workspaceContextOutput" class="code-output" data-subpanel="workspace">No workspace context.</pre><pre id="projectionOutput" class="code-output" data-subpanel="projection">No projections.</pre><pre id="aifOutput" class="code-output" data-subpanel="aif">No AIF-Core.</pre>
+        <div class="subtabs"><button class="active" data-subtab="wcf">WCF</button><button data-subtab="brief">Brief</button><button data-subtab="workspace">Workspace</button><button data-subtab="intuition">Intuition</button><button data-subtab="projection">Projection</button><button data-subtab="aif">AIF</button></div>
+        <pre id="wcfOutput" class="code-output active" data-subpanel="wcf">Analyze first.</pre><pre id="briefOutput" class="code-output" data-subpanel="brief">No brief.</pre><pre id="workspaceContextOutput" class="code-output" data-subpanel="workspace">No workspace context.</pre><pre id="deliberationOutput" class="code-output" data-subpanel="intuition">Generate to inspect model intuition.</pre><pre id="projectionOutput" class="code-output" data-subpanel="projection">No projections.</pre><pre id="aifOutput" class="code-output" data-subpanel="aif">No AIF-Core.</pre>
       </div>
       <div class="inspector-panel" data-inspector-panel="storage">
         <span class="eyebrow">Local-first data</span><h3>Data & Storage</h3>
@@ -418,7 +421,14 @@
     <div id="toast" class="toast hidden"></div>
     <div id="loadingOverlay" class="loading-overlay hidden"><div class="spinner"></div><b id="loadingTitle">Arline is working…</b><span id="loadingDetail">Preparing context</span></div>
   </div>
-  <script src="/static/js/stream.js?v=1.1.3-media" defer></script>
-  <script src="/static/arline.js?v=1.1.3-media" defer></script>
+  <script src="/static/js/stream.js?v=1.2.5-brand" defer></script>
+  <script src="/static/js/commands.js?v=1.2.5-brand" defer></script>
+  <script src="/static/js/core/events.js?v=1.2.5-scroll" defer></script>
+  <script src="/static/js/chat/scroll-controller.js?v=1.2.5-scroll" defer></script>
+  <script src="/static/arline.js?v=1.2.5-brand" defer></script>
+  <script src="/static/js/chat/message-runtime.js?v=1.2.5-scroll" defer></script>
+  <script src="/static/js/quick-create.js?v=1.2.5-brand" defer></script>
+  <script src="/static/js/discovery-sheets.js?v=1.2.5-brand" defer></script>
+  <script src="/static/js/memory.js?v=1.2.5-brand" defer></script>
 </body>
 </html>

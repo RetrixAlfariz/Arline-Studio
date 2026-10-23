@@ -1,4 +1,36 @@
-# Arline Studio 1.1
+# Arline Studio
+
+## v1.2 development — Evidence & Retrieval Foundation
+
+`develop/v1.2` contains the unmerged v1.2 development line. The v1.2.0
+milestone adds branch-aware evidence retrieval without turning search output
+into canon: source-backed chunks, SQLite FTS5, deterministic query routing,
+one hard Scope Gate, RRF fusion, retrieval traces, incremental indexing, and
+Context Stack integration. Dense embeddings are optional; structured lookup
+and FTS remain the baseline when LM Studio embeddings are unavailable.
+
+### Recommended LM Studio models
+
+Arline does not bundle or download model weights. Install models in LM
+Studio normally and select the local model key in Settings/config.
+
+- **Generation + vision:** [HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive](https://huggingface.co/HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive)
+- **Recommended embedding baseline:** [lm-kit/bge-m3-gguf](https://huggingface.co/lm-kit/bge-m3-gguf) — BGE-M3, 1024-dimensional embeddings; Q4_K_M is the suggested starting quantization.
+- **Embedding challenger (disabled by default):** [Qwen/Qwen3-Embedding-0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B)
+- **Experimental reranker (not required by v1.2.0):** [Qwen/Qwen3-Reranker-0.6B](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B)
+
+For BGE-M3, use the exact local embedding model key reported by LM Studio
+(`GET /api/v1/models` or `lms ls --embedding`) in `[memory.embedding].model`.
+`text-embedding-bge-m3` is Arline's default key, but an LM Studio install may
+expose a different local key. BGE-M3 does **not** use the E5-specific `query:` /
+`passage:` prefixes, so both prefix settings are empty by default.
+
+Dense retrieval remains optional in v1.2.0. If it is disabled or the embedding
+model is unavailable, Arline continues with structured retrieval + SQLite FTS5.
+Changing embedding model or dimension creates a new derived vector generation;
+vectors from an older embedding model are never reinterpreted as BGE-M3 vectors.
+
+---
 
 Arline Studio is a local-first workspace for writing, exploring, and maintaining structured story worlds.
 
@@ -35,6 +67,18 @@ python main.py
 ```
 
 4. Open the Studio URL configured under `[ui]` in `config/arline.toml` (default port `7860`).
+
+To force-stop the local web server from another terminal, run:
+
+```powershell
+uv run python shutdown.py
+```
+
+The command reads `[ui].port`, only stops an Arline/Uvicorn process by default,
+and is safe to repeat. Use `--dry-run` to inspect the target first, or
+`--any-process` only when the port belongs to a different process intentionally.
+After installing the project package, the equivalent command is
+`arline-shutdown`.
 
 The SQLite database, local media, exports, backups, and generated output are runtime data and are intentionally not included in release ZIPs.
 

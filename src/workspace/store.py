@@ -10,9 +10,12 @@ import sqlite3
 from threading import RLock
 from typing import Any, Iterable
 from uuid import uuid4
+from src.domain_events import emit_domain_event
 
 
 WORKSPACE_SCHEMA_VERSION = 7
+# Keep nested HTTP serialization bounded as well as folder traversal.
+MAX_FOLDER_DEPTH = 100
 WORLD_BIBLE_PROJECT_ID = "PROJ-WORLD-BIBLE"
 WORLD_BIBLE_WORLD_ID = "WORLD-BIBLE-MAIN"
 WORLD_BIBLE_BRANCH_ID = "BRANCH-BIBLE-MAIN"
@@ -51,6 +54,31 @@ def _loads(value: str | None, fallback: Any) -> Any:
         return json.loads(value)
     except (TypeError, json.JSONDecodeError):
         return fallback
+
+
+def build_folder_tree(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Project only rooted, bounded paths; never rewrite corrupt stored rows."""
+    by_parent: dict[str | None, list[dict[str, Any]]] = {}
+    for raw in rows:
+        row = dict(raw)
+        by_parent.setdefault(row.get("parent_id"), []).append(row)
+    for children in by_parent.values():
+        children.sort(key=lambda row: (row.get("sort_order", 0), str(row.get("name", "")).casefold()))
+    roots: list[dict[str, Any]] = []
+    pending = [(None, roots, 1)]
+    seen: set[str] = set()
+    while pending:
+        parent_id, target, depth = pending.pop()
+        if depth > MAX_FOLDER_DEPTH:
+            continue
+        for row in by_parent.get(parent_id, []):
+            if row["id"] in seen:
+                continue
+            seen.add(row["id"])
+            node = {**row, "children": []}
+            target.append(node)
+            pending.append((row["id"], node["children"], depth + 1))
+    return roots
 
 
 @dataclass(slots=True)
@@ -718,6 +746,10 @@ class WorkspaceStore:
                 "Favor state, timeline, staged changes, and contradictions.",
                 {"active_scene": True, "explicit_refs": True, "pins": True, "relationships": True, "timeline": True, "conflicts": True, "recent_turns": 10, "world_canon": "deep"},
             ),
+            ("RECIPE-LAB", "Story Lab", "Wide exploratory context without canon mutation.", {"active_scene": True, "explicit_refs": True, "pins": True, "relationships": True, "timeline": True, "recent_turns": 8, "world_canon": "relevant", "project_documents": "relevant"}),
+            ("RECIPE-INTERACTIVE", "Interactive Presence", "POV, participants, relationship state, and recent action context.", {"active_scene": True, "explicit_refs": True, "pins": True, "relationships": True, "recent_turns": 14, "voice": "deep", "world_canon": "relevant"}),
+            ("RECIPE-ANALYST", "Analyst", "Deep evidence and continuity context without narrative continuation.", {"active_scene": True, "explicit_refs": True, "pins": True, "relationships": True, "timeline": True, "conflicts": True, "recent_turns": 12, "world_canon": "deep", "project_documents": "relevant"}),
+            ("RECIPE-CHARACTER-ROOM", "Character Room", "Deep participant voice and relationships for non-canon rehearsal.", {"active_scene": False, "explicit_refs": True, "pins": False, "relationships": True, "recent_turns": 10, "voice": "deep", "world_canon": "compact"}),
         ]
         for recipe_id, name, description, payload in recipes:
             con.execute(
@@ -1469,6 +1501,8 @@ class WorkspaceStore:
     ) -> dict[str, Any]:
         if kind not in BRANCH_KINDS:
             raise ValueError("Unsupported branch kind")
+        if kind == "main":
+            raise ValueError("Main branches are created with worlds and cannot be added separately")
         if canon_status not in CANON_STATUSES:
             raise ValueError("Unsupported canon status")
         name = name.strip()
@@ -1479,6 +1513,14 @@ class WorkspaceStore:
         with self._lock, self._connection() as con:
             if con.execute("SELECT 1 FROM worlds WHERE id=?", (world_id,)).fetchone() is None:
                 raise KeyError(world_id)
+            if parent_branch_id is not None:
+                parent = con.execute(
+                    "SELECT world_id FROM world_branches WHERE id=?", (parent_branch_id,)
+                ).fetchone()
+                if parent is None:
+                    raise ValueError("Parent branch does not exist")
+                if parent["world_id"] != world_id:
+                    raise ValueError("Parent branch must belong to the same world")
             slug = self._unique_slug(
                 con, "world_branches", slugify(name), scope_column="world_id", scope_value=world_id
             )
@@ -1531,11 +1573,19 @@ class WorkspaceStore:
             fields.append("updated_at=?")
             params.extend([utc_now(), branch_id])
             with self._lock, self._connection() as con:
-                cur = con.execute(
+                current = con.execute(
+                    "SELECT kind FROM world_branches WHERE id=?", (branch_id,)
+                ).fetchone()
+                if current is None:
+                    raise KeyError(branch_id)
+                requested_kind = changes.get("kind")
+                if requested_kind is not None:
+                    next_kind = str(requested_kind).strip()
+                    if next_kind != current["kind"] and "main" in {next_kind, current["kind"]}:
+                        raise ValueError("Cannot change a branch to or from Main")
+                con.execute(
                     f"UPDATE world_branches SET {', '.join(fields)} WHERE id=?", params
                 )
-                if cur.rowcount == 0:
-                    raise KeyError(branch_id)
         return self.get_branch(branch_id)
 
     def branch_lineage(self, branch_id: str) -> list[dict[str, Any]]:
@@ -1845,6 +1895,54 @@ class WorkspaceStore:
 
         return {"source": source, "target": target, "merged": merged, "skipped": skipped}
 
+    @staticmethod
+    def _validate_folder_owner_tx(con: sqlite3.Connection, project_id: str, folder_id: str | None) -> None:
+        if folder_id is None:
+            return
+        folder = con.execute("SELECT project_id FROM workspace_folders WHERE id=?", (folder_id,)).fetchone()
+        if folder is None:
+            raise ValueError("Folder not found")
+        if folder["project_id"] != project_id:
+            raise ValueError("Folder must belong to the same project")
+
+    @staticmethod
+    def _validate_folder_parent_tx(
+        con: sqlite3.Connection, project_id: str, folder_id: str, parent_id: str | None
+    ) -> None:
+        parents = {
+            row["id"]: row["parent_id"] for row in con.execute(
+                "SELECT id,parent_id FROM workspace_folders WHERE project_id=?", (project_id,)
+            )
+        }
+        parents[folder_id] = parent_id
+        seen = {folder_id}
+        ancestor = parent_id
+        depth = 1
+        while ancestor is not None:
+            if ancestor in seen:
+                raise ValueError("Folder hierarchy cannot contain a cycle")
+            if ancestor not in parents:
+                raise ValueError("Parent folder must exist in the same project")
+            seen.add(ancestor)
+            depth += 1
+            if depth > MAX_FOLDER_DEPTH:
+                raise ValueError(f"Folder nesting cannot exceed {MAX_FOLDER_DEPTH} levels")
+            ancestor = parents[ancestor]
+        # Moving a subtree must leave its deepest descendant within the limit.
+        children: dict[str | None, list[str]] = {}
+        for child_id, ancestor in parents.items():
+            children.setdefault(ancestor, []).append(child_id)
+        pending = [(folder_id, depth)]
+        visited: set[str] = set()
+        while pending:
+            child_id, child_depth = pending.pop()
+            if child_id in visited:
+                raise ValueError("Folder hierarchy cannot contain a cycle")
+            visited.add(child_id)
+            if child_depth > MAX_FOLDER_DEPTH:
+                raise ValueError(f"Folder nesting cannot exceed {MAX_FOLDER_DEPTH} levels")
+            pending.extend((child, child_depth + 1) for child in children.get(child_id, []))
+
     def create_folder(
         self,
         project_id: str,
@@ -1860,7 +1958,11 @@ class WorkspaceStore:
         name = name.strip()
         if not name:
             raise ValueError("Folder name cannot be blank")
-        with self._lock, self._connection() as con:
+        with self._lock, self._connection() as con, con:
+            con.execute("BEGIN IMMEDIATE")
+            if con.execute("SELECT id FROM projects WHERE id=?", (project_id,)).fetchone() is None:
+                raise ValueError("Project not found")
+            self._validate_folder_parent_tx(con, project_id, folder_id, parent_id)
             con.execute(
                 "INSERT INTO workspace_folders(id,project_id,world_id,branch_id,parent_id,name,kind,created_at,updated_at) "
                 "VALUES(?,?,?,?,?,?,?,?,?)",
@@ -1895,54 +1997,62 @@ class WorkspaceStore:
         return [dict(row) for row in rows]
 
     def folder_tree(self, project_id: str, *, world_id: str | None = None, branch_id: str | None = None) -> list[dict[str, Any]]:
-        rows = self.list_folders(project_id, world_id=world_id, branch_id=branch_id)
-        by_parent: dict[str | None, list[dict[str, Any]]] = {}
-        for row in rows:
-            by_parent.setdefault(row.get("parent_id"), []).append(row)
-        def build(parent: str | None):
-            return [
-                {**row, "children": build(row["id"])}
-                for row in by_parent.get(parent, [])
-            ]
-        return build(None)
+        return build_folder_tree(self.list_folders(project_id, world_id=world_id, branch_id=branch_id))
 
     def update_folder(self, folder_id: str, **changes: Any) -> dict[str, Any]:
+        if "name" in changes:
+            changes["name"] = str(changes["name"] or "").strip()
+            if not changes["name"]:
+                raise ValueError("Folder name cannot be blank")
         fields: list[str] = []
         params: list[Any] = []
         for key in ("name", "parent_id", "world_id", "branch_id", "kind", "sort_order"):
             if key in changes:
                 fields.append(f"{key}=?")
                 params.append(changes[key])
-        if fields:
-            fields.append("updated_at=?")
-            params.extend([utc_now(), folder_id])
-            with self._lock, self._connection() as con:
-                cur = con.execute(
-                    f"UPDATE workspace_folders SET {', '.join(fields)} WHERE id=?", params
-                )
-                if cur.rowcount == 0:
-                    raise KeyError(folder_id)
+        with self._lock, self._connection() as con, con:
+            con.execute("BEGIN IMMEDIATE")
+            folder = con.execute("SELECT project_id FROM workspace_folders WHERE id=?", (folder_id,)).fetchone()
+            if folder is None:
+                raise KeyError(folder_id)
+            if "parent_id" in changes:
+                self._validate_folder_parent_tx(con, folder["project_id"], folder_id, changes["parent_id"])
+            if fields:
+                fields.append("updated_at=?")
+                params.extend([utc_now(), folder_id])
+                con.execute(f"UPDATE workspace_folders SET {', '.join(fields)} WHERE id=?", params)
         return self.get_folder(folder_id)
 
     def delete_folder(self, folder_id: str) -> list[str]:
-        with self._lock, self._connection() as con:
-            descendants = [folder_id]
+        with self._lock, self._connection() as con, con:
+            con.execute("BEGIN IMMEDIATE")
+            folder = con.execute("SELECT project_id FROM workspace_folders WHERE id=?", (folder_id,)).fetchone()
+            if folder is None:
+                raise KeyError(folder_id)
+            children: dict[str | None, list[str]] = {}
+            for row in con.execute(
+                "SELECT id,parent_id FROM workspace_folders WHERE project_id=?", (folder["project_id"],)
+            ):
+                children.setdefault(row["parent_id"], []).append(row["id"])
+            descendants: list[str] = []
+            visited: set[str] = set()
             pending = [folder_id]
             while pending:
-                child_rows = con.execute(
-                    f"SELECT id FROM workspace_folders WHERE parent_id IN ({','.join('?' for _ in pending)})",
-                    pending,
-                ).fetchall()
-                pending = [row["id"] for row in child_rows]
-                descendants.extend(pending)
-            placeholders = ",".join("?" for _ in descendants)
-            con.execute(
-                f"UPDATE entity_families SET folder_id=NULL WHERE folder_id IN ({placeholders})",
-                descendants,
+                current = pending.pop()
+                if current in visited:
+                    continue
+                visited.add(current)
+                descendants.append(current)
+                pending.extend(children.get(current, []))
+            # Break legacy cycles/deep cascades before deleting. Invalid children
+            # owned by another project survive as roots instead of cascading away.
+            con.executemany(
+                "UPDATE workspace_folders SET parent_id=NULL WHERE parent_id=?",
+                ((item,) for item in descendants),
             )
-            cur = con.execute("DELETE FROM workspace_folders WHERE id=?", (folder_id,))
-            if cur.rowcount == 0:
-                raise KeyError(folder_id)
+            for item in descendants:
+                self._purge_resource_refs_tx(con, "folder", item)
+            con.executemany("DELETE FROM workspace_folders WHERE id=?", ((item,) for item in descendants))
             return descendants
 
     def create_document(
@@ -1966,7 +2076,9 @@ class WorkspaceStore:
             raise ValueError("Unsupported document type")
         document_id = make_id("DOC")
         now = utc_now()
-        with self._lock, self._connection() as con:
+        with self._lock, self._connection() as con, con:
+            con.execute("BEGIN IMMEDIATE")
+            self._validate_folder_owner_tx(con, project_id, folder_id)
             con.execute(
                 "INSERT INTO workspace_documents(id,project_id,world_id,branch_id,folder_id,document_type,title,"
                 "content,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
@@ -2021,7 +2133,7 @@ class WorkspaceStore:
         fields: list[str] = []
         params: list[Any] = []
         for key, value in changes.items():
-            if key in allowed and value is not None:
+            if key in allowed and (value is not None or key == "folder_id"):
                 if key == "status":
                     value = {"draft": "writing", "provisional": "revising", "canon": "final"}.get(value, value)
                 fields.append(f"{key}=?")
@@ -2029,6 +2141,11 @@ class WorkspaceStore:
         with self._lock, self._connection() as con:
             con.execute("BEGIN IMMEDIATE")
             try:
+                document = con.execute("SELECT project_id FROM workspace_documents WHERE id=?", (document_id,)).fetchone()
+                if document is None:
+                    raise KeyError(document_id)
+                if "folder_id" in changes:
+                    self._validate_folder_owner_tx(con, document["project_id"], changes["folder_id"])
                 if fields:
                     fields.append("updated_at=?")
                     params.extend([utc_now(), document_id])
@@ -2088,11 +2205,6 @@ class WorkspaceStore:
         # Library folders are organizational only; they do not make a sheet
         # project-owned.  v1.1 keeps the global ownership boundary while allowing
         # a family to live in the Bible folder tree.
-        if folder_id:
-            with self._connection() as check_con:
-                folder = check_con.execute("SELECT project_id FROM workspace_folders WHERE id=?", (folder_id,)).fetchone()
-            if folder is None or folder["project_id"] != WORLD_BIBLE_PROJECT_ID:
-                raise ValueError("Library entity folders must belong to the Library")
         with self._lock, self._connection() as con:
             slug = self._unique_slug(
                 con, "entity_families", slugify(name),
@@ -2101,6 +2213,7 @@ class WorkspaceStore:
             )
             con.execute("BEGIN IMMEDIATE")
             try:
+                self._validate_folder_owner_tx(con, owner_project_id, folder_id)
                 con.execute(
                     "INSERT INTO entity_families(id,project_id,folder_id,entity_type,name,slug,description,shared_core_json,"
                     "created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
@@ -2160,19 +2273,26 @@ class WorkspaceStore:
         return result
 
     def update_entity_family(self, family_id: str, *, note: str = "updated", **changes: Any) -> dict[str, Any]:
+        before = self.get_entity_family(family_id)
         fields: list[str] = []
         params: list[Any] = []
         for key in ("name", "description", "folder_id"):
-            if key in changes and changes[key] is not None:
+            if key in changes and (changes[key] is not None or key == "folder_id"):
                 fields.append(f"{key}=?")
-                value = str(changes[key]).strip()
-                params.append((value or None) if key == "folder_id" else value)
+                value = str(changes[key] or "").strip()
+                if key == "folder_id":
+                    changes[key] = value or None
+                    params.append(changes[key])
+                else:
+                    params.append(value)
         if "shared_core" in changes and changes["shared_core"] is not None:
             fields.append("shared_core_json=?")
             params.append(_dumps(changes["shared_core"]))
         with self._lock, self._connection() as con:
             con.execute("BEGIN IMMEDIATE")
             try:
+                if "folder_id" in changes:
+                    self._validate_folder_owner_tx(con, before["project_id"], changes["folder_id"])
                 if fields:
                     fields.append("updated_at=?")
                     params.extend([utc_now(), family_id])
@@ -2187,7 +2307,18 @@ class WorkspaceStore:
             except Exception:
                 con.execute("ROLLBACK")
                 raise
-        return self.get_entity_family(family_id)
+        result = self.get_entity_family(family_id)
+        emit_domain_event(
+            self.path,
+            "workspace.entity_family_updated",
+            {
+                "before": before,
+                "after": result,
+                "changes": dict(changes),
+                "note": note,
+            },
+        )
+        return result
 
     def preview_entity_family_merge(self, source_family_id: str, target_family_id: str) -> dict[str, Any]:
         if source_family_id == target_family_id:
@@ -2442,6 +2573,7 @@ class WorkspaceStore:
         return result
 
     def update_variant(self, variant_id: str, *, note: str = "updated", **changes: Any) -> dict[str, Any]:
+        before = self.get_variant(variant_id)
         fields: list[str] = []
         params: list[Any] = []
         for key in ("display_name", "summary", "canon_status"):
@@ -2477,7 +2609,18 @@ class WorkspaceStore:
             except Exception:
                 con.execute("ROLLBACK")
                 raise
-        return self.get_variant(variant_id)
+        result = self.get_variant(variant_id)
+        emit_domain_event(
+            self.path,
+            "workspace.variant_updated",
+            {
+                "before": before,
+                "after": result,
+                "changes": dict(changes),
+                "note": note,
+            },
+        )
+        return result
 
     def delete_variant(self, variant_id: str) -> None:
         with self._lock, self._connection() as con:
@@ -3213,6 +3356,22 @@ class WorkspaceStore:
                 raise
         return SnapshotResult(snapshot_id=snapshot_id, branch_id=new_branch_id, mode="new_sandbox_branch")
 
+    @staticmethod
+    def _retcon_storage_branch_id(
+        con: sqlite3.Connection, world_id: str, branch_id: str | None
+    ) -> str | None:
+        """Keep the legacy NULL-as-Main fact scope while checking branch ownership."""
+        if branch_id is None:
+            return None
+        row = con.execute(
+            "SELECT world_id,kind FROM world_branches WHERE id=?", (branch_id,)
+        ).fetchone()
+        if row is None:
+            raise ValueError("Retcon branch does not exist")
+        if row["world_id"] != world_id:
+            raise ValueError("Retcon branch belongs to a different world")
+        return None if row["kind"] == "main" else branch_id
+
     def retcon_preview(
         self,
         *,
@@ -3222,9 +3381,20 @@ class WorkspaceStore:
         owner_id: str,
         path: str,
         new_value: Any,
+        branch_id: str | None = None,
     ) -> dict[str, Any]:
-        facts = self.list_facts(owner_type=owner_type, owner_id=owner_id)
-        current = [f for f in facts if f["path"] == path and f["status"] not in {"retconned", "deprecated"}]
+        with self._connection() as con:
+            scoped_branch_id = self._retcon_storage_branch_id(con, world_id, branch_id)
+        facts = self.list_facts(
+            project_id=project_id, world_id=world_id, branch_id=scoped_branch_id,
+            owner_type=owner_type, owner_id=owner_id,
+        )
+        current = [
+            f for f in facts
+            if f["path"] == path
+            and f["status"] not in {"retconned", "deprecated"}
+            and (f["branch_id"] is None or f["branch_id"] == scoped_branch_id)
+        ]
         owner_label = owner_id
         if owner_type == "entity_variant":
             try:
@@ -3277,17 +3447,22 @@ class WorkspaceStore:
         with self._lock, self._connection() as con:
             con.execute("BEGIN IMMEDIATE")
             try:
+                scoped_branch_id = self._retcon_storage_branch_id(con, world_id, branch_id)
+                # A retcon edits only the exact scope. A sandbox override must
+                # not invalidate the inherited main fact or a sibling's facts.
                 con.execute(
                     "UPDATE canon_facts SET status='retconned',updated_at=? "
-                    "WHERE owner_type=? AND owner_id=? AND path=? AND status NOT IN ('retconned','deprecated')",
-                    (now, owner_type, owner_id, path),
+                    "WHERE project_id=? AND world_id=? AND branch_id IS ? "
+                    "AND owner_type=? AND owner_id=? AND path=? "
+                    "AND status NOT IN ('retconned','deprecated')",
+                    (now, project_id, world_id, scoped_branch_id, owner_type, owner_id, path),
                 )
                 fact_id = make_id("FACT")
                 con.execute(
                     "INSERT INTO canon_facts(id,project_id,world_id,branch_id,owner_type,owner_id,path,value_json,"
                     "status,authority,source_type,source_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
-                        fact_id, project_id, world_id, branch_id, owner_type, owner_id,
+                        fact_id, project_id, world_id, scoped_branch_id, owner_type, owner_id,
                         path, _dumps(new_value), "canon", "latest_user_correction",
                         "retcon", note or None, now, now,
                     ),
@@ -3634,6 +3809,24 @@ class WorkspaceStore:
             )
         return self.get_staged_change(change_id)
 
+    def finalize_staged_change(self, change_id: str, *, status: str) -> dict[str, Any]:
+        """Close a staged workflow that applies its own typed mutation.
+
+        Generic staged changes become facts when accepted. Typed workflows such
+        as Story Lab sheet proposals create or revise their resource directly,
+        then use this method to preserve the proposal audit trail without also
+        emitting a duplicate canon fact.
+        """
+        if status not in {"accepted", "rejected"}:
+            raise ValueError("Unsupported staged change status")
+        self.get_staged_change(change_id)
+        with self._lock, self._connection() as con:
+            con.execute(
+                "UPDATE staged_changes SET status=?,updated_at=? WHERE id=?",
+                (status, utc_now(), change_id),
+            )
+        return self.get_staged_change(change_id)
+
     def add_timeline_event(
         self, *, world_id: str, summary: str, branch_id: str | None = None,
         owner_type: str | None = None, owner_id: str | None = None,
@@ -3651,7 +3844,9 @@ class WorkspaceStore:
                 "VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (event_id, world_id, branch_id, owner_type, owner_id, time_label.strip(), float(order_key), event_type.strip() or "event", summary.strip(), _dumps(state_patch or {}), source_type, source_id, status, now, now),
             )
-        return self.get_timeline_event(event_id)
+        result=self.get_timeline_event(event_id)
+        emit_domain_event(self.path,"workspace.timeline_event_created",{"event":result})
+        return result
 
     def get_timeline_event(self, event_id: str) -> dict[str, Any]:
         with self._connection() as con:

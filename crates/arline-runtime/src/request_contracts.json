@@ -1,0 +1,5304 @@
+{
+  "paths": {
+    "/api/memory/discoveries/continuity/conflicts/{conflict_id}/resolve": {
+      "POST": {
+        "$ref": "#/components/schemas/ContinuityConflictResolutionPayload"
+      }
+    },
+    "/api/memory/discoveries/{proposition_id}/edit": {
+      "POST": {
+        "$ref": "#/components/schemas/DiscoveryEditPayload"
+      }
+    },
+    "/api/memory/discoveries/{proposition_id}/canon": {
+      "POST": {
+        "$ref": "#/components/schemas/DiscoveryDecisionPayload"
+      }
+    },
+    "/api/memory/discoveries/{proposition_id}/dismiss": {
+      "POST": {
+        "$ref": "#/components/schemas/DiscoveryDecisionPayload"
+      }
+    },
+    "/api/memory/discoveries/{proposition_id}/reset": {
+      "POST": {
+        "$ref": "#/components/schemas/DiscoveryDecisionPayload"
+      }
+    },
+    "/api/memory/query": {
+      "POST": {
+        "$ref": "#/components/schemas/MemoryQueryPayload"
+      }
+    },
+    "/api/memory/backfill": {
+      "POST": {
+        "$ref": "#/components/schemas/MemoryBackfillPayload"
+      }
+    },
+    "/api/memory/refresh": {
+      "POST": {
+        "$ref": "#/components/schemas/MemoryRefreshPayload"
+      }
+    },
+    "/api/directives/parse": {
+      "POST": {
+        "$ref": "#/components/schemas/PromptPayload"
+      }
+    },
+    "/api/storage/reset": {
+      "POST": {
+        "$ref": "#/components/schemas/StorageResetPayload"
+      }
+    },
+    "/api/models/query": {
+      "POST": {
+        "$ref": "#/components/schemas/ModelsPayload"
+      }
+    },
+    "/api/settings": {
+      "POST": {
+        "$ref": "#/components/schemas/RuntimePayload"
+      }
+    },
+    "/api/model/reload": {
+      "POST": {
+        "$ref": "#/components/schemas/RuntimePayload"
+      }
+    },
+    "/api/import/manuscript/preview": {
+      "POST": {
+        "$ref": "#/components/schemas/ManuscriptImportPayload"
+      }
+    },
+    "/api/import/manuscript": {
+      "POST": {
+        "$ref": "#/components/schemas/ManuscriptImportPayload"
+      }
+    },
+    "/api/projects": {
+      "POST": {
+        "$ref": "#/components/schemas/ProjectPayload"
+      }
+    },
+    "/api/projects/{project_id}": {
+      "PATCH": {
+        "$ref": "#/components/schemas/ProjectPatchPayload"
+      }
+    },
+    "/api/lifecycle/trash": {
+      "POST": {
+        "$ref": "#/components/schemas/LifecyclePayload"
+      }
+    },
+    "/api/lifecycle/archive": {
+      "POST": {
+        "$ref": "#/components/schemas/LifecyclePayload"
+      }
+    },
+    "/api/lifecycle/restore": {
+      "POST": {
+        "$ref": "#/components/schemas/LifecyclePayload"
+      }
+    },
+    "/api/aliases": {
+      "POST": {
+        "$ref": "#/components/schemas/AliasPayload"
+      }
+    },
+    "/api/collections": {
+      "POST": {
+        "$ref": "#/components/schemas/CollectionPayload"
+      }
+    },
+    "/api/collections/{collection_id}/links": {
+      "POST": {
+        "$ref": "#/components/schemas/CollectionLinkPayload"
+      }
+    },
+    "/api/saved-views": {
+      "POST": {
+        "$ref": "#/components/schemas/SavedViewPayload"
+      }
+    },
+    "/api/run-profiles": {
+      "POST": {
+        "$ref": "#/components/schemas/RunProfilePayload"
+      }
+    },
+    "/api/context-stack": {
+      "PUT": {
+        "$ref": "#/components/schemas/ContextStackPayload"
+      }
+    },
+    "/api/favorites": {
+      "POST": {
+        "$ref": "#/components/schemas/FavoritePayload"
+      }
+    },
+    "/api/issues": {
+      "POST": {
+        "$ref": "#/components/schemas/IssuePayload"
+      }
+    },
+    "/api/preferences": {
+      "PUT": {
+        "$ref": "#/components/schemas/PreferencePayload"
+      }
+    },
+    "/api/projects/world-link": {
+      "POST": {
+        "$ref": "#/components/schemas/ProjectWorldLinkPayload"
+      }
+    },
+    "/api/state-proposals": {
+      "POST": {
+        "$ref": "#/components/schemas/StateProposalPayload"
+      }
+    },
+    "/api/story-lab/sheet-proposals": {
+      "POST": {
+        "$ref": "#/components/schemas/StoryLabSheetProposalPayload"
+      }
+    },
+    "/api/story-lab/sheet-proposals/{change_id}/apply": {
+      "POST": {
+        "$ref": "#/components/schemas/StoryLabSheetApplyPayload"
+      }
+    },
+    "/api/story-lab/sheet-proposal-bundles/apply": {
+      "POST": {
+        "$ref": "#/components/schemas/StoryLabSheetBundleApplyPayload"
+      }
+    },
+    "/api/library/entity-merge/preview": {
+      "POST": {
+        "$ref": "#/components/schemas/EntityFamilyMergePayload"
+      }
+    },
+    "/api/library/entity-merge": {
+      "POST": {
+        "$ref": "#/components/schemas/EntityFamilyMergePayload"
+      }
+    },
+    "/api/quick-create/preview": {
+      "POST": {
+        "$ref": "#/components/schemas/QuickCreatePayload"
+      }
+    },
+    "/api/quick-create": {
+      "POST": {
+        "$ref": "#/components/schemas/QuickCreatePayload"
+      }
+    },
+    "/api/projects/{project_id}/manifest/refs": {
+      "POST": {
+        "$ref": "#/components/schemas/ManifestRefPayload"
+      }
+    },
+    "/api/projects/{project_id}/overlays": {
+      "POST": {
+        "$ref": "#/components/schemas/ProjectOverlayPayload"
+      }
+    },
+    "/api/projects/{project_id}/active-scene": {
+      "PUT": {
+        "$ref": "#/components/schemas/ActiveScenePayload"
+      }
+    },
+    "/api/projects/{project_id}/scene-cards/{document_id}": {
+      "PUT": {
+        "$ref": "#/components/schemas/SceneCardPayload"
+      }
+    },
+    "/api/projects/{project_id}/staged-changes": {
+      "POST": {
+        "$ref": "#/components/schemas/StagedChangePayload"
+      }
+    },
+    "/api/staged-changes/{change_id}/resolve": {
+      "POST": {
+        "$ref": "#/components/schemas/StagedResolvePayload"
+      }
+    },
+    "/api/timeline": {
+      "POST": {
+        "$ref": "#/components/schemas/TimelineEventPayload"
+      }
+    },
+    "/api/projects/{project_id}/context-recipes": {
+      "POST": {
+        "$ref": "#/components/schemas/ContextRecipePayload"
+      }
+    },
+    "/api/worlds": {
+      "POST": {
+        "$ref": "#/components/schemas/WorldPayload"
+      }
+    },
+    "/api/worlds/{world_id}": {
+      "PATCH": {
+        "$ref": "#/components/schemas/WorldPatchPayload"
+      }
+    },
+    "/api/worlds/{world_id}/fork": {
+      "POST": {
+        "$ref": "#/components/schemas/WorldPayload"
+      }
+    },
+    "/api/branches": {
+      "POST": {
+        "$ref": "#/components/schemas/BranchPayload"
+      }
+    },
+    "/api/branches/{branch_id}": {
+      "PATCH": {
+        "$ref": "#/components/schemas/BranchPatchPayload"
+      }
+    },
+    "/api/branches/{source_branch_id}/merge": {
+      "POST": {
+        "$ref": "#/components/schemas/BranchMergePayload"
+      }
+    },
+    "/api/folders": {
+      "POST": {
+        "$ref": "#/components/schemas/FolderPayload"
+      }
+    },
+    "/api/folders/{folder_id}": {
+      "PATCH": {
+        "$ref": "#/components/schemas/FolderPatchPayload"
+      }
+    },
+    "/api/documents": {
+      "POST": {
+        "$ref": "#/components/schemas/DocumentPayload"
+      }
+    },
+    "/api/documents/{document_id}": {
+      "PATCH": {
+        "$ref": "#/components/schemas/DocumentPatchPayload"
+      }
+    },
+    "/api/entities/families": {
+      "POST": {
+        "$ref": "#/components/schemas/EntityFamilyPayload"
+      }
+    },
+    "/api/entities/families/{family_id}": {
+      "PATCH": {
+        "$ref": "#/components/schemas/EntityFamilyPatchPayload"
+      }
+    },
+    "/api/entities/variants": {
+      "POST": {
+        "$ref": "#/components/schemas/EntityVariantPayload"
+      }
+    },
+    "/api/entities/variants/{variant_id}": {
+      "PATCH": {
+        "$ref": "#/components/schemas/EntityVariantPatchPayload"
+      }
+    },
+    "/api/relationships": {
+      "POST": {
+        "$ref": "#/components/schemas/RelationshipPayload"
+      }
+    },
+    "/api/relationships/{relationship_id}": {
+      "PATCH": {
+        "$ref": "#/components/schemas/RelationshipPatchPayload"
+      }
+    },
+    "/api/templates": {
+      "POST": {
+        "$ref": "#/components/schemas/TemplatePayload"
+      }
+    },
+    "/api/scenes/dependencies": {
+      "POST": {
+        "$ref": "#/components/schemas/SceneDependencyPayload"
+      }
+    },
+    "/api/conflicts": {
+      "POST": {
+        "$ref": "#/components/schemas/ConflictPayload"
+      }
+    },
+    "/api/conflicts/{conflict_id}/resolve": {
+      "POST": {
+        "$ref": "#/components/schemas/ConflictResolutionPayload"
+      }
+    },
+    "/api/tags": {
+      "POST": {
+        "$ref": "#/components/schemas/TagPayload"
+      }
+    },
+    "/api/tags/{tag_id}/link": {
+      "POST": {
+        "$ref": "#/components/schemas/TagLinkPayload"
+      }
+    },
+    "/api/facts": {
+      "POST": {
+        "$ref": "#/components/schemas/FactPayload"
+      }
+    },
+    "/api/canon/promote": {
+      "POST": {
+        "$ref": "#/components/schemas/FactPayload"
+      }
+    },
+    "/api/retcon/preview": {
+      "POST": {
+        "$ref": "#/components/schemas/RetconPayload"
+      }
+    },
+    "/api/retcon/apply": {
+      "POST": {
+        "$ref": "#/components/schemas/RetconPayload"
+      }
+    },
+    "/api/revisions/{revision_id}/restore": {
+      "POST": {
+        "$ref": "#/components/schemas/RevisionRestorePayload"
+      }
+    },
+    "/api/snapshots": {
+      "POST": {
+        "$ref": "#/components/schemas/SnapshotPayload"
+      }
+    },
+    "/api/snapshots/{snapshot_id}/restore": {
+      "POST": {
+        "$ref": "#/components/schemas/RestoreSnapshotPayload"
+      }
+    },
+    "/api/context/pins": {
+      "POST": {
+        "$ref": "#/components/schemas/ContextPinPayload"
+      }
+    },
+    "/api/user-profile": {
+      "PUT": {
+        "$ref": "#/components/schemas/UserProfilePayload"
+      }
+    },
+    "/api/user-profile/extract": {
+      "POST": {
+        "$ref": "#/components/schemas/ProfileExtractPayload"
+      }
+    },
+    "/api/user-profile/entity": {
+      "POST": {
+        "$ref": "#/components/schemas/UserEntityPayload"
+      }
+    },
+    "/api/presence-bindings/{scope_type}/{scope_id}": {
+      "PUT": {
+        "$ref": "#/components/schemas/PresenceBindingPayload"
+      }
+    },
+    "/api/conversation/blueprint/extract": {
+      "POST": {
+        "$ref": "#/components/schemas/BlueprintExtractPayload"
+      }
+    },
+    "/api/conversation/promote-presence": {
+      "POST": {
+        "$ref": "#/components/schemas/PresencePromotionPayload"
+      }
+    },
+    "/api/sessions/{session_id}": {
+      "PATCH": {
+        "$ref": "#/components/schemas/SessionPatchPayload"
+      }
+    },
+    "/api/sessions/{session_id}/fork": {
+      "POST": {
+        "$ref": "#/components/schemas/SessionForkPayload"
+      }
+    },
+    "/api/turns/{turn_id}/feedback": {
+      "POST": {
+        "$ref": "#/components/schemas/FeedbackPayload"
+      }
+    },
+    "/api/contract": {
+      "POST": {
+        "$ref": "#/components/schemas/ContractPayload"
+      }
+    },
+    "/api/analyze": {
+      "POST": {
+        "$ref": "#/components/schemas/PromptPayload"
+      }
+    },
+    "/api/generate/stream": {
+      "POST": {
+        "$ref": "#/components/schemas/PromptPayload"
+      }
+    },
+    "/api/generate": {
+      "POST": {
+        "$ref": "#/components/schemas/PromptPayload"
+      }
+    },
+    "/api/ablation": {
+      "POST": {
+        "$ref": "#/components/schemas/AblationPayload"
+      }
+    },
+    "/api/save": {
+      "POST": {
+        "$ref": "#/components/schemas/SavePayload"
+      }
+    },
+    "/api/media": {
+      "POST": {
+        "$ref": "#/components/schemas/MediaCreatePayload"
+      }
+    },
+    "/api/media/{media_id}": {
+      "PATCH": {
+        "$ref": "#/components/schemas/MediaPatchPayload"
+      }
+    },
+    "/api/media/{media_id}/describe": {
+      "POST": {
+        "$ref": "#/components/schemas/MediaDescribePayload"
+      }
+    }
+  },
+  "schemas": {
+    "AblationPayload": {
+      "properties": {
+        "server_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Server Url"
+        },
+        "api_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Api Key"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Model"
+        },
+        "gpu_ratio": {
+          "type": "number",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Gpu Ratio",
+          "default": 1.0
+        },
+        "context_length": {
+          "type": "integer",
+          "exclusiveMinimum": 0.0,
+          "title": "Context Length",
+          "default": 32768
+        },
+        "input_mode": {
+          "type": "string",
+          "title": "Input Mode",
+          "default": "smart_hybrid"
+        },
+        "reasoning": {
+          "type": "string",
+          "title": "Reasoning",
+          "default": "off"
+        },
+        "projection_mode": {
+          "type": "string",
+          "title": "Projection Mode",
+          "default": "balanced"
+        },
+        "temperature": {
+          "type": "number",
+          "maximum": 2.0,
+          "minimum": 0.0,
+          "title": "Temperature",
+          "default": 0.8
+        },
+        "top_p": {
+          "type": "number",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Top P",
+          "default": 0.95
+        },
+        "top_k": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Top K",
+          "default": 40
+        },
+        "min_p": {
+          "type": "number",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Min P",
+          "default": 0.0
+        },
+        "repeat_penalty": {
+          "type": "number",
+          "exclusiveMinimum": 0.0,
+          "title": "Repeat Penalty",
+          "default": 1.05
+        },
+        "visible_output_tokens": {
+          "type": "integer",
+          "exclusiveMinimum": 0.0,
+          "title": "Visible Output Tokens",
+          "default": 4096
+        },
+        "reasoning_reserve_tokens": {
+          "type": "integer",
+          "minimum": 0.0,
+          "title": "Reasoning Reserve Tokens",
+          "default": 4096
+        },
+        "generation_mode": {
+          "type": "string",
+          "title": "Generation Mode",
+          "default": "single"
+        },
+        "beat_count": {
+          "type": "integer",
+          "maximum": 20.0,
+          "minimum": 1.0,
+          "title": "Beat Count",
+          "default": 4
+        },
+        "beat_tokens": {
+          "type": "integer",
+          "minimum": 256.0,
+          "title": "Beat Tokens",
+          "default": 2048
+        },
+        "total_story_target_tokens": {
+          "type": "integer",
+          "minimum": 256.0,
+          "title": "Total Story Target Tokens",
+          "default": 8192
+        },
+        "prompt": {
+          "type": "string",
+          "title": "Prompt"
+        },
+        "timezone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Timezone"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Session Id"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "folder_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Folder Id"
+        },
+        "references": {
+          "items": {
+            "$ref": "#/components/schemas/ReferencePayload"
+          },
+          "type": "array",
+          "title": "References"
+        },
+        "context_recipe_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Context Recipe Id"
+        },
+        "context_lens": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Context Lens"
+        },
+        "world_time": {
+          "title": "World Time"
+        },
+        "story_order": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Story Order"
+        },
+        "pov_variant_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Pov Variant Id"
+        },
+        "scratch_mode": {
+          "type": "boolean",
+          "title": "Scratch Mode",
+          "default": false
+        },
+        "conversation_mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Conversation Mode"
+        },
+        "conversation_profile": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Conversation Profile"
+        },
+        "images": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "maxItems": 4,
+          "title": "Images"
+        },
+        "conditions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Conditions"
+        }
+      },
+      "type": "object",
+      "required": [
+        "prompt"
+      ],
+      "title": "AblationPayload"
+    },
+    "ActiveScenePayload": {
+      "properties": {
+        "document_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Document Id"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "pov_variant_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Pov Variant Id"
+        },
+        "location_variant_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Location Variant Id"
+        },
+        "participants": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Participants"
+        },
+        "narrative_time": {
+          "type": "string",
+          "title": "Narrative Time",
+          "default": ""
+        },
+        "notes": {
+          "type": "string",
+          "title": "Notes",
+          "default": ""
+        }
+      },
+      "type": "object",
+      "title": "ActiveScenePayload"
+    },
+    "AliasPayload": {
+      "properties": {
+        "resource_type": {
+          "type": "string",
+          "title": "Resource Type"
+        },
+        "resource_id": {
+          "type": "string",
+          "title": "Resource Id"
+        },
+        "alias": {
+          "type": "string",
+          "title": "Alias"
+        }
+      },
+      "type": "object",
+      "required": [
+        "resource_type",
+        "resource_id",
+        "alias"
+      ],
+      "title": "AliasPayload"
+    },
+    "BlueprintExtractPayload": {
+      "properties": {
+        "text": {
+          "type": "string",
+          "title": "Text"
+        },
+        "current": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Current"
+        }
+      },
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "title": "BlueprintExtractPayload"
+    },
+    "BranchMergePayload": {
+      "properties": {
+        "target_branch_id": {
+          "type": "string",
+          "title": "Target Branch Id"
+        },
+        "changes": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "array",
+          "title": "Changes"
+        },
+        "note": {
+          "type": "string",
+          "title": "Note",
+          "default": "selective branch merge"
+        }
+      },
+      "type": "object",
+      "required": [
+        "target_branch_id"
+      ],
+      "title": "BranchMergePayload"
+    },
+    "BranchPatchPayload": {
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Name"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Kind"
+        },
+        "canon_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Canon Status"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Description"
+        }
+      },
+      "type": "object",
+      "title": "BranchPatchPayload"
+    },
+    "BranchPayload": {
+      "properties": {
+        "world_id": {
+          "type": "string",
+          "title": "World Id"
+        },
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "parent_branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parent Branch Id"
+        },
+        "kind": {
+          "type": "string",
+          "title": "Kind",
+          "default": "sandbox"
+        },
+        "canon_status": {
+          "type": "string",
+          "title": "Canon Status",
+          "default": "what_if"
+        },
+        "description": {
+          "type": "string",
+          "title": "Description",
+          "default": ""
+        }
+      },
+      "type": "object",
+      "required": [
+        "world_id",
+        "name"
+      ],
+      "title": "BranchPayload"
+    },
+    "CollectionLinkPayload": {
+      "properties": {
+        "resource_type": {
+          "type": "string",
+          "title": "Resource Type"
+        },
+        "resource_id": {
+          "type": "string",
+          "title": "Resource Id"
+        },
+        "sort_order": {
+          "type": "integer",
+          "title": "Sort Order",
+          "default": 0
+        }
+      },
+      "type": "object",
+      "required": [
+        "resource_type",
+        "resource_id"
+      ],
+      "title": "CollectionLinkPayload"
+    },
+    "CollectionPayload": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "description": {
+          "type": "string",
+          "title": "Description",
+          "default": ""
+        },
+        "icon": {
+          "type": "string",
+          "title": "Icon",
+          "default": "◇"
+        },
+        "scope_type": {
+          "type": "string",
+          "title": "Scope Type",
+          "default": "world_bible"
+        },
+        "scope_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Scope Id"
+        }
+      },
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "title": "CollectionPayload"
+    },
+    "ConflictPayload": {
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "title": "Project Id"
+        },
+        "owner_type": {
+          "type": "string",
+          "title": "Owner Type"
+        },
+        "owner_id": {
+          "type": "string",
+          "title": "Owner Id"
+        },
+        "path": {
+          "type": "string",
+          "title": "Path"
+        },
+        "left": {
+          "title": "Left"
+        },
+        "right": {
+          "title": "Right"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "conflict_class": {
+          "type": "string",
+          "title": "Conflict Class",
+          "default": "hard_contradiction"
+        }
+      },
+      "type": "object",
+      "required": [
+        "project_id",
+        "owner_type",
+        "owner_id",
+        "path",
+        "left",
+        "right"
+      ],
+      "title": "ConflictPayload"
+    },
+    "ConflictResolutionPayload": {
+      "properties": {
+        "resolution_type": {
+          "type": "string",
+          "title": "Resolution Type"
+        },
+        "chosen_value": {
+          "title": "Chosen Value"
+        },
+        "note": {
+          "type": "string",
+          "title": "Note",
+          "default": ""
+        }
+      },
+      "type": "object",
+      "required": [
+        "resolution_type"
+      ],
+      "title": "ConflictResolutionPayload"
+    },
+    "ContextPinPayload": {
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "title": "Project Id"
+        },
+        "resource_type": {
+          "type": "string",
+          "title": "Resource Type"
+        },
+        "resource_id": {
+          "type": "string",
+          "title": "Resource Id"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "scope": {
+          "type": "string",
+          "title": "Scope",
+          "default": "world"
+        },
+        "priority": {
+          "type": "integer",
+          "title": "Priority",
+          "default": 1
+        }
+      },
+      "type": "object",
+      "required": [
+        "project_id",
+        "resource_type",
+        "resource_id"
+      ],
+      "title": "ContextPinPayload"
+    },
+    "ContextRecipePayload": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "description": {
+          "type": "string",
+          "title": "Description",
+          "default": ""
+        },
+        "recipe": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Recipe"
+        }
+      },
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "title": "ContextRecipePayload"
+    },
+    "ContextStackPayload": {
+      "properties": {
+        "stack_id": {
+          "type": "string",
+          "title": "Stack Id",
+          "default": "default"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "scene_document_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Scene Document Id"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Session Id"
+        },
+        "recipe_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Recipe Id"
+        },
+        "run_profile_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Run Profile Id"
+        },
+        "references": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "array",
+          "title": "References"
+        },
+        "overrides": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Overrides"
+        }
+      },
+      "type": "object",
+      "title": "ContextStackPayload"
+    },
+    "ContinuityConflictResolutionPayload": {
+      "properties": {
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Session Id"
+        },
+        "story_order": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Story Order"
+        },
+        "world_time": {
+          "title": "World Time"
+        },
+        "note": {
+          "type": "string",
+          "title": "Note",
+          "default": ""
+        },
+        "action": {
+          "type": "string",
+          "title": "Action"
+        },
+        "from_proposition_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "From Proposition Id"
+        },
+        "to_proposition_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "To Proposition Id"
+        }
+      },
+      "type": "object",
+      "required": [
+        "action"
+      ],
+      "title": "ContinuityConflictResolutionPayload"
+    },
+    "ContractPayload": {
+      "properties": {
+        "content": {
+          "type": "string",
+          "title": "Content"
+        }
+      },
+      "type": "object",
+      "required": [
+        "content"
+      ],
+      "title": "ContractPayload"
+    },
+    "DiscoveryDecisionPayload": {
+      "properties": {
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Session Id"
+        },
+        "story_order": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Story Order"
+        },
+        "world_time": {
+          "title": "World Time"
+        },
+        "note": {
+          "type": "string",
+          "title": "Note",
+          "default": ""
+        }
+      },
+      "type": "object",
+      "title": "DiscoveryDecisionPayload"
+    },
+    "DiscoveryEditPayload": {
+      "properties": {
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Session Id"
+        },
+        "story_order": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Story Order"
+        },
+        "world_time": {
+          "title": "World Time"
+        },
+        "note": {
+          "type": "string",
+          "title": "Note",
+          "default": ""
+        },
+        "value": {
+          "title": "Value"
+        },
+        "mode": {
+          "type": "string",
+          "title": "Mode",
+          "default": "correction"
+        }
+      },
+      "type": "object",
+      "required": [
+        "value"
+      ],
+      "title": "DiscoveryEditPayload"
+    },
+    "DocumentPatchPayload": {
+      "properties": {
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Title"
+        },
+        "content": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Content"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Status"
+        },
+        "folder_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Folder Id"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "sort_order": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Sort Order"
+        },
+        "note": {
+          "type": "string",
+          "title": "Note",
+          "default": "updated"
+        }
+      },
+      "type": "object",
+      "title": "DocumentPatchPayload"
+    },
+    "DocumentPayload": {
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "title": "Project Id"
+        },
+        "title": {
+          "type": "string",
+          "title": "Title"
+        },
+        "document_type": {
+          "type": "string",
+          "title": "Document Type",
+          "default": "scene"
+        },
+        "content": {
+          "type": "string",
+          "title": "Content",
+          "default": ""
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "folder_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Folder Id"
+        },
+        "status": {
+          "type": "string",
+          "title": "Status",
+          "default": "planned"
+        }
+      },
+      "type": "object",
+      "required": [
+        "project_id",
+        "title"
+      ],
+      "title": "DocumentPayload"
+    },
+    "EntityFamilyMergePayload": {
+      "properties": {
+        "source_family_id": {
+          "type": "string",
+          "title": "Source Family Id"
+        },
+        "target_family_id": {
+          "type": "string",
+          "title": "Target Family Id"
+        }
+      },
+      "type": "object",
+      "required": [
+        "source_family_id",
+        "target_family_id"
+      ],
+      "title": "EntityFamilyMergePayload"
+    },
+    "EntityFamilyPatchPayload": {
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Name"
+        },
+        "folder_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Folder Id"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Description"
+        },
+        "shared_core": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Shared Core"
+        },
+        "note": {
+          "type": "string",
+          "title": "Note",
+          "default": "updated"
+        }
+      },
+      "type": "object",
+      "title": "EntityFamilyPatchPayload"
+    },
+    "EntityFamilyPayload": {
+      "properties": {
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        },
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "folder_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Folder Id"
+        },
+        "entity_type": {
+          "type": "string",
+          "title": "Entity Type",
+          "default": "character"
+        },
+        "description": {
+          "type": "string",
+          "title": "Description",
+          "default": ""
+        },
+        "shared_core": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Shared Core"
+        },
+        "create_variant_in_world": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Create Variant In World"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        }
+      },
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "title": "EntityFamilyPayload"
+    },
+    "EntityVariantPatchPayload": {
+      "properties": {
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Display Name"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Summary"
+        },
+        "canon_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Canon Status"
+        },
+        "attributes": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Attributes"
+        },
+        "voice": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Voice"
+        },
+        "knowledge": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Knowledge"
+        },
+        "beliefs": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Beliefs"
+        },
+        "current_state": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Current State"
+        },
+        "note": {
+          "type": "string",
+          "title": "Note",
+          "default": "updated"
+        }
+      },
+      "type": "object",
+      "title": "EntityVariantPatchPayload"
+    },
+    "EntityVariantPayload": {
+      "properties": {
+        "family_id": {
+          "type": "string",
+          "title": "Family Id"
+        },
+        "world_id": {
+          "type": "string",
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Display Name"
+        },
+        "summary": {
+          "type": "string",
+          "title": "Summary",
+          "default": ""
+        },
+        "canon_status": {
+          "type": "string",
+          "title": "Canon Status",
+          "default": "draft"
+        },
+        "inherit_from_variant_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Inherit From Variant Id"
+        },
+        "inherit_sections": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Inherit Sections"
+        },
+        "attributes": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Attributes"
+        },
+        "voice": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Voice"
+        },
+        "knowledge": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Knowledge"
+        },
+        "beliefs": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Beliefs"
+        },
+        "current_state": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Current State"
+        }
+      },
+      "type": "object",
+      "required": [
+        "family_id",
+        "world_id"
+      ],
+      "title": "EntityVariantPayload"
+    },
+    "FactPayload": {
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "title": "Project Id"
+        },
+        "owner_type": {
+          "type": "string",
+          "title": "Owner Type"
+        },
+        "owner_id": {
+          "type": "string",
+          "title": "Owner Id"
+        },
+        "path": {
+          "type": "string",
+          "title": "Path"
+        },
+        "value": {
+          "title": "Value"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "status": {
+          "type": "string",
+          "title": "Status",
+          "default": "draft"
+        },
+        "authority": {
+          "type": "string",
+          "title": "Authority",
+          "default": "user_explicit"
+        },
+        "source_type": {
+          "type": "string",
+          "title": "Source Type",
+          "default": "manual"
+        },
+        "source_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Id"
+        }
+      },
+      "type": "object",
+      "required": [
+        "project_id",
+        "owner_type",
+        "owner_id",
+        "path",
+        "value"
+      ],
+      "title": "FactPayload"
+    },
+    "FavoritePayload": {
+      "properties": {
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        },
+        "resource_type": {
+          "type": "string",
+          "title": "Resource Type"
+        },
+        "resource_id": {
+          "type": "string",
+          "title": "Resource Id"
+        },
+        "label": {
+          "type": "string",
+          "title": "Label",
+          "default": ""
+        }
+      },
+      "type": "object",
+      "required": [
+        "resource_type",
+        "resource_id"
+      ],
+      "title": "FavoritePayload"
+    },
+    "FeedbackPayload": {
+      "properties": {
+        "status": {
+          "type": "string",
+          "title": "Status"
+        },
+        "issues": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Issues"
+        },
+        "note": {
+          "type": "string",
+          "title": "Note",
+          "default": ""
+        },
+        "edited_story": {
+          "type": "string",
+          "title": "Edited Story",
+          "default": ""
+        }
+      },
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "title": "FeedbackPayload"
+    },
+    "FolderPatchPayload": {
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Name"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parent Id"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Kind"
+        },
+        "sort_order": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Sort Order"
+        }
+      },
+      "type": "object",
+      "title": "FolderPatchPayload"
+    },
+    "FolderPayload": {
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "title": "Project Id"
+        },
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parent Id"
+        },
+        "kind": {
+          "type": "string",
+          "title": "Kind",
+          "default": "mixed"
+        }
+      },
+      "type": "object",
+      "required": [
+        "project_id",
+        "name"
+      ],
+      "title": "FolderPayload"
+    },
+    "HTTPValidationError": {
+      "properties": {
+        "detail": {
+          "items": {
+            "$ref": "#/components/schemas/ValidationError"
+          },
+          "type": "array",
+          "title": "Detail"
+        }
+      },
+      "type": "object",
+      "title": "HTTPValidationError"
+    },
+    "IssuePayload": {
+      "properties": {
+        "issue_type": {
+          "type": "string",
+          "title": "Issue Type"
+        },
+        "title": {
+          "type": "string",
+          "title": "Title"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "severity": {
+          "type": "string",
+          "title": "Severity",
+          "default": "warning"
+        },
+        "description": {
+          "type": "string",
+          "title": "Description",
+          "default": ""
+        },
+        "resource_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Resource Type"
+        },
+        "resource_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Resource Id"
+        },
+        "payload": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Payload"
+        }
+      },
+      "type": "object",
+      "required": [
+        "issue_type",
+        "title"
+      ],
+      "title": "IssuePayload"
+    },
+    "LifecyclePayload": {
+      "properties": {
+        "resource_type": {
+          "type": "string",
+          "title": "Resource Type"
+        },
+        "resource_id": {
+          "type": "string",
+          "title": "Resource Id"
+        },
+        "previous_state": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Previous State"
+        }
+      },
+      "type": "object",
+      "required": [
+        "resource_type",
+        "resource_id"
+      ],
+      "title": "LifecyclePayload"
+    },
+    "ManifestRefPayload": {
+      "properties": {
+        "resource_type": {
+          "type": "string",
+          "title": "Resource Type"
+        },
+        "resource_id": {
+          "type": "string",
+          "title": "Resource Id"
+        },
+        "label": {
+          "type": "string",
+          "title": "Label",
+          "default": ""
+        },
+        "priority": {
+          "type": "integer",
+          "title": "Priority",
+          "default": 1
+        }
+      },
+      "type": "object",
+      "required": [
+        "resource_type",
+        "resource_id"
+      ],
+      "title": "ManifestRefPayload"
+    },
+    "ManuscriptImportPayload": {
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "title": "Project Id"
+        },
+        "title": {
+          "type": "string",
+          "title": "Title",
+          "default": "Imported manuscript"
+        },
+        "text": {
+          "type": "string",
+          "title": "Text"
+        },
+        "folder_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Folder Id"
+        },
+        "split_headings": {
+          "type": "boolean",
+          "title": "Split Headings",
+          "default": true
+        },
+        "default_type": {
+          "type": "string",
+          "title": "Default Type",
+          "default": "scene"
+        }
+      },
+      "type": "object",
+      "required": [
+        "project_id",
+        "text"
+      ],
+      "title": "ManuscriptImportPayload"
+    },
+    "MediaCreatePayload": {
+      "properties": {
+        "resource_type": {
+          "type": "string",
+          "title": "Resource Type"
+        },
+        "resource_id": {
+          "type": "string",
+          "title": "Resource Id"
+        },
+        "filename": {
+          "type": "string",
+          "title": "Filename",
+          "default": "image"
+        },
+        "data_url": {
+          "type": "string",
+          "title": "Data Url"
+        },
+        "kind": {
+          "type": "string",
+          "title": "Kind",
+          "default": "reference"
+        },
+        "caption": {
+          "type": "string",
+          "title": "Caption",
+          "default": ""
+        },
+        "is_cover": {
+          "type": "boolean",
+          "title": "Is Cover",
+          "default": false
+        },
+        "sort_order": {
+          "type": "integer",
+          "title": "Sort Order",
+          "default": 0
+        }
+      },
+      "type": "object",
+      "required": [
+        "resource_type",
+        "resource_id",
+        "data_url"
+      ],
+      "title": "MediaCreatePayload"
+    },
+    "MediaDescribePayload": {
+      "properties": {
+        "model": {
+          "type": "string",
+          "title": "Model",
+          "default": ""
+        },
+        "server_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Server Url"
+        },
+        "api_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Api Key"
+        },
+        "prompt": {
+          "type": "string",
+          "title": "Prompt",
+          "default": ""
+        }
+      },
+      "type": "object",
+      "title": "MediaDescribePayload"
+    },
+    "MediaPatchPayload": {
+      "properties": {
+        "kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Kind"
+        },
+        "caption": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Caption"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Description"
+        },
+        "description_source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Description Source"
+        },
+        "is_cover": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Is Cover"
+        },
+        "sort_order": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Sort Order"
+        }
+      },
+      "type": "object",
+      "title": "MediaPatchPayload"
+    },
+    "MemoryBackfillPayload": {
+      "properties": {
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        },
+        "background": {
+          "type": "boolean",
+          "title": "Background",
+          "default": true
+        }
+      },
+      "type": "object",
+      "title": "MemoryBackfillPayload"
+    },
+    "MemoryQueryPayload": {
+      "properties": {
+        "query": {
+          "type": "string",
+          "title": "Query"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Session Id"
+        },
+        "current_turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Current Turn Id"
+        },
+        "world_time": {
+          "title": "World Time"
+        },
+        "story_order": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Story Order"
+        },
+        "pov_variant_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Pov Variant Id"
+        },
+        "context_lens": {
+          "type": "string",
+          "title": "Context Lens",
+          "default": "scene"
+        },
+        "retrieval_mode": {
+          "type": "string",
+          "title": "Retrieval Mode",
+          "default": "debug"
+        },
+        "explicit_references": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "array",
+          "title": "Explicit References"
+        },
+        "explicit_cross_scope_sources": {
+          "items": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "type": "array",
+          "title": "Explicit Cross Scope Sources"
+        },
+        "allow_scratch": {
+          "type": "boolean",
+          "title": "Allow Scratch",
+          "default": false
+        },
+        "allow_future_author_knowledge": {
+          "type": "boolean",
+          "title": "Allow Future Author Knowledge",
+          "default": false
+        }
+      },
+      "type": "object",
+      "required": [
+        "query"
+      ],
+      "title": "MemoryQueryPayload"
+    },
+    "MemoryRefreshPayload": {
+      "properties": {
+        "document_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Document Id"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Turn Id"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        }
+      },
+      "type": "object",
+      "title": "MemoryRefreshPayload"
+    },
+    "ModelsPayload": {
+      "properties": {
+        "server_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Server Url"
+        },
+        "api_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Api Key"
+        }
+      },
+      "type": "object",
+      "title": "ModelsPayload"
+    },
+    "PreferencePayload": {
+      "properties": {
+        "scope_type": {
+          "type": "string",
+          "title": "Scope Type",
+          "default": "app"
+        },
+        "scope_id": {
+          "type": "string",
+          "title": "Scope Id",
+          "default": "default"
+        },
+        "key": {
+          "type": "string",
+          "title": "Key"
+        },
+        "value": {
+          "title": "Value"
+        }
+      },
+      "type": "object",
+      "required": [
+        "key",
+        "value"
+      ],
+      "title": "PreferencePayload"
+    },
+    "PresenceBindingPayload": {
+      "properties": {
+        "profile": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Profile"
+        }
+      },
+      "type": "object",
+      "title": "PresenceBindingPayload"
+    },
+    "PresencePromotionPayload": {
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "title": "Project Id"
+        },
+        "world_id": {
+          "type": "string",
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "blueprint": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Blueprint"
+        }
+      },
+      "type": "object",
+      "required": [
+        "project_id",
+        "world_id",
+        "name"
+      ],
+      "title": "PresencePromotionPayload"
+    },
+    "ProfileExtractPayload": {
+      "properties": {
+        "text": {
+          "type": "string",
+          "maxLength": 20000,
+          "minLength": 1,
+          "title": "Text"
+        }
+      },
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "title": "ProfileExtractPayload"
+    },
+    "ProjectOverlayPayload": {
+      "properties": {
+        "owner_type": {
+          "type": "string",
+          "title": "Owner Type"
+        },
+        "owner_id": {
+          "type": "string",
+          "title": "Owner Id"
+        },
+        "path": {
+          "type": "string",
+          "title": "Path"
+        },
+        "value": {
+          "title": "Value"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        }
+      },
+      "type": "object",
+      "required": [
+        "owner_type",
+        "owner_id",
+        "path",
+        "value"
+      ],
+      "title": "ProjectOverlayPayload"
+    },
+    "ProjectPatchPayload": {
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Description"
+        },
+        "pinned": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Pinned"
+        },
+        "archived": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Archived"
+        },
+        "default_world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Default World Id"
+        },
+        "settings": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Settings"
+        }
+      },
+      "type": "object",
+      "title": "ProjectPatchPayload"
+    },
+    "ProjectPayload": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "description": {
+          "type": "string",
+          "title": "Description",
+          "default": ""
+        },
+        "settings": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Settings"
+        }
+      },
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "title": "ProjectPayload"
+    },
+    "ProjectWorldLinkPayload": {
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "title": "Project Id"
+        },
+        "world_id": {
+          "type": "string",
+          "title": "World Id"
+        },
+        "role": {
+          "type": "string",
+          "title": "Role",
+          "default": "reference"
+        }
+      },
+      "type": "object",
+      "required": [
+        "project_id",
+        "world_id"
+      ],
+      "title": "ProjectWorldLinkPayload"
+    },
+    "PromptPayload": {
+      "properties": {
+        "server_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Server Url"
+        },
+        "api_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Api Key"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Model"
+        },
+        "gpu_ratio": {
+          "type": "number",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Gpu Ratio",
+          "default": 1.0
+        },
+        "context_length": {
+          "type": "integer",
+          "exclusiveMinimum": 0.0,
+          "title": "Context Length",
+          "default": 32768
+        },
+        "input_mode": {
+          "type": "string",
+          "title": "Input Mode",
+          "default": "smart_hybrid"
+        },
+        "reasoning": {
+          "type": "string",
+          "title": "Reasoning",
+          "default": "off"
+        },
+        "projection_mode": {
+          "type": "string",
+          "title": "Projection Mode",
+          "default": "balanced"
+        },
+        "temperature": {
+          "type": "number",
+          "maximum": 2.0,
+          "minimum": 0.0,
+          "title": "Temperature",
+          "default": 0.8
+        },
+        "top_p": {
+          "type": "number",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Top P",
+          "default": 0.95
+        },
+        "top_k": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Top K",
+          "default": 40
+        },
+        "min_p": {
+          "type": "number",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Min P",
+          "default": 0.0
+        },
+        "repeat_penalty": {
+          "type": "number",
+          "exclusiveMinimum": 0.0,
+          "title": "Repeat Penalty",
+          "default": 1.05
+        },
+        "visible_output_tokens": {
+          "type": "integer",
+          "exclusiveMinimum": 0.0,
+          "title": "Visible Output Tokens",
+          "default": 4096
+        },
+        "reasoning_reserve_tokens": {
+          "type": "integer",
+          "minimum": 0.0,
+          "title": "Reasoning Reserve Tokens",
+          "default": 4096
+        },
+        "generation_mode": {
+          "type": "string",
+          "title": "Generation Mode",
+          "default": "single"
+        },
+        "beat_count": {
+          "type": "integer",
+          "maximum": 20.0,
+          "minimum": 1.0,
+          "title": "Beat Count",
+          "default": 4
+        },
+        "beat_tokens": {
+          "type": "integer",
+          "minimum": 256.0,
+          "title": "Beat Tokens",
+          "default": 2048
+        },
+        "total_story_target_tokens": {
+          "type": "integer",
+          "minimum": 256.0,
+          "title": "Total Story Target Tokens",
+          "default": 8192
+        },
+        "prompt": {
+          "type": "string",
+          "title": "Prompt"
+        },
+        "timezone": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Timezone"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Session Id"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "folder_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Folder Id"
+        },
+        "references": {
+          "items": {
+            "$ref": "#/components/schemas/ReferencePayload"
+          },
+          "type": "array",
+          "title": "References"
+        },
+        "context_recipe_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Context Recipe Id"
+        },
+        "context_lens": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Context Lens"
+        },
+        "world_time": {
+          "title": "World Time"
+        },
+        "story_order": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Story Order"
+        },
+        "pov_variant_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Pov Variant Id"
+        },
+        "scratch_mode": {
+          "type": "boolean",
+          "title": "Scratch Mode",
+          "default": false
+        },
+        "conversation_mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Conversation Mode"
+        },
+        "conversation_profile": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Conversation Profile"
+        },
+        "images": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "maxItems": 4,
+          "title": "Images"
+        }
+      },
+      "type": "object",
+      "required": [
+        "prompt"
+      ],
+      "title": "PromptPayload"
+    },
+    "QuickCreatePayload": {
+      "properties": {
+        "text": {
+          "type": "string",
+          "title": "Text"
+        },
+        "forced_kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Forced Kind"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "entity_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Entity Type"
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Name"
+        },
+        "attributes": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Attributes"
+        },
+        "shared_core": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Shared Core"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Description"
+        },
+        "document_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Document Type"
+        },
+        "folder_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Folder Id"
+        }
+      },
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "title": "QuickCreatePayload"
+    },
+    "ReferencePayload": {
+      "properties": {
+        "type": {
+          "type": "string",
+          "title": "Type"
+        },
+        "id": {
+          "type": "string",
+          "title": "Id"
+        },
+        "label": {
+          "type": "string",
+          "title": "Label",
+          "default": ""
+        },
+        "mode": {
+          "type": "string",
+          "title": "Mode",
+          "default": "context"
+        },
+        "selector": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Selector"
+        }
+      },
+      "type": "object",
+      "required": [
+        "type",
+        "id"
+      ],
+      "title": "ReferencePayload"
+    },
+    "RelationshipPatchPayload": {
+      "properties": {
+        "relation_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Relation Type"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Status"
+        },
+        "canon_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Canon Status"
+        },
+        "attributes": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Attributes"
+        },
+        "note": {
+          "type": "string",
+          "title": "Note",
+          "default": "updated"
+        }
+      },
+      "type": "object",
+      "title": "RelationshipPatchPayload"
+    },
+    "RelationshipPayload": {
+      "properties": {
+        "world_id": {
+          "type": "string",
+          "title": "World Id"
+        },
+        "subject_variant_id": {
+          "type": "string",
+          "title": "Subject Variant Id"
+        },
+        "object_variant_id": {
+          "type": "string",
+          "title": "Object Variant Id"
+        },
+        "relation_type": {
+          "type": "string",
+          "title": "Relation Type"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "status": {
+          "type": "string",
+          "title": "Status",
+          "default": "current"
+        },
+        "canon_status": {
+          "type": "string",
+          "title": "Canon Status",
+          "default": "draft"
+        },
+        "attributes": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Attributes"
+        }
+      },
+      "type": "object",
+      "required": [
+        "world_id",
+        "subject_variant_id",
+        "object_variant_id",
+        "relation_type"
+      ],
+      "title": "RelationshipPayload"
+    },
+    "RestoreSnapshotPayload": {
+      "properties": {
+        "branch_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Name"
+        }
+      },
+      "type": "object",
+      "title": "RestoreSnapshotPayload"
+    },
+    "RetconPayload": {
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "title": "Project Id"
+        },
+        "world_id": {
+          "type": "string",
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "owner_type": {
+          "type": "string",
+          "title": "Owner Type"
+        },
+        "owner_id": {
+          "type": "string",
+          "title": "Owner Id"
+        },
+        "path": {
+          "type": "string",
+          "title": "Path"
+        },
+        "new_value": {
+          "title": "New Value"
+        },
+        "note": {
+          "type": "string",
+          "title": "Note",
+          "default": ""
+        }
+      },
+      "type": "object",
+      "required": [
+        "project_id",
+        "world_id",
+        "owner_type",
+        "owner_id",
+        "path",
+        "new_value"
+      ],
+      "title": "RetconPayload"
+    },
+    "RevisionRestorePayload": {
+      "properties": {
+        "note": {
+          "type": "string",
+          "title": "Note",
+          "default": "restored in Arline Studio"
+        }
+      },
+      "type": "object",
+      "title": "RevisionRestorePayload"
+    },
+    "RunProfilePayload": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "description": {
+          "type": "string",
+          "title": "Description",
+          "default": ""
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        },
+        "profile": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Profile"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Id"
+        }
+      },
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "title": "RunProfilePayload"
+    },
+    "RuntimePayload": {
+      "properties": {
+        "server_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Server Url"
+        },
+        "api_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Api Key"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Model"
+        },
+        "gpu_ratio": {
+          "type": "number",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Gpu Ratio",
+          "default": 1.0
+        },
+        "context_length": {
+          "type": "integer",
+          "exclusiveMinimum": 0.0,
+          "title": "Context Length",
+          "default": 32768
+        },
+        "input_mode": {
+          "type": "string",
+          "title": "Input Mode",
+          "default": "smart_hybrid"
+        },
+        "reasoning": {
+          "type": "string",
+          "title": "Reasoning",
+          "default": "off"
+        },
+        "projection_mode": {
+          "type": "string",
+          "title": "Projection Mode",
+          "default": "balanced"
+        },
+        "temperature": {
+          "type": "number",
+          "maximum": 2.0,
+          "minimum": 0.0,
+          "title": "Temperature",
+          "default": 0.8
+        },
+        "top_p": {
+          "type": "number",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Top P",
+          "default": 0.95
+        },
+        "top_k": {
+          "type": "integer",
+          "minimum": 1.0,
+          "title": "Top K",
+          "default": 40
+        },
+        "min_p": {
+          "type": "number",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Min P",
+          "default": 0.0
+        },
+        "repeat_penalty": {
+          "type": "number",
+          "exclusiveMinimum": 0.0,
+          "title": "Repeat Penalty",
+          "default": 1.05
+        },
+        "visible_output_tokens": {
+          "type": "integer",
+          "exclusiveMinimum": 0.0,
+          "title": "Visible Output Tokens",
+          "default": 4096
+        },
+        "reasoning_reserve_tokens": {
+          "type": "integer",
+          "minimum": 0.0,
+          "title": "Reasoning Reserve Tokens",
+          "default": 4096
+        },
+        "generation_mode": {
+          "type": "string",
+          "title": "Generation Mode",
+          "default": "single"
+        },
+        "beat_count": {
+          "type": "integer",
+          "maximum": 20.0,
+          "minimum": 1.0,
+          "title": "Beat Count",
+          "default": 4
+        },
+        "beat_tokens": {
+          "type": "integer",
+          "minimum": 256.0,
+          "title": "Beat Tokens",
+          "default": 2048
+        },
+        "total_story_target_tokens": {
+          "type": "integer",
+          "minimum": 256.0,
+          "title": "Total Story Target Tokens",
+          "default": 8192
+        }
+      },
+      "type": "object",
+      "title": "RuntimePayload"
+    },
+    "SavePayload": {
+      "properties": {
+        "run_id": {
+          "type": "string",
+          "title": "Run Id"
+        }
+      },
+      "type": "object",
+      "required": [
+        "run_id"
+      ],
+      "title": "SavePayload"
+    },
+    "SavedViewPayload": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "scope_type": {
+          "type": "string",
+          "title": "Scope Type",
+          "default": "world_bible"
+        },
+        "scope_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Scope Id"
+        },
+        "resource_type": {
+          "type": "string",
+          "title": "Resource Type",
+          "default": "all"
+        },
+        "query": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Query"
+        }
+      },
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "title": "SavedViewPayload"
+    },
+    "SceneCardPayload": {
+      "properties": {
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "pov_variant_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Pov Variant Id"
+        },
+        "location_variant_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Location Variant Id"
+        },
+        "participants": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Participants"
+        },
+        "narrative_time": {
+          "type": "string",
+          "title": "Narrative Time",
+          "default": ""
+        },
+        "target_outcome": {
+          "type": "string",
+          "title": "Target Outcome",
+          "default": ""
+        },
+        "notes": {
+          "type": "string",
+          "title": "Notes",
+          "default": ""
+        },
+        "status": {
+          "type": "string",
+          "title": "Status",
+          "default": "planned"
+        },
+        "sort_order": {
+          "type": "number",
+          "title": "Sort Order",
+          "default": 0.0
+        }
+      },
+      "type": "object",
+      "title": "SceneCardPayload"
+    },
+    "SceneDependencyPayload": {
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "title": "Project Id"
+        },
+        "scene_document_id": {
+          "type": "string",
+          "title": "Scene Document Id"
+        },
+        "requirement_type": {
+          "type": "string",
+          "title": "Requirement Type"
+        },
+        "target_type": {
+          "type": "string",
+          "title": "Target Type"
+        },
+        "target_id": {
+          "type": "string",
+          "title": "Target Id"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "condition": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Condition"
+        }
+      },
+      "type": "object",
+      "required": [
+        "project_id",
+        "scene_document_id",
+        "requirement_type",
+        "target_type",
+        "target_id"
+      ],
+      "title": "SceneDependencyPayload"
+    },
+    "SessionForkPayload": {
+      "properties": {
+        "through_turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Through Turn Id"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Title"
+        }
+      },
+      "type": "object",
+      "title": "SessionForkPayload"
+    },
+    "SessionPatchPayload": {
+      "properties": {
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Title"
+        },
+        "pinned": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Pinned"
+        },
+        "archived": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Archived"
+        },
+        "project": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "folder_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Folder Id"
+        },
+        "session_kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Session Kind"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Tags"
+        },
+        "workspace_refs": {
+          "anyOf": [
+            {
+              "items": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Workspace Refs"
+        },
+        "scratch_mode": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Scratch Mode"
+        },
+        "conversation_mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Conversation Mode"
+        },
+        "conversation_profile": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Conversation Profile"
+        },
+        "world_fork_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Fork Id"
+        }
+      },
+      "type": "object",
+      "title": "SessionPatchPayload"
+    },
+    "SnapshotPayload": {
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "title": "Project Id"
+        },
+        "world_id": {
+          "type": "string",
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "name": {
+          "type": "string",
+          "title": "Name",
+          "default": "Snapshot"
+        },
+        "description": {
+          "type": "string",
+          "title": "Description",
+          "default": ""
+        }
+      },
+      "type": "object",
+      "required": [
+        "project_id",
+        "world_id"
+      ],
+      "title": "SnapshotPayload"
+    },
+    "StagedChangePayload": {
+      "properties": {
+        "owner_type": {
+          "type": "string",
+          "title": "Owner Type"
+        },
+        "owner_id": {
+          "type": "string",
+          "title": "Owner Id"
+        },
+        "path": {
+          "type": "string",
+          "title": "Path"
+        },
+        "proposed_value": {
+          "title": "Proposed Value"
+        },
+        "old_value": {
+          "title": "Old Value"
+        },
+        "confidence": {
+          "type": "number",
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "default": 0.5
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Session Id"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Turn Id"
+        },
+        "source_text": {
+          "type": "string",
+          "title": "Source Text",
+          "default": ""
+        }
+      },
+      "type": "object",
+      "required": [
+        "owner_type",
+        "owner_id",
+        "path",
+        "proposed_value"
+      ],
+      "title": "StagedChangePayload"
+    },
+    "StagedResolvePayload": {
+      "properties": {
+        "accept": {
+          "type": "boolean",
+          "title": "Accept"
+        }
+      },
+      "type": "object",
+      "required": [
+        "accept"
+      ],
+      "title": "StagedResolvePayload"
+    },
+    "StateProposalPayload": {
+      "properties": {
+        "text": {
+          "type": "string",
+          "title": "Text"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Session Id"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Turn Id"
+        }
+      },
+      "type": "object",
+      "required": [
+        "text"
+      ],
+      "title": "StateProposalPayload"
+    },
+    "StorageResetPayload": {
+      "properties": {
+        "mode": {
+          "type": "string",
+          "title": "Mode"
+        },
+        "confirmation": {
+          "type": "string",
+          "title": "Confirmation"
+        }
+      },
+      "type": "object",
+      "required": [
+        "mode",
+        "confirmation"
+      ],
+      "title": "StorageResetPayload"
+    },
+    "StoryLabSheetApplyPayload": {
+      "properties": {
+        "action": {
+          "type": "string",
+          "title": "Action",
+          "default": "accept"
+        },
+        "proposal": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Proposal"
+        },
+        "branch_name": {
+          "type": "string",
+          "title": "Branch Name",
+          "default": ""
+        },
+        "target_branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Target Branch Id"
+        }
+      },
+      "type": "object",
+      "title": "StoryLabSheetApplyPayload"
+    },
+    "StoryLabSheetBundleApplyPayload": {
+      "properties": {
+        "action": {
+          "type": "string",
+          "title": "Action",
+          "default": "accept"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/components/schemas/StoryLabSheetBundleItem"
+          },
+          "type": "array",
+          "title": "Items"
+        },
+        "branch_name": {
+          "type": "string",
+          "title": "Branch Name",
+          "default": ""
+        }
+      },
+      "type": "object",
+      "title": "StoryLabSheetBundleApplyPayload"
+    },
+    "StoryLabSheetBundleItem": {
+      "properties": {
+        "change_id": {
+          "type": "string",
+          "title": "Change Id"
+        },
+        "proposal": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Proposal"
+        },
+        "selected": {
+          "type": "boolean",
+          "title": "Selected",
+          "default": true
+        }
+      },
+      "type": "object",
+      "required": [
+        "change_id"
+      ],
+      "title": "StoryLabSheetBundleItem"
+    },
+    "StoryLabSheetProposalPayload": {
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "title": "Project Id"
+        },
+        "source_text": {
+          "type": "string",
+          "title": "Source Text"
+        },
+        "prompt_text": {
+          "type": "string",
+          "title": "Prompt Text",
+          "default": ""
+        },
+        "kind": {
+          "type": "string",
+          "title": "Kind",
+          "default": "plot"
+        },
+        "name": {
+          "type": "string",
+          "title": "Name",
+          "default": ""
+        },
+        "world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "session_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Session Id"
+        },
+        "turn_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Turn Id"
+        }
+      },
+      "type": "object",
+      "required": [
+        "project_id",
+        "source_text"
+      ],
+      "title": "StoryLabSheetProposalPayload"
+    },
+    "TagLinkPayload": {
+      "properties": {
+        "resource_type": {
+          "type": "string",
+          "title": "Resource Type"
+        },
+        "resource_id": {
+          "type": "string",
+          "title": "Resource Id"
+        }
+      },
+      "type": "object",
+      "required": [
+        "resource_type",
+        "resource_id"
+      ],
+      "title": "TagLinkPayload"
+    },
+    "TagPayload": {
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "title": "Project Id"
+        },
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "color": {
+          "type": "string",
+          "title": "Color",
+          "default": "#6b7280"
+        },
+        "kind": {
+          "type": "string",
+          "title": "Kind",
+          "default": "organizational"
+        }
+      },
+      "type": "object",
+      "required": [
+        "project_id",
+        "name"
+      ],
+      "title": "TagPayload"
+    },
+    "TemplatePayload": {
+      "properties": {
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "entity_type": {
+          "type": "string",
+          "title": "Entity Type"
+        },
+        "template": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Template"
+        },
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        },
+        "description": {
+          "type": "string",
+          "title": "Description",
+          "default": ""
+        }
+      },
+      "type": "object",
+      "required": [
+        "name",
+        "entity_type"
+      ],
+      "title": "TemplatePayload"
+    },
+    "TimelineEventPayload": {
+      "properties": {
+        "world_id": {
+          "type": "string",
+          "title": "World Id"
+        },
+        "summary": {
+          "type": "string",
+          "title": "Summary"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "owner_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Owner Type"
+        },
+        "owner_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Owner Id"
+        },
+        "time_label": {
+          "type": "string",
+          "title": "Time Label",
+          "default": ""
+        },
+        "order_key": {
+          "type": "number",
+          "title": "Order Key",
+          "default": 0.0
+        },
+        "event_type": {
+          "type": "string",
+          "title": "Event Type",
+          "default": "event"
+        },
+        "state_patch": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "State Patch"
+        },
+        "source_type": {
+          "type": "string",
+          "title": "Source Type",
+          "default": "manual"
+        },
+        "source_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Id"
+        },
+        "status": {
+          "type": "string",
+          "title": "Status",
+          "default": "canon"
+        }
+      },
+      "type": "object",
+      "required": [
+        "world_id",
+        "summary"
+      ],
+      "title": "TimelineEventPayload"
+    },
+    "UserEntityPayload": {
+      "properties": {
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        },
+        "world_id": {
+          "type": "string",
+          "title": "World Id"
+        },
+        "branch_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Branch Id"
+        },
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "about": {
+          "type": "string",
+          "title": "About",
+          "default": ""
+        },
+        "creative_profile": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Creative Profile"
+        },
+        "preferred_names": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "array",
+          "title": "Preferred Names"
+        },
+        "personal_details": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Personal Details"
+        },
+        "presence_defaults": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Presence Defaults"
+        },
+        "entity_variant_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Entity Variant Id"
+        }
+      },
+      "type": "object",
+      "required": [
+        "world_id",
+        "name"
+      ],
+      "title": "UserEntityPayload"
+    },
+    "UserProfilePayload": {
+      "properties": {
+        "display_name": {
+          "type": "string",
+          "title": "Display Name",
+          "default": ""
+        },
+        "about": {
+          "type": "string",
+          "title": "About",
+          "default": ""
+        },
+        "creative_profile": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Creative Profile"
+        },
+        "collaboration": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Collaboration"
+        },
+        "presence_defaults": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Presence Defaults"
+        },
+        "story_lab": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Story Lab"
+        },
+        "boundaries": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Boundaries"
+        },
+        "memory_policy": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Memory Policy"
+        },
+        "personal_details": {
+          "additionalProperties": true,
+          "type": "object",
+          "title": "Personal Details"
+        },
+        "preferred_names": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "type": "array",
+          "title": "Preferred Names"
+        }
+      },
+      "type": "object",
+      "title": "UserProfilePayload"
+    },
+    "ValidationError": {
+      "properties": {
+        "loc": {
+          "items": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              }
+            ]
+          },
+          "type": "array",
+          "title": "Location"
+        },
+        "msg": {
+          "type": "string",
+          "title": "Message"
+        },
+        "type": {
+          "type": "string",
+          "title": "Error Type"
+        },
+        "input": {
+          "title": "Input"
+        },
+        "ctx": {
+          "type": "object",
+          "title": "Context"
+        }
+      },
+      "type": "object",
+      "required": [
+        "loc",
+        "msg",
+        "type"
+      ],
+      "title": "ValidationError"
+    },
+    "WorldPatchPayload": {
+      "properties": {
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Name"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Description"
+        },
+        "canon_status": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Canon Status"
+        },
+        "inheritance_mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Inheritance Mode"
+        },
+        "settings": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Settings"
+        }
+      },
+      "type": "object",
+      "title": "WorldPatchPayload"
+    },
+    "WorldPayload": {
+      "properties": {
+        "project_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Project Id"
+        },
+        "name": {
+          "type": "string",
+          "title": "Name"
+        },
+        "description": {
+          "type": "string",
+          "title": "Description",
+          "default": ""
+        },
+        "parent_world_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parent World Id"
+        },
+        "canon_status": {
+          "type": "string",
+          "title": "Canon Status",
+          "default": "draft"
+        },
+        "inheritance_mode": {
+          "type": "string",
+          "title": "Inheritance Mode",
+          "default": "snapshot"
+        },
+        "clone_parent": {
+          "type": "boolean",
+          "title": "Clone Parent",
+          "default": true
+        }
+      },
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "title": "WorldPayload"
+    }
+  }
+}

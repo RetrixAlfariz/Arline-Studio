@@ -9,12 +9,20 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class V11QuickCreateFeatureTests(unittest.TestCase):
     def test_feature_module_exposes_required_quick_create_surfaces(self):
-        stream = (ROOT / "src/interface/web/static/js/stream.js").read_text(encoding="utf-8")
+        html = (ROOT / "src/interface/web/static/index.html").read_text(encoding="utf-8")
         quick = (ROOT / "src/interface/web/static/js/quick-create.js").read_text(encoding="utf-8")
+        main_js = (ROOT / "src/interface/web/static/arline.js").read_text(encoding="utf-8")
         app = (ROOT / "src/interface/web/app.py").read_text(encoding="utf-8")
 
-        self.assertIn("/static/js/quick-create.js?v=1.1.4-qc", stream)
-        self.assertIn("installQuickCreateProjectScopeBridge", stream)
+        self.assertIn("/static/js/quick-create.js?v=1.2.5-brand", html)
+        self.assertNotIn("window.fetch =", quick)
+        self.assertIn("preparePayload", quick)
+        self.assertIn("previewOverride", quick)
+        self.assertIn("replaceSelectOptions", quick)
+        self.assertNotRegex(quick, r"innerHTML\s*=\s*[^;\n]*<option")
+        self.assertIn("ArlineQuickCreate?.preparePayload", main_js)
+        self.assertIn("ArlineQuickCreate?.previewOverride", main_js)
+
         for token in (
             'value="entity:character"', 'value="entity:location"',
             'value="entity:item"', 'value="entity:organization"',
@@ -31,7 +39,7 @@ class V11QuickCreateFeatureTests(unittest.TestCase):
             self.assertIn(token, quick)
 
         # The UI enhancement deliberately reuses capability already exposed by
-        # the v1.1 backend instead of adding a parallel schema.
+        # the backend instead of adding a parallel schema.
         self.assertIn("entity_type: str | None = None", app)
         self.assertIn("document_type: str | None = None", app)
         self.assertIn("folder_id: str | None = None", app)
@@ -51,6 +59,9 @@ vm.runInContext(source, context, { filename: "quick-create.js" });
 
 const api = context.ArlineQuickCreate;
 if (!api) throw new Error("ArlineQuickCreate helpers were not exported");
+if (typeof api.preparePayload !== "function") throw new Error("preparePayload missing");
+if (typeof api.previewOverride !== "function") throw new Error("previewOverride missing");
+if (typeof api.replaceSelectOptions !== "function") throw new Error("replaceSelectOptions missing");
 
 const character = api.decodeCreateAs("entity:character");
 const research = api.decodeCreateAs("document:research");
@@ -61,7 +72,25 @@ const variants = [
 ];
 const inferred = api.inferRelationship("Vian dan Fano adalah saudara angkat", variants);
 
-console.log(JSON.stringify({ character, research, relationship, inferred }));
+const hostile = '<img src=x onerror="globalThis.compromised=true">';
+const select = {
+  ownerDocument: {
+    createElement(tagName) {
+      return { tagName: tagName.toUpperCase(), value: "", textContent: "", dataset: {} };
+    },
+  },
+  replaceChildren(...children) { this.options = children; },
+};
+api.replaceSelectOptions(
+  select,
+  [{ id: '\"><script>bad()</script>', label: hostile, kind: '\"><svg onload=bad()>' }],
+  (row) => row.id,
+  (row) => row.label,
+  (row) => ({ kind: row.kind }),
+);
+const safeOption = select.options[0];
+
+console.log(JSON.stringify({ character, research, relationship, inferred, safeOption }));
 '''
         result = subprocess.run(
             ["node", "-e", smoke, str(quick_path)],
@@ -79,6 +108,10 @@ console.log(JSON.stringify({ character, research, relationship, inferred }));
         self.assertEqual(data["inferred"]["object_id"], "VAR-FANO")
         self.assertEqual(data["inferred"]["relation_type"], "adopted_sibling")
         self.assertTrue(data["inferred"]["resolved"])
+        self.assertEqual(data["safeOption"]["tagName"], "OPTION")
+        self.assertEqual(data["safeOption"]["textContent"], '<img src=x onerror="globalThis.compromised=true">')
+        self.assertEqual(data["safeOption"]["value"], '\"><script>bad()</script>')
+        self.assertEqual(data["safeOption"]["dataset"]["kind"], '\"><svg onload=bad()>')
 
 
 if __name__ == "__main__":

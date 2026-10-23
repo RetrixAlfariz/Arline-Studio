@@ -1,0 +1,41 @@
+:root{
+  --surface:#151b19;
+  --surface-0:#101513;
+  --surface-1:#171e1b;
+  --surface-2:#1d2521;
+  --surface-3:#252e2a;
+  --surface-4:#2d3832;
+  --canvas:#121816;
+  --line:rgba(203,213,207,.11);
+  --line-strong:rgba(203,213,207,.22);
+  --text:#edf2ef;
+  --text-soft:#d6ded9;
+  --muted:#8e9c95;
+  --soft:#65736c;
+  --core:#2f9b81;
+  --core-bright:#45b99b;
+  --core-soft:rgba(47,155,129,.13);
+  --core-line:rgba(69,185,155,.5);
+  color-scheme:dark;
+}
+
+:root:has(.studio-shell[data-theme="light"]){
+  --surface:#f3f6f4;
+  --surface-0:#e9eeeb;
+  --surface-1:#f7f9f8;
+  --surface-2:#fff;
+  --surface-3:#e8eeeb;
+  --surface-4:#dce5e1;
+  --canvas:#eef2f0;
+  --line:rgba(48,64,57,.11);
+  --line-strong:rgba(48,64,57,.22);
+  --text:#26312c;
+  --text-soft:#405048;
+  --muted:#68776f;
+  --soft:#8b9891;
+  --core:#2f8e78;
+  --core-bright:#287e6b;
+  --core-soft:rgba(47,142,120,.11);
+  --core-line:rgba(47,142,120,.45);
+  color-scheme:light;
+}

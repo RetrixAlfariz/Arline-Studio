@@ -1,6 +1,8 @@
 [lmstudio]
 base_url = "http://127.0.0.1:1234"
 model = "qwen3.5-4b-uncensored-hauhaucs-aggressive"
+# Runtime secret only. For persistence, set ARLINE_LMSTUDIO_API_KEY;
+# Settings saves intentionally keep this portable file blank.
 api_key = ""
 timeout_seconds = 600.0
 auto_load = true
@@ -110,3 +112,52 @@ mention_limit = 20
 pinned_context_limit = 24
 autosave_drafts = true
 language_mode = "follow_prompt"
+
+
+[memory]
+enabled = true
+fts_enabled = true
+dense_enabled = false
+automatic_context = true
+default_lens = "scene"
+chunk_chars = 1800
+chunk_overlap_chars = 180
+max_candidates = 60
+final_k = 12
+max_per_source = 2
+rrf_k = 60
+trace_enabled = true
+# Hard ceiling for evidence packed into one model context. The runtime may
+# allocate less when the Context Compiler has less headroom.
+max_pack_tokens = 4096
+
+[memory.embedding]
+# Recommended LM Studio download: lm-kit/bge-m3-gguf (Q4_K_M is a sensible
+# baseline). Use the exact local embedding model key shown by LM Studio if it
+# differs from the common `text-embedding-bge-m3` key below.
+# Dense retrieval stays optional in v1.2.0.
+enabled = false
+provider = "lmstudio"
+model = "text-embedding-bge-m3"
+dimension = 1024
+query_prefix = ""
+passage_prefix = ""
+batch_size = 32
+timeout_seconds = 120.0
+
+[memory.reranker]
+enabled = false
+provider = "disabled"
+model = "Qwen/Qwen3-Reranker-0.6B"
+top_k_input = 20
+top_k_output = 8
+
+
+[deliberation]
+# Soft model intuition after authoritative context assembly and before prose.
+# It never writes Canon and fails soft when the local model is unavailable.
+enabled = true
+max_tokens = 700
+temperature = 0.35
+alternatives = 3
+context_chars = 24000

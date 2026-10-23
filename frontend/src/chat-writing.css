@@ -1,0 +1,391 @@
+/*
+ * Conversation Desk
+ *
+ * The writing view is deliberately isolated from the application-wide chat
+ * rules. ChatView imports this file after styles.css and opts in with the
+ * writing-studio class.
+ */
+.chat-workspace.writing-studio[data-mode] {
+  --writing-paper: color-mix(in srgb, var(--surface-1) 92%, var(--canvas) 8%);
+  --writing-paper-deep: color-mix(in srgb, var(--surface-0) 88%, var(--surface-1) 12%);
+  --writing-ink: var(--text, #262825);
+  --writing-muted: var(--muted, #6c756e);
+  --writing-rule: color-mix(in srgb, var(--line-strong) 72%, var(--core) 28%);
+  --writing-accent: var(--core, #2f9b81);
+  --writing-content: 750px;
+  --writing-notebook: 264px;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--writing-notebook);
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "header header"
+    "modebar modebar"
+    "tools tools"
+    "viewport notebook"
+    "composer notebook"
+    "modals modals";
+  background: var(--canvas);
+  color: var(--writing-ink);
+}
+.studio-shell[data-theme="light"] .writing-studio {
+  --writing-paper: #fbf9f3;
+  --writing-paper-deep: #f4f1e8;
+  --writing-ink: #2d342f;
+  --writing-muted: #626d65;
+  --writing-accent: color-mix(in srgb, var(--core) 70%, #102a23 30%);
+}
+
+.chat-workspace.writing-studio > .chat-header {
+  grid-area: header;
+  min-width: 0;
+  min-height: 64px;
+  padding: 10px clamp(16px, 3vw, 42px);
+  border-bottom: 1px solid var(--line);
+  background: var(--writing-paper);
+}
+
+.writing-studio .chat-header-identity,
+.writing-studio .chat-header-actions,
+.writing-studio .writing-view-controls {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.writing-studio .chat-title-block { min-width: 0; }
+.writing-studio .chat-title-block h1 {
+  max-width: min(34vw, 380px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--writing-ink);
+  font: 650 14px/1.2 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -.02em;
+}
+.writing-studio .chat-title-kicker {
+  color: var(--writing-accent);
+  font: 700 10px/1.2 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.writing-studio .chat-scope-path { color: var(--writing-muted); font-size: 10px; }
+.writing-studio .chat-scope-path b { color: var(--writing-rule); }
+
+.writing-studio .chat-header-actions > button,
+.writing-studio .writing-view-controls > button,
+.writing-studio .writing-session-menu summary {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--writing-muted);
+  padding: 0 9px;
+  font: 600 11px/1 ui-sans-serif, system-ui, sans-serif;
+  cursor: pointer;
+  list-style: none;
+}
+.writing-studio .chat-header-actions > button:hover,
+.writing-studio .writing-view-controls > button:hover,
+.writing-studio .writing-session-menu summary:hover,
+.writing-studio .writing-view-controls > button[aria-pressed="true"] {
+  border-color: var(--writing-rule);
+  background: color-mix(in srgb, var(--writing-accent) 10%, transparent);
+  color: var(--writing-ink);
+}
+.writing-studio .writing-view-controls > button[aria-pressed="true"] { color: var(--writing-accent); }
+.writing-studio .writing-session-menu { position: relative; }
+.writing-studio .writing-session-menu summary::-webkit-details-marker { display: none; }
+.writing-studio .writing-session-menu > div {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 170px;
+  display: grid;
+  gap: 3px;
+  padding: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--writing-paper);
+  box-shadow: 0 14px 35px color-mix(in srgb, var(--shadow-color, #000) 18%, transparent);
+}
+.writing-studio .writing-session-menu > div button { justify-content: flex-start; }
+
+.chat-workspace.writing-studio > .writing-modebar {
+  grid-area: modebar;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 8px clamp(16px, 3vw, 42px);
+  border-bottom: 1px solid var(--line);
+  background: var(--writing-paper-deep);
+  scrollbar-width: thin;
+}
+.writing-studio .writing-mode-tabs { display: flex; align-items: center; gap: 4px; min-width: max-content; }
+.writing-studio .writing-mode-tabs button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--writing-muted);
+  padding: 0 11px;
+  font: 650 11px/1 ui-sans-serif, system-ui, sans-serif;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.writing-studio .writing-mode-tabs button:hover { color: var(--writing-ink); background: color-mix(in srgb, var(--writing-accent) 7%, transparent); }
+.writing-studio .writing-mode-tabs button[aria-selected="true"],
+.writing-studio .writing-mode-tabs button[aria-pressed="true"],
+.writing-studio .writing-mode-tabs button.active {
+  border-color: var(--writing-rule);
+  background: color-mix(in srgb, var(--writing-accent) 12%, transparent);
+  color: var(--writing-accent);
+}
+.writing-studio .writing-modebar .conversation-mode-control { margin-left: auto; }
+.writing-studio .writing-modebar .chat-mode-control { flex: none; display: flex; }
+.writing-studio .writing-modebar .conversation-mode-control > span,
+.writing-studio .writing-modebar .chat-mode-control > span { display: none; }
+.writing-studio .writing-modebar .chat-mode-control { border: 0; padding: 0; }
+.writing-studio .writing-modebar .chat-mode-switch { display: flex; align-items: center; gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 7px; background: var(--writing-paper); }
+.writing-studio .chat-mode-switch > button { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 0 8px; border: 1px solid transparent; border-radius: 5px; color: var(--writing-muted); background: transparent; font: 600 10px/1 ui-sans-serif, system-ui, sans-serif; white-space: nowrap; cursor: pointer; }
+.writing-studio .chat-mode-switch > button[aria-pressed="true"] { color: var(--writing-accent); border-color: var(--writing-rule); background: var(--core-soft); }
+.writing-studio .writing-context-tools:empty { display: none; }
+.writing-studio[data-mode="story_writer"] > .writing-context-tools,
+.writing-studio[data-mode="analyst"] > .writing-context-tools { display: none; }
+.writing-studio .writing-context-tools:has(.presence-studio-panel) { display: block; max-height: 34vh; overflow: auto; }
+.writing-studio .writing-context-tools .presence-studio-panel { margin-top: 8px; }
+
+.chat-workspace.writing-studio > .writing-context-tools {
+  grid-area: tools;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px clamp(16px, 3vw, 42px);
+  border-bottom: 1px solid var(--line);
+  background: var(--writing-paper);
+}
+.writing-studio .writing-mode-options {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+.writing-studio .writing-mode-options .conversation-mode-control,
+.writing-studio .writing-mode-options .chat-mode-control { flex: none; }
+.writing-studio .writing-context-tools .conversation-context-bar {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+.writing-studio .writing-context-tools .presence-studio-panel {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  box-shadow: none;
+}
+
+.chat-workspace.writing-studio > .chat-viewport {
+  grid-area: viewport;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  overflow-y: auto;
+  padding: 34px clamp(18px, 4vw, 54px) 42px;
+  background: var(--writing-paper);
+}
+.writing-studio .chat-viewport > * { width: min(var(--writing-content), 100%); margin-inline: auto; }
+.writing-studio .turn-list { gap: 34px; }
+.writing-studio .turn-block { gap: 12px; }
+.writing-studio .user-turn { justify-content: flex-start; }
+.writing-studio .user-turn > div {
+  max-width: min(680px, 92%);
+  padding: 5px 0 5px 13px;
+  border: 0;
+  border-left: 2px solid color-mix(in srgb, var(--writing-accent) 55%, var(--line));
+  border-radius: 0;
+  background: transparent;
+  color: var(--writing-muted);
+  font: 500 13px/1.55 ui-sans-serif, system-ui, sans-serif;
+  white-space: pre-wrap;
+}
+.writing-studio .user-turn > div::before {
+  content: "Author note";
+  display: block;
+  margin-bottom: 3px;
+  color: var(--writing-accent);
+  font: 750 9px/1 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.writing-studio .user-turn > .discussion-user-turn::before { display: none; }
+.writing-studio .assistant-turn { max-width: 100%; padding: 0; }
+.writing-studio .assistant-meta { min-height: 25px; height: auto; gap: 7px; flex-wrap: wrap; }
+.writing-studio .assistant-meta > span { color: var(--writing-accent); font: 700 11px/1 ui-sans-serif, system-ui, sans-serif; }
+.writing-studio .assistant-meta small { color: var(--writing-muted); font-size: 10px; }
+.writing-studio .assistant-meta em { color: var(--writing-muted); font-size: 9px; opacity: .65; }
+.writing-studio .draft-number { color: var(--writing-muted); font: 650 10px/1 ui-monospace, monospace; }
+.writing-studio .story-text {
+  color: var(--writing-ink);
+  font: 17.5px/1.8 Iowan Old Style, Palatino Linotype, Palatino, Georgia, serif;
+  letter-spacing: .003em;
+}
+.writing-studio .assistant-turn:has(.discussion-arline-mark) .story-text,
+.writing-studio .story-text.discussion {
+  font: 14px/1.7 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0;
+}
+.writing-studio .turn-actions { gap: 3px; margin-top: 12px; }
+.writing-studio .turn-actions button { min-height: 32px; color: var(--writing-muted); font-size: 10px; }
+.writing-studio .turn-actions button:hover { color: var(--writing-ink); border-color: var(--writing-rule); }
+
+.writing-studio .chat-empty { min-height: 100%; display: block; text-align: left; padding: 30px 0; }
+.writing-studio .writing-welcome { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, 260px); align-items: center; gap: 24px; }
+.writing-studio .writing-welcome-copy { max-width: 560px; }
+.writing-studio .writing-welcome-copy .writing-eyebrow { display: inline-flex; align-items: center; gap: 6px; color: var(--writing-accent); font: 750 10px/1 ui-sans-serif, system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; }
+.writing-studio .writing-welcome-copy h2 { margin: 12px 0 8px; color: var(--writing-ink); font: 500 clamp(28px, 4vw, 48px)/1.05 Iowan Old Style, Palatino Linotype, Georgia, serif; letter-spacing: -.045em; }
+.writing-studio .writing-welcome-copy h2 em { color: var(--writing-accent); font-style: italic; }
+.writing-studio .writing-welcome-copy > p { max-width: 520px; margin: 0; color: var(--writing-muted); font: 14px/1.65 ui-sans-serif, system-ui, sans-serif; }
+.writing-studio .writing-welcome > .writing-illustration { display: block; justify-self: center; width: min(260px, 100%); max-height: 240px; object-fit: contain; }
+.writing-studio .starter-grid { width: 100%; margin-top: 24px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.writing-studio .starter-grid button { position: relative; min-height: 92px; grid-template-columns: 24px 1fr 16px; align-items: start; border-radius: 8px; background: var(--writing-paper-deep); padding: 14px; }
+.writing-studio .starter-grid .starter-number { color: var(--writing-accent); font: 700 11px/1 ui-monospace, monospace; }
+.writing-studio .starter-grid button > span:nth-child(2) { display: flex; flex-direction: column; gap: 5px; }
+.writing-studio .starter-grid button > span:nth-child(2) strong { color: var(--writing-ink); font-size: 12px; }
+.writing-studio .starter-grid button > span:nth-child(2) small { color: var(--writing-muted); font-size: 10px; line-height: 1.45; }
+.writing-studio .starter-grid button > svg:last-child { color: var(--writing-accent); margin-top: 2px; }
+
+.chat-workspace.writing-studio > .composer-zone {
+  grid-area: composer;
+  width: 100%;
+  min-width: 0;
+  padding: 10px clamp(18px, 4vw, 54px) 16px;
+  background: var(--writing-paper);
+}
+.writing-studio .composer-shell { max-width: 750px; margin-inline: auto; border-radius: 9px; background: var(--writing-paper-deep); box-shadow: 0 9px 24px color-mix(in srgb, var(--shadow-color, #000) 10%, transparent); }
+.writing-studio .composer-shell > textarea { min-height: 70px; font: 14px/1.55 ui-sans-serif, system-ui, sans-serif; }
+.writing-studio .composer-left > button { min-height: 34px; font-size: 10px; }
+.writing-studio .composer-right button { min-width: 36px; min-height: 36px; }
+.writing-studio .composer-right .send-button { min-width: 84px; width: auto; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding-inline: 13px; }
+.writing-studio .writing-composer-footnote { display: flex; justify-content: space-between; gap: 10px; max-width: 750px; margin: 7px auto 0; color: var(--writing-muted); font: 10px/1.3 ui-sans-serif, system-ui, sans-serif; }
+.writing-studio .writing-composer-footnote kbd { border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px; font: 9px ui-monospace, monospace; }
+
+.chat-workspace.writing-studio > .writing-notebook,
+.chat-workspace.writing-studio > .living-session-panel {
+  display: block;
+  grid-area: notebook;
+  grid-row: 4 / 6;
+  position: static;
+  width: auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  border: 0;
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--writing-paper-deep);
+  box-shadow: none;
+  padding: 18px 15px;
+}
+.writing-studio .living-session-panel > header > button { flex: none; display: grid; place-items: center; min-width: 32px; min-height: 32px; border: 1px solid var(--line); border-radius: 6px; color: var(--writing-muted); background: transparent; cursor: pointer; }
+.writing-studio .living-session-panel textarea { font: 13px/1.6 ui-sans-serif, system-ui, sans-serif; }
+.writing-studio .writing-notebook[hidden],
+.writing-studio .living-session-panel[hidden] { display: none; }
+.writing-studio .notebook-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding-bottom: 13px; border-bottom: 1px solid var(--line); }
+.writing-studio .notebook-heading > div { display: grid; gap: 3px; }
+.writing-studio .notebook-heading > div > span { color: var(--writing-accent); font: 750 9px/1.2 ui-sans-serif, system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
+.writing-studio .notebook-heading > div > strong { margin: 0; color: var(--writing-ink); font: 650 13px/1.25 ui-sans-serif, system-ui, sans-serif; }
+.writing-studio .notebook-heading p { margin: 4px 0 0; color: var(--writing-muted); font: 10px/1.4 ui-sans-serif, system-ui, sans-serif; }
+.writing-studio .notebook-heading button { min-width: 32px; min-height: 32px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--writing-muted); }
+.writing-studio .notebook-scope, .writing-studio .notebook-section, .writing-studio .notebook-note { margin-top: 14px; padding-top: 13px; border-top: 1px solid var(--line); }
+.writing-studio .notebook-scope dt, .writing-studio .notebook-section > h3 { display: flex; align-items: center; gap: 6px; margin: 0 0 7px; color: var(--writing-accent); font: 750 9px/1.2 ui-sans-serif, system-ui, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
+.writing-studio .notebook-section > h3 span { margin-left: auto; color: var(--writing-muted); font: 650 10px/1 ui-monospace, monospace; letter-spacing: 0; }
+.writing-studio .notebook-scope dd { margin: 4px 0 0; color: var(--writing-ink); font: 12px/1.45 ui-sans-serif, system-ui, sans-serif; }
+.writing-studio .notebook-scope dt:not(:first-child) { margin-top: 13px; }
+.writing-studio .notebook-section > p { margin: 0 0 9px; color: var(--writing-muted); font: 11px/1.55 ui-sans-serif, system-ui, sans-serif; }
+.writing-studio .notebook-section > button { min-height: 32px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--writing-muted); padding: 0 8px; font: 600 10px/1 ui-sans-serif, system-ui, sans-serif; }
+.writing-studio .notebook-section > button:hover { border-color: var(--writing-rule); color: var(--writing-ink); }
+.writing-studio .notebook-reference-list { display: grid; gap: 4px; margin: 8px 0 10px; padding: 0; list-style: none; }
+.writing-studio .notebook-reference-list li { min-height: 32px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--line); color: var(--writing-muted); font: 11px/1.3 ui-sans-serif, system-ui, sans-serif; }
+.writing-studio .notebook-reference-list li > span { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.writing-studio .notebook-reference-list li > button { min-width: 26px; min-height: 26px; display: grid; place-items: center; border: 0; border-radius: 5px; background: transparent; color: var(--writing-muted); }
+.writing-studio .notebook-reference-list button:hover { background: color-mix(in srgb, var(--writing-accent) 8%, transparent); color: var(--writing-ink); }
+.writing-studio .notebook-note { color: var(--writing-muted); font: 11px/1.55 ui-sans-serif, system-ui, sans-serif; }
+
+.chat-workspace.writing-studio[data-focus="true"] { grid-template-columns: minmax(0, 1fr); grid-template-areas: "header" "viewport" "composer" "modals"; grid-template-rows: auto minmax(0, 1fr) auto auto; }
+.writing-studio[data-focus="true"] > .writing-modebar,
+.writing-studio[data-focus="true"] > .writing-context-tools,
+.writing-studio[data-focus="true"] > .writing-notebook,
+.writing-studio[data-focus="true"] > .living-session-panel { display: none !important; }
+.writing-studio[data-notebook-open="false"] > .writing-notebook,
+.writing-studio[data-notebook-open="false"] > .living-session-panel { display: none; }
+.chat-workspace.writing-studio[data-notebook-open="false"]:not([data-focus="true"]) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "header" "modebar" "tools" "viewport" "composer" "modals"; }
+.writing-studio[data-focus="true"] .chat-viewport { padding-inline: max(18px, calc((100% - 750px) / 2)); }
+.writing-studio > .modal-backdrop,
+.writing-studio > .attachment-lightbox { grid-area: modals; }
+
+.writing-studio button:focus-visible,
+.writing-studio input:focus-visible,
+.writing-studio textarea:focus-visible,
+.writing-studio select:focus-visible,
+.writing-studio summary:focus-visible { outline: 2px solid var(--writing-accent); outline-offset: 2px; }
+
+@media (max-width: 1100px) {
+  .chat-workspace.writing-studio[data-mode]:not([data-focus="true"]) { grid-template-columns: minmax(0, 1fr); grid-template-areas: "header" "modebar" "tools" "viewport" "composer" "modals"; }
+  .chat-workspace.writing-studio > .writing-notebook,
+  .chat-workspace.writing-studio > .living-session-panel { position: absolute; grid-area: auto; z-index: 40; inset: auto 0 0 auto; width: min(390px, 92vw); height: min(75vh, 640px); border: 1px solid var(--line-strong); box-shadow: 0 20px 55px color-mix(in srgb, var(--shadow-color, #000) 22%, transparent); }
+  .writing-studio .writing-welcome { grid-template-columns: minmax(0, 1fr) 210px; }
+}
+@media (max-width: 700px) {
+  .chat-workspace.writing-studio { height: 100%; grid-template-rows: auto auto auto minmax(0, 1fr) auto auto; }
+  .chat-workspace.writing-studio > .chat-header { min-height: 62px; padding: 8px 11px; }
+  .writing-studio .chat-title-block h1 { max-width: 46vw; font-size: 13px; }
+  .writing-studio .chat-scope-path { max-width: 52vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .writing-studio .chat-header-actions > button { display: none; }
+  .writing-studio .writing-view-controls { gap: 3px; }
+  .writing-studio .writing-view-controls > button { min-width: 34px; padding: 0 7px; }
+  .writing-studio .writing-view-controls > button span { display: none; }
+  .chat-workspace.writing-studio > .writing-modebar, .chat-workspace.writing-studio > .writing-context-tools { padding-inline: 10px; }
+  .chat-workspace.writing-studio > .writing-modebar { flex-wrap: wrap; gap: 6px; }
+  .writing-studio .writing-mode-options { width: 100%; gap: 6px; }
+  .writing-studio .writing-mode-options .conversation-mode-control { flex: 1; padding: 0; border: 0; min-width: 0; }
+  .writing-studio .writing-mode-options .arline-select { min-width: 0; width: 100%; }
+  .writing-studio .chat-mode-switch > button { padding-inline: 6px; }
+  .writing-studio .writing-mode-tabs { width: 100%; justify-content: space-between; gap: 0; }
+  .writing-studio .writing-mode-tabs button { padding-inline: 8px; }
+  .writing-studio .writing-modebar .conversation-mode-control { margin-left: 0; }
+  .chat-workspace.writing-studio > .chat-viewport { padding: 22px 13px 28px; }
+  .writing-studio .writing-welcome { grid-template-columns: 1fr; gap: 15px; }
+  .writing-studio .writing-welcome > .writing-illustration { order: -1; justify-self: start; width: min(180px, 52vw); max-height: 150px; }
+  .writing-studio .starter-grid { grid-template-columns: 1fr; gap: 7px; }
+  .writing-studio .starter-grid button { min-height: 70px; }
+  .writing-studio .story-text { font-size: 17px; line-height: 1.75; }
+  .writing-studio .assistant-meta em { display: none; }
+  .chat-workspace.writing-studio > .composer-zone { padding: 8px 10px 11px; }
+  .writing-studio .composer-left { flex-wrap: wrap; }
+  .writing-studio .composer-left > button { min-height: 32px; }
+  .writing-studio .writing-composer-footnote { font-size: 9px; }
+  .chat-workspace.writing-studio > .writing-notebook,
+  .chat-workspace.writing-studio > .living-session-panel { inset: auto 7px 7px; width: auto; height: min(72vh, 540px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .writing-studio *, .writing-studio *::before, .writing-studio *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}

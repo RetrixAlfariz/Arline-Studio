@@ -1,0 +1,6 @@
+import { BookOpenText, FileUp, PenLine, X } from "lucide-react";
+
+export function WelcomeDialog({ open, onClose, onStory, onLibrary, onImport }: { open: boolean; onClose: () => void; onStory: () => void; onLibrary: () => void; onImport: () => void }) {
+  if (!open) return null;
+  return <div className="modal-backdrop"><section className="modal welcome-react"><button className="icon-control modal-close" onClick={onClose}><X size={15} /></button><span className="eyebrow">Welcome to Arline</span><h2>What do you want to do first?</h2><p>Start naturally. Arline keeps the structured workspace underneath.</p><div className="welcome-react-actions"><button onClick={onStory}><PenLine size={18} /><span><strong>Start a story</strong><small>Create your first manuscript scene.</small></span></button><button onClick={onLibrary}><BookOpenText size={18} /><span><strong>Build the Library</strong><small>Create a character, location, item, or world.</small></span></button><button onClick={onImport}><FileUp size={18} /><span><strong>Import writing</strong><small>Preview and split Markdown or plain text.</small></span></button></div><div className="modal-actions"><button onClick={onClose}>Not now</button></div></section></div>;
+}
