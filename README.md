@@ -1,209 +1,210 @@
-# Arline Studio
+<p align="center">
+  <img src="src/interface/web/static/assets/brand/arline-primary.svg" width="88" height="88" alt="Arline mark">
+</p>
 
-## v1.2 development — Evidence & Retrieval Foundation
+<h1 align="center">Arline Studio</h1>
 
-`develop/v1.2` contains the unmerged v1.2 development line. The v1.2.0
-milestone adds branch-aware evidence retrieval without turning search output
-into canon: source-backed chunks, SQLite FTS5, deterministic query routing,
-one hard Scope Gate, RRF fusion, retrieval traces, incremental indexing, and
-Context Stack integration. Dense embeddings are optional; structured lookup
-and FTS remain the baseline when LM Studio embeddings are unavailable.
+<p align="center">
+  <strong>Write the scene. Keep the world coherent.</strong><br>
+  A local-first writing workspace for stories, characters, and the worlds they inhabit.
+</p>
 
-### Recommended LM Studio models
+<p align="center">
+  <a href="#quick-start">Get started</a> ·
+  <a href="#the-workspace">Explore the workspace</a> ·
+  <a href="#development">Development</a> ·
+  <a href="crates/arline-runtime/VALIDATION.md">Native validation</a>
+</p>
 
-Arline does not bundle or download model weights. Install models in LM
-Studio normally and select the local model key in Settings/config.
+<p align="center">
+  <img src="frontend/src/assets/writing-island.png" width="700" alt="An open book becoming a coastal path to a lighthouse">
+</p>
 
-- **Generation + vision:** [HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive](https://huggingface.co/HauhauCS/Qwen3.5-4B-Uncensored-HauhauCS-Aggressive)
-- **Recommended embedding baseline:** [lm-kit/bge-m3-gguf](https://huggingface.co/lm-kit/bge-m3-gguf) — BGE-M3, 1024-dimensional embeddings; Q4_K_M is the suggested starting quantization.
-- **Embedding challenger (disabled by default):** [Qwen/Qwen3-Embedding-0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B)
-- **Experimental reranker (not required by v1.2.0):** [Qwen/Qwen3-Reranker-0.6B](https://huggingface.co/Qwen/Qwen3-Reranker-0.6B)
+Arline brings conversations, manuscripts, and structured worldbuilding into one workspace. Develop an idea in Story Lab, write a scene with explicit references, and keep the resulting prose separate from the facts you choose to make canon.
 
-For BGE-M3, use the exact local embedding model key reported by LM Studio
-(`GET /api/v1/models` or `lms ls --embedding`) in `[memory.embedding].model`.
-`text-embedding-bge-m3` is Arline's default key, but an LM Studio install may
-expose a different local key. BGE-M3 does **not** use the E5-specific `query:` /
-`passage:` prefixes, so both prefix settings are empty by default.
+The desktop application uses **React + TypeScript**, a **Rust/Axum runtime**, and **Tauri**. **LM Studio** runs the language model. The native application runs without Python; the Python backend remains available for development and existing workflows.
 
-Dense retrieval remains optional in v1.2.0. If it is disabled or the embedding
-model is unavailable, Arline continues with structured retrieval + SQLite FTS5.
-Changing embedding model or dimension creates a new derived vector generation;
-vectors from an older embedding model are never reinterpreted as BGE-M3 vectors.
+> **Development status:** v1.2 alpha (`1.2.5a1`). The native runtime is on `main`. See the [validation record](crates/arline-runtime/VALIDATION.md) for tested behavior and migration limits.
 
----
+## The workspace
 
-Arline Studio is a local-first workspace for writing, exploring, and maintaining structured story worlds.
+| Surface | What you do there |
+| --- | --- |
+| **Chat** | Write prose in **Story Writer**, develop ideas in **Story Lab**, or enter a scene through **Interactive** mode. Stream responses, fork conversations, and review previous turns. |
+| **Manuscript** | Organize scenes, chapters, notes, research, and outlines. Use checkpoints for meaningful revisions and recovery state for work in progress. |
+| **Library** | Maintain worlds, characters, locations, items, relationships, and canon facts. Use entity variants for differences across worlds and branches. |
+| **Context Stack** | Choose the references, scene, and scope a generation may use. Opening a sheet and adding it to context are separate actions. |
+| **Quick Create** | Describe a scene, character, location, or other resource naturally, then review the structured result. |
+| **Review & Evals** | Accept, edit, or reject writing and export review data. Feedback collection does not automatically train a model. |
 
-## v1.1 status
+Library sheets are shared world knowledge. Projects organize the writing you are making from that knowledge. Putting a Library sheet in a folder does not make it owned by a Project.
 
-**Feature scope is frozen.** After the final v1.1 PR is merged, changes on the v1.1 line should be bug fixes, regressions, compatibility fixes, and data-safety fixes only. New memory/RAG, autonomous reasoning, visual-semantic analysis, consequence simulation, relationship dynamics, and other intelligence-layer work belongs to v1.2.
+### Three ways to work in Chat
 
-## v1.1 mental model
+- **Story Writer** turns a writing request into prose, using the selected context and generation settings.
+- **Story Lab** helps develop a premise, character, or story problem through discussion. It writes fiction when you explicitly ask for it.
+- **Interactive** lets you enter the scene through a chosen Presence while keeping your dialogue and major decisions under your control.
 
-- **Library** — what is true: worlds, entity sheets, variants, relationships, canon facts, lore, timeline.
-- **Project** — what you are making: a focused story workspace, folders, manuscript, notes, research, assets, and references.
-- **Manuscript** — what you have written: scenes, chapters, notes, research, and outline views.
-- **Chat** — what you are exploring: conversations, forks, scratch/what-if exploration.
-- **Scene** — where you are narratively: POV, location, participants, narrative time, target outcome.
-- **Review & Evals** — what Arline learns from your choices: review, accept/edit/reject, fork comparisons, and advanced dataset exports under Settings → Developer.
-- **Context Stack** — what Arline is allowed to use for the current generation.
-
-Opening something in the UI does **not** automatically put it into context. Navigation state and Context Stack are deliberately separate.
+Planning and model reasoning have separate controls. You can ask Arline to plan a scene before writing without enabling the model's reasoning mode.
 
 ## Quick start
 
-1. Install the project dependencies used by your existing Arline setup. `uv sync`
-2. Start LM Studio and expose its local API (the default config expects `127.0.0.1:1234`).
-3. From the repository root, run either:
+The source launcher currently targets **Windows**. Before building, install:
+
+| Requirement | Purpose |
+| --- | --- |
+| PowerShell 7 | Run the native launcher. |
+| Node.js **22.12+** and npm | Install and build the React interface. |
+| Rust **1.88+**, with the MSVC toolchain | Build the native runtime and desktop host. |
+| Visual Studio C++ Build Tools and Windows SDK | Compile and link native dependencies. |
+| Microsoft Edge WebView2 Runtime | Display the desktop window. |
+| LM Studio and a downloaded generation model | Run local inference. Model weights are installed separately. |
+
+### First launch
+
+Start LM Studio's local API server at `http://127.0.0.1:1234`, then run:
 
 ```powershell
-python app.py
+git clone https://github.com/RetrixAlfariz/Arline-Studio.git "Arline Studio"
+cd "Arline Studio"
+npm --prefix frontend ci
+.\run-native.ps1
 ```
 
-or the existing CLI entry point:
+The launcher builds the frontend and release executable, then opens the desktop application. In **Settings → Models & Runtime**, select a model that is actually installed in LM Studio. The model key in the repository configuration may differ from yours.
+
+For later launches, reuse the compiled application:
 
 ```powershell
-python main.py
+.\run-native.ps1 -SkipBuild
 ```
 
-4. Open the Studio URL configured under `[ui]` in `config/arline.toml` (default port `7860`).
+Run without `-SkipBuild` after changing the application source. The release executable is written to `crates/arline-runtime/target/release/arline.exe`.
 
-To force-stop the local web server from another terminal, run:
+### Other launch options
 
 ```powershell
-uv run python shutdown.py
+# Serve the application in your browser without a desktop window.
+.\run-native.ps1 -SkipBuild -Headless
+# Open http://127.0.0.1:7861
+
+# Use a separate copy of your data for a trial.
+.\run-native.ps1 -SkipBuild -DataDirectory E:\Arline-native-trial
+
+# Build without launching, or choose a different port.
+.\run-native.ps1 -BuildOnly
+.\run-native.ps1 -SkipBuild -Port 17861
 ```
 
-The command reads `[ui].port`, only stops an Arline/Uvicorn process by default,
-and is safe to repeat. Use `--dry-run` to inspect the target first, or
-`--any-process` only when the port belongs to a different process intentionally.
-After installing the project package, the equivalent command is
-`arline-shutdown`.
+The launcher uses loopback port **7861** by default. Pass `-Port 0` to select a free port. Native CLI options and model-loading details are documented in the [runtime guide](crates/arline-runtime/README.md).
 
-The SQLite database, local media, exports, backups, and generated output are runtime data and are intentionally not included in release ZIPs.
+## From an idea to a scene
 
-## The v1.1 workflow
+1. **Choose a Project, World, and branch.** These define the active workspace scope.
+2. **Build the references you need.** Use Quick Create for characters and places, then review their sheets in the Library.
+3. **Add context deliberately.** Use explicit references and the Context Stack to choose what the model can draw on.
+4. **Discuss or write.** Work through uncertainty in Story Lab, then switch to Story Writer when you want the scene itself.
+5. **Review the result.** Keep the prose, revise it in Manuscript, and explicitly review any proposed changes to canon.
 
-### Create naturally
-
-Use **Quick Create** instead of filling schema-heavy forms. For example:
+For example, a writing request can be as direct as:
 
 ```text
-Taman Bunga di belakang kampus
+At dawn, Mara returns to the lighthouse with a letter she was told
+never to open. Continue the scene, keeping the letter sealed.
 ```
 
-Arline can infer a Location sheet, suggest possible duplicate identities, and place the sheet in a Library folder. Advanced family/variant/JSON editing is still available from the Inspector.
+### Context and canon
 
-### Organize the Library
+Arline distinguishes between **established facts**, **retrieved evidence**, **creative exploration**, and **generated prose**. Retrieval uses scoped sources, structured lookup, and SQLite FTS5; a search result is evidence to inspect, not an automatic canon update.
 
-Library folders are organizational only. A sheet remains shared knowledge and is never made Project-owned by putting it in a folder.
+Chat forks create separate conversations. World branches represent changes in world state. Scratch mode supports exploration without staging proposed state changes into canon.
 
-Use:
+Visual references can belong to Library identities or their variants. A reviewed image description remains media metadata until you explicitly make a canon decision.
 
-- **Folders** for one structural location.
-- **Tags** for many-to-many descriptors.
-- **Collections** for curated groups without moving a sheet.
-- **Saved Views** for reusable filters/query views.
+## Your data
 
-Library presentation is independent of the underlying object model. The same sheets can be browsed as **List**, **Grid**, or **Gallery**, and Saved Views can remember their layout.
+On first launch, the native launcher copies the repository's runtime configuration, writer prompt, and configured SQLite data into an application data directory. It preserves uncheckpointed WAL changes and rehomes managed media. Subsequent launches use that application copy.
 
-### Gallery and visual references
+| Native data | Default Windows location |
+| --- | --- |
+| Workspace database | `%LOCALAPPDATA%\Arline Studio\arline_history.db` |
+| Runtime configuration | `%LOCALAPPDATA%\Arline Studio\config\arline.toml` |
+| Managed images and media | `%LOCALAPPDATA%\Arline Studio\media\` |
+| Saved runs, output, and dataset exports | Under `%LOCALAPPDATA%\Arline Studio\` |
 
-Library sheets can carry local visual references without turning images into a separate canon system.
+Use `-DataDirectory` to choose another location. After the first launch, change native settings in the application or its copied configuration; editing the repository's `config/arline.toml` does not update an existing application copy.
 
-- Entity families can have shared identity images.
-- World/branch variants can have variant-specific images.
-- One image per resource can be selected as its **Cover** for Gallery view.
-- Media can store a kind, caption, ordering, and reviewed visual description.
-- Deleting a media item removes its managed local file; permanent resource deletion also cleans its media, while identity merges move media to the surviving identity.
-- The selected model's LM Studio metadata controls whether the **Describe** action is available.
-- When a vision-capable local model is selected, **Describe** sends the image through the existing LM Studio inference path and returns a reviewable visual-description proposal.
-- A vision description is saved only after explicit review and remains **media metadata, not canon**. It never silently changes character attributes, facts, relationships, or world state.
+- The original repository workspace is preserved during bootstrap. Keep it until you have reviewed the imported data.
+- Supported schema upgrades create SQLite backups. This does not establish compatibility with every historical database version.
+- Trash supports recovery; permanent deletion is a separate action. Shared Library sheets are not owned by the Projects that reference them.
+- Generation requests go to the configured LM Studio server, which defaults to your machine. Model weights are not bundled with Arline.
+- API credentials stay out of the public configuration response and saved portable settings. `ARLINE_LMSTUDIO_API_KEY` supplies a runtime credential when needed.
 
-Gallery/visual references are the final v1.1 multimodal foundation. Automatic image tagging, visual embeddings/similarity, image-vs-canon contradiction detection, and autonomous multimodal canon extraction are intentionally deferred to v1.2.
+## Development
 
-### Write in Manuscript
+### Frontend with the Python backend
 
-Project folders contain Project files only. Manuscript items use explicit types such as Scene, Chapter, Note, Research, and Outline. Writing status is separate:
+The Vite development proxy targets the Python backend on port **7860**. Python **3.11+** and `uv` are required for this path.
 
-```text
-Planned → Writing → Revising → Final
-```
-
-Editing autosaves recovery state without flooding revision history. Use **Checkpoint** when you want a meaningful durable revision.
-
-### Use Context Stack deliberately
-
-The Context Stack tracks the active Project, World/branch, Scene, Chat fork, Run Profile, explicit references, pins, and overrides. `@references` can use Mention / Context / Deep depth without changing the Library itself.
-
-Visual media is not injected into normal story context merely because a sheet is open or has a cover. v1.1 uses vision only for the explicit **Describe image** action.
-
-### Fork without polluting canon
-
-A Chat fork is only a conversation fork. It does not become a semantic World branch unless you explicitly promote it. Scratch mode prevents proposed state changes from being staged into canon.
-
-### Review instead of silently learning
-
-Generated prose is reviewable under **Settings → Developer → Review & Evals**. Accept/edit/reject decisions and fork comparisons can later feed SFT, preference, and evaluation exports; dataset plumbing stays out of the primary writing navigation.
-
-## v1.1 final UI / recovery polish
-
-- The Composer stays spacious for a new chat, then automatically becomes a compact sticky dock once a conversation is active.
-- Response-length, token-budget, and context-detail controls collapse in active chats and can be expanded from the profile control when needed.
-- Chat rendering is progressive: very long sessions initially render only the newest turns and expose a **Load earlier messages** control.
-- Unsent Composer drafts, the last chat/document, navigation state, density, and sidebar preferences are restored where possible after restart.
-- First-run onboarding offers **Start a story**, **Build the Library**, and **Import existing writing** without exposing the underlying schema first.
-- Settings uses a vertical top-to-down layout. Developer tools can be hidden when the user only wants writing-facing settings.
-- **Data & Storage → Workspace health** provides a read-only Doctor that reports dangling references, stale scene pointers, and obvious duplicate identities without auto-repairing canon.
-- Startup failures keep a visible recovery surface with direct access to Data & Storage and reload, rather than disappearing into a transient toast.
-- Settings search matches both category names and the actual setting content inside each panel.
-- Static assets are versioned together so browsers are less likely to mix stale HTML, CSS, and JavaScript after an update.
-- Library view modes are List / Grid / Gallery, with local cover images and explicit vision-description review.
-
-## Data safety
-
-Normal destructive actions use **Trash**, not immediate permanent deletion. Activity Center provides Restore and explicit permanent deletion. Archive is separate from Trash.
-
-Before a database schema upgrade, v1.1 creates a consistent SQLite backup under the runtime database directory's `backups/` folder. Legacy Manuscript rows are migrated from the old broad Draft vocabulary to the v1.1 Scene/writing-state model. The visual-reference foundation advances the shared workspace schema to v7 and therefore passes through the same pre-migration backup boundary.
-
-Project deletion never owns or deletes shared Library sheets. Project bundles reference Library resources rather than silently embedding ownership copies.
-
-## Useful shortcuts
-
-- `Ctrl/Cmd + K` — global Search / Command Palette
-- `Ctrl/Cmd + Shift + P` — Command Palette
-- `Ctrl/Cmd + N` — Quick Create
-- `Ctrl/Cmd + Shift + N` — New Chat
-- `Ctrl/Cmd + S` — create a meaningful Manuscript checkpoint
-- `Ctrl/Cmd + Z` — undo the most recent Trash action when not editing text
-- `Alt + Left / Right` — navigation history
-- `Ctrl/Cmd + Shift + F` — Manuscript Focus mode
-
-## Regression tests
-
-The v1.1 foundation suite uses temporary databases and does not require a running LM Studio server:
+From the repository root:
 
 ```powershell
-python -m unittest discover -s tests -v
+uv sync
+uv run python app.py
 ```
 
-A release pass should also include:
+In a second terminal, from the same root:
 
 ```powershell
-python -m compileall -q src
-node --check src/interface/web/static/js/commands.js
-node --check src/interface/web/static/js/stream.js
-node --check src/interface/web/static/arline.js
+npm --prefix frontend ci
+npm --prefix frontend run dev
 ```
 
-## v1.1 hardening guarantees
+Open `http://127.0.0.1:5173`. Vite proxies API and asset requests to `http://127.0.0.1:7860`. See [Vite's configuration](frontend/vite.config.ts) before pointing it at a different backend or port.
 
-- Composer reference highlighting only overlays actual `@references` and `/commands`; plain prose remains a native textarea with native spellcheck.
-- Context-budget UI consumes the same token-breakdown contract returned by the backend, so response MAX is computed from real assembled context rather than prompt length alone.
-- Run Profiles capture and restore the complete generation configuration.
-- Normal deletion is recoverable Trash; permanent project/world/branch deletion uses one cross-store cleanup path so chat history cannot become orphaned.
-- Existing SQLite data is backed up before **any** History/Workspace migration starts, including pre-versioned legacy databases.
-- Context Stack state is browser-tab scoped, preventing two open Studio tabs from overwriting each other.
-- API keys are no longer returned by `/api/config` or sent in model-discovery query strings.
-- CI rejects duplicate top-level frontend functions and frontend/backend context-contract regressions.
-- The final v1.1 release gate covers compact Composer behavior, onboarding/recovery surfaces, Data Doctor wiring, progressive chat rendering, Developer/Settings separation, Gallery/media lifecycle, and native LM Studio image-input plumbing.
+### Integrated Python interface and CLI
+
+```powershell
+npm --prefix frontend run build
+uv run python app.py
+# Open http://127.0.0.1:7860
+
+uv run python main.py --help
+uv run python shutdown.py --dry-run
+```
+
+`app.py` serves the built React interface when available and falls back to the legacy static interface when it is absent. The Python path reads `config/arline.toml` and normally uses repository-local `data/` and `output/` directories. `shutdown.py` targets the Python web server; it is not the native desktop shutdown command.
+
+### Validation
+
+Run these commands from the repository root. Install the dependencies for the relevant runtime first.
+
+```powershell
+# Native runtime and desktop feature.
+cargo test --locked --features desktop --manifest-path crates/arline-runtime/Cargo.toml
+cargo clippy --locked --features desktop --manifest-path crates/arline-runtime/Cargo.toml --all-targets -- -D warnings
+
+# React type checking and production build.
+npm --prefix frontend run typecheck
+npm --prefix frontend run build
+
+# Python regression suite.
+uv run python -m unittest discover -s tests -v
+```
+
+The automated suites use temporary databases and mock model providers where needed. Real-model observations and migration checks are recorded separately in [native validation](crates/arline-runtime/VALIDATION.md). Route inventory coverage does not prove identical semantics or output for every historical endpoint.
+
+### Repository map
+
+| Path | Responsibility |
+| --- | --- |
+| [`frontend/`](frontend/) | React interface, client state, and Vite configuration. |
+| [`crates/arline-runtime/`](crates/arline-runtime/) | Rust application runtime, SQLite services, inference integration, and Tauri host. |
+| [`crates/arline-native/`](crates/arline-native/) | Optional Rust storage extension for the Python backend. |
+| [`src/`](src/) | Python backend, CLI services, and legacy interface. |
+| [`config/`](config/) | Repository defaults and writer contracts. |
+| [`tests/`](tests/) | Python and legacy frontend regression coverage; native tests live in the runtime crate. |
+
+## License
+
+Arline Studio is available under the [MIT License](LICENSE).
