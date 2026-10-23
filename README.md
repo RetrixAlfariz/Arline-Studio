@@ -203,6 +203,7 @@ The automated suites use temporary databases and mock model providers where need
 | [`crates/arline-native/`](crates/arline-native/) | Optional Rust storage extension for the Python backend. |
 | [`src/`](src/) | Python backend, CLI services, and legacy interface. |
 | [`config/`](config/) | Repository defaults and writer contracts. |
+| [`docs/`](docs/) | Architecture and implementation notes, plus archived [design QA evidence](docs/design-qa/). |
 | [`tests/`](tests/) | Python and legacy frontend regression coverage; native tests live in the runtime crate. |
 
 ## License

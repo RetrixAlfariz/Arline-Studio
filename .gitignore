@@ -28,3 +28,7 @@ pnpm-debug.log*
 .codex/
 .codex-*/
 tmp/
+
+# Ad hoc QA captures; curated evidence belongs in docs/design-qa/.
+/design-qa*.png
+/design-qa.md

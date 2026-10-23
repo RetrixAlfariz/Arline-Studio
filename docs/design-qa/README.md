@@ -1,11 +1,25 @@
 # Sidebar Shadow Design QA
 
-- Source visual truth: `C:\Users\Revian\AppData\Local\Temp\codex-clipboard-ad01958c-744f-44ea-a1bb-ed3be5cabfe7.png` (245 x 77 px) and `C:\Users\Revian\AppData\Local\Temp\codex-clipboard-e45fa008-07f9-4138-8fd6-387f12e967bb.png` (280 x 71 px)
-- Implementation screenshot: `E:\Developen\Github\Arline Studio\design-qa-sidebar-shadow-final.png` (248 x 330 px)
-- Focused comparison: `E:\Developen\Github\Arline Studio\design-qa-shadow-comparison.png` (540 x 220 px)
+Archived evidence from the sidebar-shadow design pass. These notes describe the captured UI state.
+
+- Source visual truth: supplied reference crops (245 x 77 px and 280 x 71 px), shown in the comparison below. Original clipboard files are not included in the repository.
+- Implementation screenshot: [Final sidebar capture](design-qa-sidebar-shadow-final.png) (248 x 330 px)
+- Focused comparison: [Reference and implementation](design-qa-shadow-comparison.png) (540 x 220 px)
 - Browser viewport: 1280 x 720 CSS px, device pixel ratio 1
 - State: dark theme, custom pink accent, New chat control and active Chat navigation control
 - Density normalization: all captures use 1x pixels; focused controls are displayed without resampling in the comparison board
+
+![Reference controls compared with the Arline sidebar controls](design-qa-shadow-comparison.png)
+
+## Captures
+
+| Capture | Artifact |
+| --- | --- |
+| New chat control | [Final capture](design-qa-new-chat-final.png) |
+| Active navigation control | [Final capture](design-qa-active-nav-final.png) |
+| Sidebar, initial pass | [Initial capture](design-qa-sidebar-shadow.png) |
+| Sidebar, final pass | [Final capture](design-qa-sidebar-shadow-final.png) |
+| Reference comparison | [Comparison board](design-qa-shadow-comparison.png) |
 
 ## Full-view comparison evidence
 
