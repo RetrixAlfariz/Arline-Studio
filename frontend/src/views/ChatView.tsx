@@ -43,6 +43,8 @@ import {
   X,
 } from "lucide-react";
 import { runtimePayload, streamGeneration, studioApi } from "../api";
+import { deliberationSelectorMode, withDeliberationMode } from "../deliberation";
+import { OUTPUT_BUDGET_OPTIONS, withOutputBudgetMode, withResponseLength } from "../outputBudget";
 import { ArlineSelect, simpleOptions, type ArlineSelectOption } from "../components/ArlineSelect";
 import type {
   CommandDefinition,
@@ -98,6 +100,13 @@ const MODE_META: Record<ConversationMode, { label: string; description: string; 
 };
 
 const MODE_OPTIONS: ArlineSelectOption[] = (Object.entries(MODE_META) as Array<[ConversationMode, (typeof MODE_META)[ConversationMode]]>).map(([value, item]) => ({ value, label: item.label, description: item.description, icon: item.icon }));
+
+function outputCutoffNotice(turn: Turn): string | null {
+  const stats = (turn.stats || {}) as JsonMap;
+  if (stats.output_cutoff === true) return "Output reached the token limit.";
+  if (stats.output_cutoff == null && stats.likely_output_budget_cutoff === true) return "Output may have reached its token allowance.";
+  return null;
+}
 
 const DEFAULT_CONVERSATION_PROFILE: ConversationProfile = {
   exploration: "open",
@@ -1004,6 +1013,7 @@ export function ChatView({
                 <div className="assistant-turn">
                   <div className="assistant-meta"><b className="draft-number">{conversationMode === "story_lab" ? "Note" : "Draft"} {String(item.index + 1).padStart(2, "0")}</b>{conversationMode === "story_lab" && <i className="brand-mark discussion-arline-mark" aria-hidden="true" />}<span>{partnerName}</span><small>{item.turn.model || "local model"}</small><em>{item.turn.run_id || ""}</em></div>
                   <StoryText text={item.turn.story || ""} discussion={conversationMode === "story_lab"} />
+                  {outputCutoffNotice(item.turn) && <div className="library-notice">{outputCutoffNotice(item.turn)}</div>}
                   <div className="turn-actions">
                     <button onClick={() => void navigator.clipboard.writeText(item.turn.story || "")}><Copy size={13} />Copy</button>
                     <button onClick={() => onInspect("Turn data", item.turn)}><CornerUpRight size={13} />Inspect</button>
@@ -1171,10 +1181,7 @@ export function ChatView({
 
               <section className="run-settings-section">
                 <div className="run-setting-heading"><span><BrainCircuit size={13} />Planning</span><small>Plan the scene before writing</small></div>
-                <div className="setting-segments two" role="group" aria-label="Planning">
-                  <button type="button" aria-pressed={!config.planning_enabled} className={!config.planning_enabled ? "active" : ""} onClick={() => onConfig({ ...config, planning_enabled: false })}><strong>Off</strong><small>Write right away</small></button>
-                  <button type="button" aria-pressed={config.planning_enabled === true} className={config.planning_enabled ? "active" : ""} onClick={() => onConfig({ ...config, planning_enabled: true })}><strong>On</strong><small>Plan, then write</small></button>
-                </div>
+                <ArlineSelect density="compact" ariaLabel="Planning mode" value={deliberationSelectorMode(config)} options={[{ value: "off", label: "Off", description: "Write right away" }, { value: "auto", label: "Auto", description: "Plan when the task needs it" }, { value: "fast", label: "Fast", description: "Skip optional planning" }, { value: "deep", label: "Deep", description: "Always plan before writing" }]} onValueChange={(mode) => onConfig(withDeliberationMode(config, mode as "off" | "auto" | "fast" | "deep"))} />
               </section>
 
               <div className="run-settings-grid">
@@ -1183,8 +1190,9 @@ export function ChatView({
                   <ArlineSelect density="compact" ariaLabel="Reasoning mode" value={config.reasoning} options={(config.reasoning_modes || ["off", "on", "low", "medium", "high"]).map((value) => ({ value, label: value === "off" ? "Off" : value.charAt(0).toUpperCase() + value.slice(1) }))} onValueChange={(reasoning) => onConfig({ ...config, reasoning })} />
                 </section>
                 <section className="run-settings-section compact">
-                  <div className="run-setting-heading"><span><Gauge size={13} />Response length</span><small>{Math.round((config.visible_output_tokens || 4096) / 1024)}K token target</small></div>
-                  <div className="token-segments">{[1024, 2048, 4096, 8192, 16384].map((tokens) => <button key={tokens} className={config.visible_output_tokens === tokens ? "active" : ""} onClick={() => onConfig({ ...config, visible_output_tokens: tokens })}>{tokens / 1024}K</button>)}</div>
+                  <div className="run-setting-heading"><span><Gauge size={13} />Response length</span><small>{config.output_budget_mode === "auto" ? "Task-aware allowance" : `${Math.round((config.visible_output_tokens || 4096) / 1024)}K token target`}</small></div>
+                  <ArlineSelect density="compact" ariaLabel="Output budget mode" value={config.output_budget_mode || "fixed"} options={OUTPUT_BUDGET_OPTIONS.map((option) => ({ ...option }))} onValueChange={(mode) => onConfig(withOutputBudgetMode(config, mode as "fixed" | "auto"))} />
+                  <div className="token-segments">{[1024, 2048, 4096, 8192, 16384].map((tokens) => <button key={tokens} className={config.visible_output_tokens === tokens && config.output_budget_mode !== "auto" ? "active" : ""} onClick={() => onConfig(withResponseLength(config, tokens))}>{tokens / 1024}K</button>)}</div>
                 </section>
               </div>
 

@@ -142,6 +142,30 @@ pub fn validate(method: &str, path: &[&str], body: &Value) -> Result<(), Vec<Val
             continue;
         }
         if let Some(node) = methods.get(method) {
+            // Keep the imported legacy schema frozen. INF-09 owns these numeric
+            // fields now (positive explicit limits, including small beat targets).
+            // Only adapt this generation boundary; all other validation stays here.
+            let mut adapted;
+            let node = if method == "POST"
+                && matches!(
+                    path,
+                    ["api", "generate"]
+                        | ["api", "generate", "stream"]
+                        | ["api", "analyze"]
+                        | ["api", "ablation"]
+                ) {
+                adapted = schema(node).clone();
+                if let Some(properties) =
+                    adapted.get_mut("properties").and_then(Value::as_object_mut)
+                {
+                    for &(key, _) in crate::inference::budget::FIELDS {
+                        properties.remove(key);
+                    }
+                }
+                &adapted
+            } else {
+                node
+            };
             let mut errors = Vec::new();
             check(node, body, &[json!("body")], &mut errors);
             if !errors.is_empty() {

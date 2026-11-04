@@ -242,17 +242,29 @@ pub fn quality_report_with_context(story: &str, context: Option<&Value>) -> Valu
 /// Run the configured planning pass. Its output is explicitly soft and never
 /// enters canon; provider failures return a traceable fallback object.
 pub async fn deliberate(state: &AppState, body: &Value, analysis: &Value) -> Value {
+    deliberate_with_override(state, body, analysis, None, None).await
+}
+
+pub(crate) async fn deliberate_with_override(
+    state: &AppState,
+    body: &Value,
+    analysis: &Value,
+    planning_override: Option<bool>,
+    output_budget: Option<&crate::inference::budget::OutputBudget>,
+) -> Value {
     let cfg = match state.runtime_config() {
         Ok(value) => value,
         Err(error) => {
             return json!({"version":"1.2.4a1","status":"fallback","authority":"soft_non_canon","diagnostics":[error.message]})
         }
     };
-    let planning_enabled = match body.get("deliberation_mode").and_then(Value::as_str) {
-        Some("on") => true,
-        Some("off") => false,
-        _ => cfg.bool("deliberation.enabled", false),
-    };
+    let planning_enabled = planning_override.unwrap_or_else(|| {
+        match body.get("deliberation_mode").and_then(Value::as_str) {
+            Some("on") => true,
+            Some("off") => false,
+            _ => cfg.bool("deliberation.enabled", false),
+        }
+    });
     if !planning_enabled {
         return json!({"version":"1.2.4a1","status":"disabled","authority":"soft_non_canon","intent":"continue","likely_beats":[],"alternatives":[]});
     }
@@ -269,7 +281,10 @@ pub async fn deliberate(state: &AppState, body: &Value, analysis: &Value) -> Val
         .get("model")
         .and_then(Value::as_str)
         .unwrap_or(&configured_model);
-    let payload = json!({"model":model,"input":format!("<AUTHORITATIVE_CONTEXT>\n{}\n</AUTHORITATIVE_CONTEXT>\nReturn one JSON object only with scene_goal, likely_beats, character_intentions, emotional_trajectories, opportunities, alternatives, uncertainties, constraints.", context),"system_prompt":"You are Arline's Narrative Deliberator. Return JSON only. Never write prose or invent canon. Your output is soft non-canon guidance.","stream":false,"temperature":cfg.f64("deliberation.temperature",0.35),"top_p":0.9,"top_k":40,"max_output_tokens":cfg.u64("deliberation.max_tokens",700).clamp(128,4096),"reasoning":"off"});
+    let limit = output_budget
+        .map(|b| b.api_max)
+        .unwrap_or_else(|| cfg.u64("deliberation.max_tokens", 700));
+    let payload = json!({"model":model,"input":format!("<AUTHORITATIVE_CONTEXT>\n{}\n</AUTHORITATIVE_CONTEXT>\nReturn one JSON object only with scene_goal, likely_beats, character_intentions, emotional_trajectories, opportunities, alternatives, uncertainties, constraints.", context),"system_prompt":"You are Arline's Narrative Deliberator. Return JSON only. Never write prose or invent canon. Your output is soft non-canon guidance.","stream":false,"temperature":cfg.f64("deliberation.temperature",0.35),"top_p":0.9,"top_k":40,"max_output_tokens":limit,"reasoning":"off"});
     let mut request = state
         .client
         .post(format!("{}/api/v1/chat", base.trim_end_matches('/')))
@@ -311,7 +326,7 @@ pub async fn deliberate(state: &AppState, body: &Value, analysis: &Value) -> Val
             .trim_end_matches("```")
             .trim(),
     );
-    match parsed {
+    let mut result = match parsed {
         Ok(value) if value.is_object() => {
             let mut result = serde_json::Map::new();
             for key in [
@@ -347,7 +362,11 @@ pub async fn deliberate(state: &AppState, body: &Value, analysis: &Value) -> Val
         _ => {
             json!({"version":"1.2.4a1","status":"fallback","authority":"soft_non_canon","diagnostics":["Deliberator returned non-JSON output."],"scene_goal":prompt})
         }
+    };
+    if let Some(budget) = output_budget {
+        result["_output_usage"] = crate::inference::budget::usage(&raw, budget);
     }
+    result
 }
 
 pub fn compose_input(
@@ -1609,8 +1628,21 @@ pub fn analyze(state: &AppState, body: &Value) -> ApiResult<Value> {
     payload["writer_context"]["style"] =
         json!({"language_profile":{"language":"en-US","narrator_pronoun":"adaptive"}});
     let rendered = wcf::render(&payload["writer_context"]);
-    payload["wcf"] = rendered["text"].clone();
+    // Preserve the authoritative workspace selection after rendering the
+    // derived writer context. Rendering must not erase scoped Canon/POV data.
+    payload["wcf"] = if wcf.is_empty() {
+        rendered["text"].clone()
+    } else {
+        json!(format!(
+            "{wcf}\n\n{}",
+            rendered["text"].as_str().unwrap_or_default()
+        ))
+    };
     payload["wcf_metadata"] = rendered["metadata"].clone();
+    if !wcf.is_empty() {
+        payload["wcf_metadata"]["budget_scope"] = json!("derived_writer_context");
+        payload["wcf_metadata"]["workspace_context_characters"] = json!(wcf.chars().count());
+    }
     Ok(payload)
 }
 
@@ -1618,7 +1650,19 @@ pub fn analyze(state: &AppState, body: &Value) -> ApiResult<Value> {
 /// canonical memory retrieval path.  HTTP and generation entrypoints use this
 /// async form; the synchronous core remains useful to bounded context code.
 pub async fn analyze_async(state: &AppState, body: &Value) -> ApiResult<Value> {
+    analyze_async_profiled(state, body, None).await
+}
+
+pub(crate) async fn analyze_async_profiled(
+    state: &AppState,
+    body: &Value,
+    mut telemetry: Option<&mut crate::inference::RunTelemetry>,
+) -> ApiResult<Value> {
+    let started = std::time::Instant::now();
     let mut payload = analyze(state, body)?;
+    if let Some(profile) = telemetry.as_deref_mut() {
+        profile.record_stage("analyze", started.elapsed());
+    }
     let cfg = state.runtime_config()?;
     if !cfg.bool("memory.enabled", true) || !cfg.bool("memory.automatic_context", true) {
         payload["memory"] = json!([]);
@@ -1629,7 +1673,11 @@ pub async fn analyze_async(state: &AppState, body: &Value) -> ApiResult<Value> {
     let mut query = body.clone();
     query["query"] = json!(prompt);
     query["limit"] = json!(20);
+    let started = std::time::Instant::now();
     let retrieval = crate::foundation::memory::retrieve_async(state, &query, &HashMap::new()).await;
+    if let Some(profile) = telemetry {
+        profile.record_stage("memory_retrieval", started.elapsed());
+    }
     match retrieval {
         Ok(result) => {
             let memory = result.get("results").cloned().unwrap_or_else(|| json!([]));

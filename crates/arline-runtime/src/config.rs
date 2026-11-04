@@ -211,6 +211,7 @@ impl RuntimeConfig {
                 "This local runtime requires a loopback LM Studio URL",
             ));
         }
+        crate::inference::budget::validate_config(self)?;
         if self.u64("generation.visible_output_tokens", 4096) == 0 {
             return Err(ApiError::bad_request("Response length must be positive"));
         }
@@ -240,7 +241,30 @@ impl RuntimeConfig {
         {
             return Err(ApiError::bad_request("Beat configuration must be positive"));
         }
+        if let Some(mode) = self
+            .raw
+            .get("deliberation")
+            .and_then(|section| section.get("mode"))
+        {
+            if !mode
+                .as_str()
+                .is_some_and(|mode| ["on", "off", "auto", "fast", "deep"].contains(&mode))
+            {
+                return Err(ApiError::bad_request("Unsupported deliberation mode"));
+            }
+        }
         Ok(())
+    }
+
+    pub fn deliberation_mode(&self) -> String {
+        self.str(
+            "deliberation.mode",
+            if self.bool("deliberation.enabled", false) {
+                "on"
+            } else {
+                "off"
+            },
+        )
     }
 
     pub fn api_payload(&self) -> Value {
@@ -251,9 +275,11 @@ impl RuntimeConfig {
             "model":self.str("lmstudio.model",""), "auto_load":self.bool("lmstudio.auto_load",true), "gpu_ratio":self.f64("model_load.gpu_ratio",1.0), "flash_attention":self.bool("model_load.flash_attention",true),
             "context_length":self.u64("model_load.context_length",32768), "input_mode":self.str("writer.input_mode","smart_hybrid"),
             "reasoning":self.str("generation.reasoning","off"),"projection_mode":self.str("projection.mode","balanced"),
-            "planning_enabled":self.bool("deliberation.enabled",false),
+            "planning_enabled":matches!(self.deliberation_mode().as_str(),"on"|"auto"|"deep"),
+            "deliberation_mode":self.deliberation_mode(),"deliberation_modes":["off","auto","fast","deep","on"],
             "temperature":self.f64("generation.temperature",0.8),"top_p":self.f64("generation.top_p",0.95),"top_k":self.u64("generation.top_k",40),
             "min_p":self.f64("generation.min_p",0.0),"repeat_penalty":self.f64("generation.repeat_penalty",1.05),
+            "output_budget_mode":self.str("generation.output_budget_mode","fixed"),
             "visible_output_tokens":self.u64("generation.visible_output_tokens",4096),"reasoning_reserve_tokens":self.u64("generation.reasoning_reserve_tokens",4096),
             "api_max_output_tokens":self.u64("generation.visible_output_tokens",4096) + if self.str("generation.reasoning","off")=="off" {0} else {self.u64("generation.reasoning_reserve_tokens",4096)},
             "generation_mode":self.str("generation.generation_mode","single"),"beat_count":self.u64("generation.beat_count",4),"beat_tokens":self.u64("generation.beat_tokens",2048),"total_story_target_tokens":self.u64("generation.total_story_target_tokens",8192),
@@ -288,6 +314,7 @@ impl RuntimeConfig {
             ("min_p", "generation.min_p"),
             ("repeat_penalty", "generation.repeat_penalty"),
             ("visible_output_tokens", "generation.visible_output_tokens"),
+            ("output_budget_mode", "generation.output_budget_mode"),
             (
                 "reasoning_reserve_tokens",
                 "generation.reasoning_reserve_tokens",
@@ -300,6 +327,7 @@ impl RuntimeConfig {
                 "generation.total_story_target_tokens",
             ),
             ("deliberation_enabled", "deliberation.enabled"),
+            ("deliberation_mode", "deliberation.mode"),
             ("deliberation_max_tokens", "deliberation.max_tokens"),
             ("deliberation_temperature", "deliberation.temperature"),
             ("deliberation_alternatives", "deliberation.alternatives"),
@@ -333,6 +361,35 @@ impl RuntimeConfig {
                     }
                 }
             }
+        }
+        let explicit_mode = object.contains_key("deliberation_mode")
+            || object
+                .get("deliberation")
+                .and_then(|section| section.get("mode"))
+                .is_some_and(|mode| !mode.is_null());
+        if !explicit_mode {
+            if let Some(enabled) = object
+                .get("deliberation_enabled")
+                .or_else(|| {
+                    object
+                        .get("deliberation")
+                        .and_then(|section| section.get("enabled"))
+                })
+                .and_then(Value::as_bool)
+            {
+                updated.set(
+                    "deliberation.mode",
+                    toml::Value::String(if enabled { "on" } else { "off" }.into()),
+                )?;
+            }
+        } else {
+            updated.set(
+                "deliberation.enabled",
+                toml::Value::Boolean(matches!(
+                    updated.deliberation_mode().as_str(),
+                    "on" | "auto" | "deep"
+                )),
+            )?;
         }
         updated.set("lmstudio.api_key", toml::Value::String(String::new()))?;
         updated.validate()?;
@@ -440,6 +497,82 @@ mod tests {
                 .set("deliberation.enabled", toml::Value::Boolean(enabled))
                 .unwrap();
             assert_eq!(config.api_payload()["planning_enabled"], enabled);
+        }
+    }
+
+    #[test]
+    fn adaptive_mode_persists_and_legacy_toggle_can_replace_it() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("settings.toml");
+        let mut config = RuntimeConfig::create_default(&path, temp.path()).unwrap();
+        let saved = config
+            .apply_settings(&json!({"deliberation_mode":"auto"}))
+            .unwrap();
+        assert_eq!(saved["config"]["deliberation_mode"], "auto");
+        assert_eq!(saved["config"]["planning_enabled"], true);
+        let reloaded = RuntimeConfig::load(&path, temp.path()).unwrap();
+        assert_eq!(reloaded.deliberation_mode(), "auto");
+        assert_eq!(
+            config
+                .apply_settings(&json!({"deliberation_enabled":false}))
+                .unwrap()["config"]["deliberation_mode"],
+            "off"
+        );
+        assert_eq!(
+            config
+                .apply_settings(&json!({"deliberation":{"enabled":true}}))
+                .unwrap()["config"]["deliberation_mode"],
+            "on"
+        );
+        let saved = config
+            .apply_settings(&json!({"deliberation_enabled":true,"deliberation_mode":"fast"}))
+            .unwrap();
+        assert_eq!(saved["config"]["deliberation_mode"], "fast");
+        assert_eq!(saved["config"]["planning_enabled"], false);
+    }
+
+    #[test]
+    fn invalid_adaptive_mode_leaves_settings_unchanged() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("settings.toml");
+        let mut config = RuntimeConfig::create_default(&path, temp.path()).unwrap();
+        let original = std::fs::read(&path).unwrap();
+        for invalid in [json!("sometimes"), json!(7), json!(true)] {
+            assert!(config
+                .apply_settings(&json!({"deliberation_mode":invalid}))
+                .is_err());
+            assert_eq!(std::fs::read(&path).unwrap(), original);
+            assert_eq!(config.deliberation_mode(), "off");
+        }
+    }
+
+    #[test]
+    fn output_budget_policy_persists_and_invalid_numbers_leave_file_unchanged() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("settings.toml");
+        let mut config = RuntimeConfig::create_default(&path, temp.path()).unwrap();
+        assert_eq!(config.api_payload()["output_budget_mode"], "fixed");
+        config
+            .apply_settings(&json!({"output_budget_mode":"auto","reasoning_reserve_tokens":0}))
+            .unwrap();
+        assert_eq!(
+            RuntimeConfig::load(&path, temp.path())
+                .unwrap()
+                .api_payload()["output_budget_mode"],
+            "auto"
+        );
+        let before = std::fs::read(&path).unwrap();
+        for invalid in [
+            json!({"output_budget_mode":"tiny"}),
+            json!({"visible_output_tokens":0}),
+            json!({"visible_output_tokens":"100"}),
+            json!({"reasoning_reserve_tokens":-1}),
+            json!({"beat_count":25}),
+            json!({"total_story_target_tokens":0}),
+            json!({"deliberation_max_tokens":0}),
+        ] {
+            assert!(config.apply_settings(&invalid).is_err(), "{invalid}");
+            assert_eq!(std::fs::read(&path).unwrap(), before);
         }
     }
 }

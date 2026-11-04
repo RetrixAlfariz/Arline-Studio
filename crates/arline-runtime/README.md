@@ -39,6 +39,19 @@ The legacy route fixture contains 213 entries. The route-coverage test establish
 
 ## Validation
 
+Generation profiling is returned and persisted under `stats.inference`; see the
+[profiling contract](../../docs/INFERENCE_PROFILING.md). A bounded synthetic
+[benchmark runner](../../docs/INFERENCE_BENCHMARK.md) uses fresh temporary storage
+per sample and leaves the application's workspace unchanged.
+
+Adaptive deliberation supports legacy `on/off` and opt-in `auto/fast/deep` modes.
+See the [U2 routing contract and validation](../../docs/INFERENCE_U2_VALIDATION.md)
+for precedence, author-command handling and the shared scope/validation path.
+
+Output budgets default to Fixed, with optional Auto by task. The shared
+[budget contract](../../docs/INFERENCE_OUTPUT_BUDGET.md) covers explicit limits,
+reasoning reserves, beat totals, planner limits and cutoff reporting.
+
 Run the crate suite from the repository root:
 
 ```powershell

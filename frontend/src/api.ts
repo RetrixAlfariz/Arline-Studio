@@ -14,6 +14,8 @@ import type {
   WorldBible,
   MediaItem,
 } from "./types";
+import { resolveDeliberationMode } from "./deliberation";
+import { resolveOutputBudgetMode } from "./outputBudget";
 
 type RequestInitJson = Omit<RequestInit, "body"> & { body?: unknown };
 
@@ -279,7 +281,7 @@ export function runtimePayload(
   overrides: Partial<RuntimeConfig> = {},
 ): Record<string, unknown> {
   const next = { ...config, ...overrides };
-  return {
+  const payload: Record<string, unknown> = {
     prompt,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
     session_id: scope.sessionId || null,
@@ -294,21 +296,29 @@ export function runtimePayload(
     context_length: Number(next.context_length ?? 32768),
     input_mode: next.input_mode || "smart_hybrid",
     reasoning: next.reasoning || "off",
-    deliberation_mode: next.planning_enabled === true ? "on" : "off",
+    deliberation_mode: resolveDeliberationMode(config, overrides),
+    output_budget_mode: resolveOutputBudgetMode(config, overrides),
     projection_mode: next.projection_mode || "balanced",
     temperature: Number(next.temperature ?? 0.8),
     top_p: Number(next.top_p ?? 0.95),
     top_k: Number(next.top_k ?? 40),
     min_p: Number(next.min_p ?? 0),
     repeat_penalty: Number(next.repeat_penalty ?? 1.05),
-    visible_output_tokens: Number(next.visible_output_tokens ?? 4096),
     reasoning_reserve_tokens: Number(next.reasoning_reserve_tokens ?? 4096),
     generation_mode: next.generation_mode || "single",
     beat_count: Number(next.beat_count ?? 4),
-    beat_tokens: Number(next.beat_tokens ?? 2048),
-    total_story_target_tokens: Number(next.total_story_target_tokens ?? 8192),
     scratch_mode: false,
   };
+  const budgetMode = resolveOutputBudgetMode(config, overrides);
+  for (const key of ["visible_output_tokens", "beat_tokens", "total_story_target_tokens"] as const) {
+    if (budgetMode === "fixed" || Object.prototype.hasOwnProperty.call(overrides, key)) {
+      payload[key] = Number(next[key] ?? (key === "visible_output_tokens" ? 4096 : key === "beat_tokens" ? 2048 : 8192));
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(overrides, "max_output_tokens")) {
+    payload.max_output_tokens = overrides.max_output_tokens;
+  }
+  return payload;
 }
 
 export interface StreamEvent {

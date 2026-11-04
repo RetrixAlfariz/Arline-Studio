@@ -12,6 +12,8 @@ export type JsonMap = Record<string, unknown>;
 export type ConversationMode = "story_writer" | "story_lab" | "interactive" | "analyst" | "character_room";
 export type ExplorationLevel = "grounded" | "open" | "unbound";
 export type PresenceMode = "observer" | "self" | "linked_entity";
+export type DeliberationMode = "on" | "off" | "auto" | "fast" | "deep";
+export type OutputBudgetMode = "fixed" | "auto";
 
 export interface ConversationProfile extends JsonMap {
   exploration?: ExplorationLevel;
@@ -55,6 +57,8 @@ export interface RuntimeConfig extends JsonMap {
   input_mode: string;
   reasoning: string;
   planning_enabled?: boolean;
+  deliberation_mode?: DeliberationMode;
+  output_budget_mode?: OutputBudgetMode;
   projection_mode: string;
   temperature: number;
   top_p: number;

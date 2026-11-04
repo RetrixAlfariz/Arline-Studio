@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { AlertTriangle, BrainCircuit, Check, ChevronDown, ChevronUp, ClipboardPaste, Cpu, Database, Download, GripVertical, Library, Link2, MessageSquareText, Monitor, Moon, MoreHorizontal, Palette, Pause, Plus, RefreshCcw, RotateCcw, Save, Search, ShieldCheck, SlidersHorizontal, Sparkles, Sun, Trash2, UserPlus, UserRound, X } from "lucide-react";
 import { studioApi } from "../api";
+import { deliberationSelectorMode, resolveDeliberationMode, withDeliberationMode } from "../deliberation";
+import { OUTPUT_BUDGET_OPTIONS, withOutputBudgetMode, withResponseLength } from "../outputBudget";
 import { browserStorage } from "../browserStorage";
 import { appearancePalette, DEFAULT_APPEARANCE, normalizeHex, readableForeground, resolveAccent } from "../theme";
 import type { AppearanceSettings, EntityVariant, JsonMap, ModelInfo, PreferredName, RuntimeConfig, ThemeMode, ThemePreference, UserProfile, WorldBible } from "../types";
@@ -160,6 +162,8 @@ export function SettingsDrawer({ open, config, onConfig, appearance, onAppearanc
         context_length: config.context_length,
         input_mode: config.input_mode,
         reasoning: config.reasoning,
+        deliberation_mode: resolveDeliberationMode(config),
+        output_budget_mode: config.output_budget_mode || "fixed",
         projection_mode: config.projection_mode,
         temperature: config.temperature,
         top_p: config.top_p,
@@ -500,12 +504,14 @@ export function SettingsDrawer({ open, config, onConfig, appearance, onAppearanc
               <div className="settings-grid">
                 <label><span>Input mode</span><ArlineSelect ariaLabel="Input mode" value={config.input_mode} options={Object.entries(config.modes || { smart_hybrid: "Smart Hybrid", wcf: "WCF only", raw: "Raw only", wcf_raw: "WCF + Raw", aif_core: "AIF-Core" }).map(([value, label]) => ({ value, label }))} onValueChange={(input_mode) => patch("input_mode", input_mode)} /></label>
                 <label><span>Reasoning</span><ArlineSelect ariaLabel="Reasoning" value={config.reasoning} options={(config.reasoning_modes || ["off", "on", "low", "medium", "high"]).map((value) => ({ value, label: value === "off" ? "Off" : value.charAt(0).toUpperCase() + value.slice(1) }))} onValueChange={(reasoning) => patch("reasoning", reasoning)} /></label>
+                <label><span>Planning</span><ArlineSelect ariaLabel="Planning mode" value={deliberationSelectorMode(config)} options={[{ value: "off", label: "Off", description: "Write right away" }, { value: "auto", label: "Auto", description: "Plan when the task needs it" }, { value: "fast", label: "Fast", description: "Skip optional planning" }, { value: "deep", label: "Deep", description: "Always plan before writing" }]} onValueChange={(mode) => onConfig(withDeliberationMode(config, mode as "off" | "auto" | "fast" | "deep"))} /></label>
                 <NumberSetting label="Temperature" value={config.temperature} min={0} max={2} step={0.05} onChange={(value) => patch("temperature", value)} />
                 <NumberSetting label="Top P" value={config.top_p} min={0} max={1} step={0.01} onChange={(value) => patch("top_p", value)} />
                 <NumberSetting label="Top K" value={config.top_k} min={1} step={1} onChange={(value) => patch("top_k", value)} />
                 <NumberSetting label="Min P" value={config.min_p} min={0} max={1} step={0.01} onChange={(value) => patch("min_p", value)} />
                 <NumberSetting label="Repeat penalty" value={config.repeat_penalty} min={0.8} max={1.5} step={0.01} onChange={(value) => patch("repeat_penalty", value)} />
-                <NumberSetting label="Visible output" value={config.visible_output_tokens} min={256} step={256} onChange={(value) => patch("visible_output_tokens", value)} />
+                <label><span>Output budget</span><ArlineSelect ariaLabel="Output budget mode" value={config.output_budget_mode || "fixed"} options={OUTPUT_BUDGET_OPTIONS.map((option) => ({ ...option }))} onValueChange={(mode) => onConfig(withOutputBudgetMode(config, mode as "fixed" | "auto"))} /></label>
+                <NumberSetting label="Visible output" value={config.visible_output_tokens} min={256} step={256} onChange={(value) => onConfig(withResponseLength(config, value))} />
                 <NumberSetting label="Reasoning reserve" value={config.reasoning_reserve_tokens} min={0} step={256} onChange={(value) => patch("reasoning_reserve_tokens", value)} />
               </div>
             </>}

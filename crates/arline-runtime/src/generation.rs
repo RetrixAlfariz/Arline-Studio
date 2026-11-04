@@ -9,10 +9,99 @@ use axum::{
 };
 use futures_util::StreamExt;
 use serde_json::{json, Value};
-use std::{collections::HashMap, convert::Infallible};
+use std::{collections::HashMap, convert::Infallible, time::Instant};
 use uuid::Uuid;
 
+use crate::inference::{ProviderAppTimings, RunTelemetry};
 use crate::{ApiError, ApiResult, AppState};
+
+struct ProviderTimer {
+    started: Instant,
+    first_text: Option<std::time::Duration>,
+}
+
+impl ProviderTimer {
+    fn new() -> Self {
+        Self {
+            started: Instant::now(),
+            first_text: None,
+        }
+    }
+
+    fn first_text(&mut self) {
+        self.first_text
+            .get_or_insert_with(|| self.started.elapsed());
+    }
+
+    fn finish(self, telemetry: &mut RunTelemetry, raw: &Value) {
+        let total = self.started.elapsed();
+        telemetry.record_provider_call_with_timings(
+            raw,
+            ProviderAppTimings {
+                first_text: self.first_text,
+                total: Some(total),
+                text_stream: self.first_text.map(|first| total.saturating_sub(first)),
+            },
+        );
+    }
+}
+
+fn inference_snapshot(telemetry: &mut RunTelemetry) -> Value {
+    telemetry.freeze_total();
+    telemetry.to_value()
+}
+
+fn profiled_error(error: ApiError, telemetry: &mut RunTelemetry) -> Response {
+    let run_id = telemetry.run_id().to_owned();
+    let mut response = json_response_value(json!({
+        "detail":error.message,
+        "run_id":run_id,
+        "stats":{"run_status":"failed","partial":true,"inference":inference_snapshot(telemetry)}
+    }));
+    *response.status_mut() = error.status;
+    response
+}
+
+fn generation_telemetry(body: &Value, cfg: &crate::RuntimeConfig) -> RunTelemetry {
+    let mut telemetry = RunTelemetry::new(format!("run-{}", Uuid::new_v4()));
+    telemetry.record_metadata("backend", json!("lmstudio"));
+    telemetry.record_metadata("provider_call_scope", json!("writer"));
+    telemetry.record_metadata(
+        "model_id",
+        json!(payload_string(
+            body,
+            "model",
+            &cfg.str("lmstudio.model", "")
+        )),
+    );
+    telemetry.record_metadata(
+        "reasoning_mode",
+        json!(payload_string(
+            body,
+            "reasoning",
+            &cfg.str("generation.reasoning", "off")
+        )),
+    );
+    telemetry.record_metadata(
+        "generation_mode",
+        json!(payload_string(body, "generation_mode", "single")),
+    );
+    for (key, default) in [
+        ("temperature", 0.8),
+        ("top_p", 0.95),
+        ("top_k", 40.0),
+        ("min_p", 0.0),
+        ("repeat_penalty", 1.05),
+    ] {
+        telemetry.record_metadata(
+            key,
+            body.get(key)
+                .cloned()
+                .unwrap_or_else(|| json!(cfg.f64(&format!("generation.{key}"), default))),
+        );
+    }
+    telemetry
+}
 
 const CHAT_SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, pinned INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0, project TEXT, project_id TEXT, world_id TEXT, branch_id TEXT, folder_id TEXT, session_kind TEXT NOT NULL DEFAULT 'chat', tags_json TEXT NOT NULL DEFAULT '[]', workspace_refs_json TEXT NOT NULL DEFAULT '[]', parent_session_id TEXT, forked_from_turn_id TEXT, scratch_mode INTEGER NOT NULL DEFAULT 0, conversation_mode TEXT NOT NULL DEFAULT 'story_writer', conversation_profile_json TEXT NOT NULL DEFAULT '{}', mode_events_json TEXT NOT NULL DEFAULT '[]', world_fork_id TEXT, last_model TEXT, last_mode TEXT, last_reasoning TEXT);
@@ -36,6 +125,24 @@ struct CancellationGuard {
     store: crate::store::Store,
     turn_id: String,
     finished: bool,
+    telemetry: RunTelemetry,
+    provider_timer: Option<ProviderTimer>,
+    output_budget: crate::inference::budget::OutputBudget,
+}
+impl CancellationGuard {
+    fn finish_provider(&mut self, raw: &Value) {
+        if let Some(timer) = self.provider_timer.take() {
+            timer.finish(&mut self.telemetry, raw);
+        }
+    }
+
+    fn status_stats(&mut self, status: &str) -> Value {
+        let mut stats = crate::inference::budget::usage(&Value::Null, &self.output_budget);
+        stats["run_status"] = json!(status);
+        stats["partial"] = json!(status != "completed");
+        stats["inference"] = inference_snapshot(&mut self.telemetry);
+        stats
+    }
 }
 impl Drop for CancellationGuard {
     fn drop(&mut self) {
@@ -44,13 +151,11 @@ impl Drop for CancellationGuard {
         }
         let store = self.store.clone();
         let id = self.turn_id.clone();
+        self.finish_provider(&Value::Null);
+        let stats = self.status_stats("cancelled");
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             handle.spawn_blocking(move || {
-                let _ = store.update(
-                    "turns",
-                    &id,
-                    json!({"stats_json":{"run_status":"cancelled","partial":true}}),
-                );
+                let _ = store.update("turns", &id, json!({"stats_json":stats}));
             });
         }
     }
@@ -212,25 +317,17 @@ fn config_num(cfg: &crate::RuntimeConfig, key: &str, default: f64) -> f64 {
         .unwrap_or(default)
 }
 
-fn chat_payload(body: &Value, cfg: &crate::RuntimeConfig, context: &str) -> Value {
-    let visible = body
-        .get("visible_output_tokens")
-        .and_then(Value::as_u64)
-        .unwrap_or(config_num(cfg, "generation.visible_output_tokens", 4096.0) as u64);
+fn chat_payload(
+    body: &Value,
+    cfg: &crate::RuntimeConfig,
+    context: &str,
+    budget: &crate::inference::budget::OutputBudget,
+) -> Value {
     let configured_reasoning = cfg.str("generation.reasoning", "off");
     let requested_reasoning = body
         .get("reasoning")
         .and_then(Value::as_str)
         .unwrap_or(configured_reasoning.as_str());
-    let reserve = body
-        .get("reasoning_reserve_tokens")
-        .and_then(Value::as_u64)
-        .unwrap_or(config_num(cfg, "generation.reasoning_reserve_tokens", 4096.0) as u64);
-    let output_limit = if requested_reasoning == "off" {
-        visible
-    } else {
-        visible.saturating_add(reserve)
-    };
     let input_text = if context.contains("<REQUEST>") && body["generation_mode"] != "beats" {
         context.to_owned()
     } else if context.is_empty() {
@@ -243,7 +340,7 @@ fn chat_payload(body: &Value, cfg: &crate::RuntimeConfig, context: &str) -> Valu
         "input": input_text, "stream": true,
         "temperature": body.get("temperature").cloned().unwrap_or(json!(config_num(cfg, "generation.temperature", 0.8))),
         "top_p": body.get("top_p").cloned().unwrap_or(json!(config_num(cfg, "generation.top_p", 0.95))),
-        "max_output_tokens": body.get("max_output_tokens").cloned().unwrap_or(json!(output_limit)),
+        "max_output_tokens": budget.api_max,
     });
     if let Some(images) = body.get("images").and_then(Value::as_array) {
         if !images.is_empty() {
@@ -384,6 +481,8 @@ async fn model_stream(
     state: &AppState,
     body: &Value,
     context: &str,
+    budget: &crate::inference::budget::OutputBudget,
+    telemetry: &mut RunTelemetry,
 ) -> ApiResult<(String, String, Value, Value)> {
     let cfg = state.runtime_config()?;
     let model = payload_string(body, "model", &config_string(&cfg, "lmstudio.model", ""));
@@ -393,113 +492,143 @@ async fn model_stream(
         .and_then(Value::as_str)
         .unwrap_or(&configured_reasoning)
         .to_owned();
+    let capability_started = Instant::now();
     let effective_reasoning = resolve_reasoning(state, &cfg, &model, &requested_reasoning).await?;
+    telemetry.accumulate_stage("provider_capabilities", capability_started.elapsed());
     let base = config_string(&cfg, "lmstudio.base_url", "http://127.0.0.1:1234")
         .trim_end_matches('/')
         .to_owned();
     let url = format!("{base}/api/v1/chat");
-    let mut provider_body = chat_payload(body, &cfg, context);
+    let mut provider_body = chat_payload(body, &cfg, context, budget);
     if let Some(reasoning) = effective_reasoning {
         provider_body["reasoning"] = json!(reasoning);
     } else if let Some(object) = provider_body.as_object_mut() {
         object.remove("reasoning");
     }
+    telemetry.record_metadata(
+        "effective_reasoning",
+        provider_body
+            .get("reasoning")
+            .cloned()
+            .unwrap_or(json!("omitted")),
+    );
     let mut request = state.client.post(url.clone()).json(&provider_body);
     let api_key = cfg.str("lmstudio.api_key", "");
     if !api_key.is_empty() {
         request = request.bearer_auth(api_key);
     }
-    let response = request
-        .send()
-        .await
-        .map_err(|e| err(format!("LM Studio request failed at {url}: {e}")))?;
-    let status = response.status();
-    if !status.is_success() {
-        let text = response.text().await.unwrap_or_default();
-        return Err(ApiError::bad_request(format!(
-            "LM Studio HTTP {status}: {}",
-            preview(&text)
-        )));
-    }
-    let mut bytes = response.bytes_stream();
-    let mut story = String::new();
-    let mut reasoning = String::new();
-    let mut final_story = String::new();
-    let mut final_reasoning = String::new();
-    let mut saw_story_delta = false;
-    let mut saw_reasoning_delta = false;
-    let mut raw = Vec::new();
-    let mut final_response = Value::Null;
-    let mut pending = Vec::new();
-    let mut current_event = String::from("message");
-    while let Some(item) = bytes.next().await {
-        let chunk = item.map_err(err)?;
-        raw.extend_from_slice(&chunk);
-        pending.extend_from_slice(&chunk);
-        while let Some(line) = take_sse_line(&mut pending) {
-            if let Some(event) = line.strip_prefix("event:") {
-                current_event = event.trim().to_owned();
-                continue;
-            }
-            let Some(data) = line.strip_prefix("data:").map(str::trim) else {
-                continue;
-            };
-            if data == "[DONE]" {
-                continue;
-            }
-            let Ok(v) = serde_json::from_str::<Value>(data) else {
-                continue;
-            };
-            let content = v.get("content").and_then(Value::as_str).unwrap_or_default();
-            let typ = v
-                .get("type")
-                .and_then(Value::as_str)
-                .unwrap_or(&current_event);
-            if typ.contains("error") || v.get("error").is_some() {
-                return Err(ApiError::internal(format!(
-                    "LM Studio generation failed: {}",
-                    preview(&v.to_string())
-                )));
-            }
-            if !content.is_empty() && typ.contains("reason") {
-                reasoning.push_str(content);
-                saw_reasoning_delta = true;
-            } else if !content.is_empty() && (typ.contains("message") || typ.ends_with("delta")) {
-                story.push_str(content);
-                saw_story_delta = true;
-            }
-            if let Some(result) = v.get("result") {
-                final_response = result.clone();
-                if let Some(items) = result.get("output").and_then(Value::as_array) {
-                    for x in items {
-                        let c = x.get("content").and_then(Value::as_str).unwrap_or_default();
-                        if x.get("type").and_then(Value::as_str) == Some("reasoning") {
-                            final_reasoning.push_str(c)
-                        } else {
-                            final_story.push_str(c)
+    let mut provider_timer = ProviderTimer::new();
+    let result = async {
+        let response = request
+            .send()
+            .await
+            .map_err(|e| err(format!("LM Studio request failed at {url}: {e}")))?;
+        let status = response.status();
+        if !status.is_success() {
+            let text = response.text().await.unwrap_or_default();
+            return Err(ApiError::bad_request(format!(
+                "LM Studio HTTP {status}: {}",
+                preview(&text)
+            )));
+        }
+        let mut bytes = response.bytes_stream();
+        let mut story = String::new();
+        let mut reasoning = String::new();
+        let mut final_story = String::new();
+        let mut final_reasoning = String::new();
+        let mut saw_story_delta = false;
+        let mut saw_reasoning_delta = false;
+        let mut raw = Vec::new();
+        let mut final_response = Value::Null;
+        let mut pending = Vec::new();
+        let mut current_event = String::from("message");
+        while let Some(item) = bytes.next().await {
+            let chunk = item.map_err(err)?;
+            raw.extend_from_slice(&chunk);
+            pending.extend_from_slice(&chunk);
+            while let Some(line) = take_sse_line(&mut pending) {
+                if let Some(event) = line.strip_prefix("event:") {
+                    current_event = event.trim().to_owned();
+                    continue;
+                }
+                let Some(data) = line.strip_prefix("data:").map(str::trim) else {
+                    continue;
+                };
+                if data == "[DONE]" {
+                    continue;
+                }
+                let Ok(v) = serde_json::from_str::<Value>(data) else {
+                    continue;
+                };
+                let content = v.get("content").and_then(Value::as_str).unwrap_or_default();
+                let typ = v
+                    .get("type")
+                    .and_then(Value::as_str)
+                    .unwrap_or(&current_event);
+                if typ.contains("error") || v.get("error").is_some() {
+                    return Err(ApiError::internal(format!(
+                        "LM Studio generation failed: {}",
+                        preview(&v.to_string())
+                    )));
+                }
+                if !content.is_empty() && typ.contains("reason") {
+                    provider_timer.first_text();
+                    reasoning.push_str(content);
+                    saw_reasoning_delta = true;
+                } else if !content.is_empty() && (typ.contains("message") || typ.ends_with("delta"))
+                {
+                    provider_timer.first_text();
+                    story.push_str(content);
+                    saw_story_delta = true;
+                }
+                if let Some(result) = v.get("result") {
+                    final_response = result.clone();
+                    if let Some(items) = result.get("output").and_then(Value::as_array) {
+                        for x in items {
+                            let c = x.get("content").and_then(Value::as_str).unwrap_or_default();
+                            if x.get("type").and_then(Value::as_str) == Some("reasoning") {
+                                final_reasoning.push_str(c)
+                            } else {
+                                final_story.push_str(c)
+                            }
                         }
                     }
                 }
             }
         }
+        if !saw_story_delta {
+            story.push_str(&final_story);
+            if !final_story.is_empty() {
+                provider_timer.first_text();
+            }
+        }
+        if !saw_reasoning_delta {
+            reasoning.push_str(&final_reasoning);
+            if !final_reasoning.is_empty() {
+                provider_timer.first_text();
+            }
+        }
+        if story.trim().is_empty() {
+            return Err(ApiError::internal(
+                "LM Studio stream ended without message output",
+            ));
+        }
+        let raw = if final_response.is_null() {
+            serde_json::from_slice(&raw).unwrap_or_else(|_| json!({"raw_bytes": raw.len()}))
+        } else {
+            final_response
+        };
+        Ok((story.trim().to_owned(), reasoning, raw, provider_body))
     }
-    if !saw_story_delta {
-        story.push_str(&final_story);
-    }
-    if !saw_reasoning_delta {
-        reasoning.push_str(&final_reasoning);
-    }
-    if story.trim().is_empty() {
-        return Err(ApiError::internal(
-            "LM Studio stream ended without message output",
-        ));
-    }
-    let raw = if final_response.is_null() {
-        serde_json::from_slice(&raw).unwrap_or_else(|_| json!({"raw_bytes": raw.len()}))
-    } else {
-        final_response
-    };
-    Ok((story.trim().to_owned(), reasoning, raw, provider_body))
+    .await;
+    provider_timer.finish(
+        telemetry,
+        result
+            .as_ref()
+            .map(|(_, _, raw, _)| raw)
+            .unwrap_or(&Value::Null),
+    );
+    result
 }
 
 fn run_stats(
@@ -508,26 +637,12 @@ fn run_stats(
     body: &Value,
     cfg: &crate::RuntimeConfig,
     status: &str,
+    resolved: &crate::inference::budget::OutputBudget,
 ) -> Value {
     let mut stats = raw["stats"].as_object().cloned().unwrap_or_default();
-    let visible = body["visible_output_tokens"]
-        .as_u64()
-        .unwrap_or(cfg.u64("generation.visible_output_tokens", 4096));
-    let budget = request["max_output_tokens"]
-        .as_u64()
-        .unwrap_or(visible)
-        .max(1);
-    let total = stats.get("total_output_tokens").and_then(Value::as_u64);
-    let reason = stats
-        .get("reasoning_output_tokens")
-        .and_then(Value::as_u64)
-        .unwrap_or(0);
-    stats.insert("visible_output_target_tokens".into(), json!(visible));
-    stats.insert("api_max_output_tokens".into(), json!(budget));
-    stats.insert(
-        "reasoning_reserve_tokens".into(),
-        json!(budget.saturating_sub(visible)),
-    );
+    if let Some(usage) = crate::inference::budget::usage(raw, resolved).as_object() {
+        stats.extend(usage.clone());
+    }
     stats.insert(
         "requested_reasoning".into(),
         json!(payload_string(
@@ -545,26 +660,12 @@ fn run_stats(
     );
     stats.insert("run_status".into(), json!(status));
     stats.insert("partial".into(), json!(status != "completed"));
-    if let Some(total) = total {
-        let story = total.saturating_sub(reason);
-        stats.insert("story_output_tokens".into(), json!(story));
-        stats.insert(
-            "output_budget_usage_ratio".into(),
-            json!(total as f64 / budget as f64),
-        );
-        stats.insert(
-            "likely_output_budget_cutoff".into(),
-            json!(total as f64 >= budget as f64 * 0.985),
-        );
-        stats.insert(
-            "story_target_ratio".into(),
-            json!(story as f64 / visible.max(1) as f64),
-        );
-    }
     Value::Object(stats)
 }
 
 async fn generate_stream_response(state: &AppState, mut body: Value) -> ApiResult<Response> {
+    let mut telemetry = generation_telemetry(&body, &state.runtime_config()?);
+    let run_id = telemetry.run_id().to_owned();
     ensure_schema(state).await?;
     validate_images(&body)?;
     hydrate_session_scope(state, &mut body)?;
@@ -593,11 +694,15 @@ async fn generate_stream_response(state: &AppState, mut body: Value) -> ApiResul
         state.store.insert("sessions", json!({"id":session_id,"title":prompt.chars().take(80).collect::<String>(),"project_id":body.get("project_id"),"world_id":body.get("world_id"),"branch_id":body.get("branch_id"),"conversation_mode":payload_string(&body,"conversation_mode","story_writer"),"conversation_profile_json":body.get("conversation_profile").cloned().unwrap_or(json!({})),"workspace_refs_json":body.get("references").cloned().unwrap_or(json!([])),"scratch_mode":body.get("scratch_mode").and_then(Value::as_bool).unwrap_or(false),"created_at":now(),"updated_at":now()}))?;
     }
     let history = session_history(state, &session_id)?;
-    let (context, analytical) = prepare_generation(state, &body, &history).await?;
+    let (context, analytical, budgets) =
+        match prepare_generation(state, &body, &history, &mut telemetry).await {
+            Ok(value) => value,
+            Err(error) => return Ok(profiled_error(error, &mut telemetry)),
+        };
     let cfg = state.runtime_config()?;
     let base = cfg.str("lmstudio.base_url", "http://127.0.0.1:1234");
     let url = format!("{}/api/v1/chat", base.trim_end_matches('/'));
-    let mut provider_body = chat_payload(&body, &cfg, &context);
+    let mut provider_body = chat_payload(&body, &cfg, &context, &budgets.writers[0]);
     let deliberation = analytical["deliberation"].clone();
     let model_input = provider_body["input"].clone();
     let model = payload_string(&body, "model", &cfg.str("lmstudio.model", ""));
@@ -606,7 +711,9 @@ async fn generate_stream_response(state: &AppState, mut body: Value) -> ApiResul
         .get("reasoning")
         .and_then(Value::as_str)
         .unwrap_or(&configured_reasoning);
+    let capability_started = Instant::now();
     let effective_reasoning = resolve_reasoning(state, &cfg, &model, requested_reasoning).await?;
+    telemetry.record_stage("provider_capabilities", capability_started.elapsed());
     if let Some(reasoning) = effective_reasoning {
         provider_body["reasoning"] = json!(reasoning);
     } else if let Some(object) = provider_body.as_object_mut() {
@@ -617,17 +724,26 @@ async fn generate_stream_response(state: &AppState, mut body: Value) -> ApiResul
     if !api_key.is_empty() {
         request = request.bearer_auth(api_key);
     }
-    let run_id = format!("run-{}", Uuid::new_v4());
     let turn_id = Uuid::new_v4().to_string();
+    let write_started = Instant::now();
     state.store.insert("turns", json!({"id":turn_id,"session_id":session_id,"run_id":run_id,"user_prompt":prompt,"story":"","reasoning":"","reasoning_text":"","model":payload_string(&body,"model",""),"mode":payload_string(&body,"input_mode","smart_hybrid"),"stats_json":{"run_status":"running"},"session_context":context,"created_at":now(),"updated_at":now()}))?;
+    telemetry.accumulate_stage("persistence", write_started.elapsed());
+    telemetry.record_metadata(
+        "effective_reasoning",
+        provider_body
+            .get("reasoning")
+            .cloned()
+            .unwrap_or(json!("omitted")),
+    );
     let stream_state = state.clone();
     let stream = async_stream::stream! {
-        let mut cancellation = CancellationGuard { store: stream_state.store.clone(), turn_id: turn_id.clone(), finished: false };
+        let mut cancellation = CancellationGuard { store: stream_state.store.clone(), turn_id: turn_id.clone(), finished: false, telemetry, provider_timer: None, output_budget:budgets.writers[0].clone() };
         let mut story=String::new(); let mut reasoning=String::new(); let mut pending=Vec::<u8>::new();
         let mut raw_response=json!({});
         yield Ok::<_,Infallible>(sse("run.start",&json!({"run_id":run_id,"session_id":session_id})));
-        let response=match request.send().await{Ok(v)=>v,Err(e)=>{cancellation.finished=true;let _=stream_state.store.update("turns",&turn_id,json!({"stats_json":{"run_status":"failed","partial":true,"error":e.to_string()}}));yield Ok(sse("error",&json!({"message":e.to_string()})));return;}};
-        if !response.status().is_success(){let status=response.status();let text=response.text().await.unwrap_or_default();cancellation.finished=true;let _=stream_state.store.update("turns",&turn_id,json!({"stats_json":{"run_status":"failed","partial":true,"error":format!("LM Studio HTTP {status}")}}));yield Ok(sse("error",&json!({"message":format!("LM Studio HTTP {status}: {}",preview(&text))})));return;}
+        cancellation.provider_timer = Some(ProviderTimer::new());
+        let response=match request.send().await{Ok(v)=>v,Err(e)=>{cancellation.finish_provider(&Value::Null);cancellation.finished=true;let mut stats=cancellation.status_stats("failed");stats["error"]=json!(e.to_string());let _=stream_state.store.update("turns",&turn_id,json!({"stats_json":stats}));yield Ok(sse("error",&json!({"message":e.to_string(),"run_id":run_id})));return;}};
+        if !response.status().is_success(){let status=response.status();let text=response.text().await.unwrap_or_default();cancellation.finish_provider(&Value::Null);cancellation.finished=true;let mut stats=cancellation.status_stats("failed");stats["error"]=json!(format!("LM Studio HTTP {status}"));let _=stream_state.store.update("turns",&turn_id,json!({"stats_json":stats}));yield Ok(sse("error",&json!({"message":format!("LM Studio HTTP {status}: {}",preview(&text)),"run_id":run_id})));return;}
         let mut bytes=response.bytes_stream(); let mut current_event=String::from("message"); let mut provider_failed=false; let mut provider_error=String::new();
         while let Some(item)=bytes.next().await {
             let chunk=match item{Ok(v)=>v,Err(e)=>{provider_failed=true;provider_error=e.to_string();break;}};
@@ -641,10 +757,14 @@ async fn generate_stream_response(state: &AppState, mut body: Value) -> ApiResul
                 let typ=v.get("type").and_then(Value::as_str).unwrap_or(&current_event);
                 if typ.contains("error")||v.get("error").is_some(){provider_failed=true;provider_error=v.to_string();break;}
                 if let Some(result)=v.get("result"){raw_response=result.clone();}
-                if !content.is_empty()&&typ.contains("reason"){reasoning.push_str(content);yield Ok(sse("reasoning.delta",&json!({"content":content})));}
+                if !content.is_empty()&&typ.contains("reason"){if let Some(timer)=cancellation.provider_timer.as_mut(){timer.first_text();} reasoning.push_str(content);yield Ok(sse("reasoning.delta",&json!({"content":content})));}
                 else if !content.is_empty()&&(typ.contains("message")||typ.ends_with("delta")){
+                    if let Some(timer) = cancellation.provider_timer.as_mut() { timer.first_text(); }
                     story.push_str(content);
+                    let write_started = Instant::now();
                     let _=stream_state.store.update("turns",&turn_id,json!({"story":story,"reasoning":reasoning,"reasoning_text":reasoning,"stats_json":{"run_status":"running","partial":true}}));
+                    cancellation.telemetry.accumulate_stage("persistence", write_started.elapsed());
+                    cancellation.telemetry.record_server_first_visible_text(cancellation.telemetry.elapsed());
                     yield Ok(sse("answer.delta",&json!({"content":content})));
                 }
             }
@@ -653,27 +773,38 @@ async fn generate_stream_response(state: &AppState, mut body: Value) -> ApiResul
         if let Some(output)=raw_response["output"].as_array(){
             let final_story=output.iter().filter(|item|item["type"]=="message").filter_map(|item|item["content"].as_str()).collect::<String>();
             let final_reasoning=output.iter().filter(|item|item["type"]=="reasoning").filter_map(|item|item["content"].as_str()).collect::<String>();
-            if story.is_empty()&&!final_story.is_empty(){story=final_story;yield Ok(sse("answer.delta",&json!({"content":story})));}
-            if reasoning.is_empty()&&!final_reasoning.is_empty(){reasoning=final_reasoning;yield Ok(sse("reasoning.delta",&json!({"content":reasoning})));}
+            if story.is_empty()&&!final_story.is_empty(){if let Some(timer)=cancellation.provider_timer.as_mut(){timer.first_text();} story=final_story;cancellation.telemetry.record_server_first_visible_text(cancellation.telemetry.elapsed());yield Ok(sse("answer.delta",&json!({"content":story})));}
+            if reasoning.is_empty()&&!final_reasoning.is_empty(){if let Some(timer)=cancellation.provider_timer.as_mut(){timer.first_text();} reasoning=final_reasoning;yield Ok(sse("reasoning.delta",&json!({"content":reasoning})));}
         }
         let status=if provider_failed||story.trim().is_empty(){"failed"}else{"completed"};
+        cancellation.finish_provider(&raw_response);
         let mut done_bundle = json!({});
-        let mut stats=raw_response["stats"].as_object().cloned().unwrap_or_default();
-        stats.insert("run_status".into(),json!(status));stats.insert("partial".into(),json!(status!="completed"));
-        let stats=Value::Object(stats);
+        let mut stats=run_stats(&raw_response,&provider_body,&body,&cfg,status,&budgets.writers[0]);
+        stats["inference"]=inference_snapshot(&mut cancellation.telemetry);
         if status == "completed" {
             {
                 let analysis=&analytical;
                 let analysis_id = run_id.clone();
-                done_bundle = json!({"analysis_id":analysis_id,"run_id":run_id,"turn_id":turn_id,"input_mode":payload_string(&body,"input_mode","smart_hybrid"),"projection_mode":payload_string(&body,"projection_mode","balanced"),"wcf":analysis["wcf"],"aif_core":analysis["aif_core"],"narrative_brief":analysis["narrative_brief"],"deliberation":deliberation,"projections":analysis["projections"],"wcf_validation":analysis["wcf_validation"],"extracted_state":analysis["extracted_state"],"events":analysis["events"],"semantic_core":analysis["semantic_core"],"writer_context":analysis["writer_context"],"world_runtime":analysis["world_runtime"],"narrative_runtime":analysis["narrative_runtime"],"model_input":model_input,"trace_choices":analysis["trace_choices"],"story":story,"reasoning":reasoning,"stats":stats,"post_validation":{"quality_report":crate::analysis::quality_report_with_context(&story, analysis.get("writer_context"))},"raw_response":raw_response});
+                let validation_started=Instant::now();
+                let quality=crate::analysis::quality_report_with_context(&story, analysis.get("writer_context"));
+                cancellation.telemetry.record_stage("validation",validation_started.elapsed());
+                done_bundle = json!({"analysis_id":analysis_id,"run_id":run_id,"turn_id":turn_id,"input_mode":payload_string(&body,"input_mode","smart_hybrid"),"projection_mode":payload_string(&body,"projection_mode","balanced"),"wcf":analysis["wcf"],"aif_core":analysis["aif_core"],"narrative_brief":analysis["narrative_brief"],"deliberation":deliberation,"projections":analysis["projections"],"wcf_validation":analysis["wcf_validation"],"extracted_state":analysis["extracted_state"],"events":analysis["events"],"semantic_core":analysis["semantic_core"],"writer_context":analysis["writer_context"],"world_runtime":analysis["world_runtime"],"narrative_runtime":analysis["narrative_runtime"],"model_input":model_input,"trace_choices":analysis["trace_choices"],"story":story,"reasoning":reasoning,"stats":stats,"post_validation":{"quality_report":quality},"raw_response":raw_response});
+                let write_started = Instant::now();
                 let _ = crate::analysis::cache_run(&stream_state, &analysis_id, &done_bundle);
                 let _ = stream_state.store.update("turns", &turn_id, json!({"wcf":analysis["wcf"],"aif_core":analysis["aif_core"],"projections_json":analysis["projections"],"post_validation_json":done_bundle["post_validation"],"wcf_validation_json":analysis["wcf_validation"],"lineage_json":{"analysis_id":analysis_id}}));
+                cancellation.telemetry.accumulate_stage("persistence", write_started.elapsed());
             }
         }
+        let write_started = Instant::now();
         let _=stream_state.store.update("turns",&turn_id,json!({"story":story,"reasoning":reasoning,"reasoning_text":reasoning,"stats_json":stats}));
-        if status == "completed" { let _ = crate::foundation::memory::refresh_turn(&stream_state, &turn_id); }
+        cancellation.telemetry.accumulate_stage("persistence", write_started.elapsed());
+        if status == "completed" {let memory_started=Instant::now(); let _ = crate::foundation::memory::refresh_turn(&stream_state, &turn_id); cancellation.telemetry.record_stage("memory_index",memory_started.elapsed());}
+        stats["inference"]=inference_snapshot(&mut cancellation.telemetry);
+        let _=stream_state.store.update("turns",&turn_id,json!({"stats_json":stats}));
         if status=="completed"{
             cancellation.finished=true;
+            done_bundle["stats"]=stats;
+            let _=crate::analysis::cache_run(&stream_state,&run_id,&done_bundle);
             done_bundle["session_id"]=json!(session_id);
             done_bundle["quality_report"]=done_bundle["post_validation"]["quality_report"].clone();
             done_bundle["summary"]=json!({"response_kind":if payload_string(&body,"conversation_mode","story_writer")=="story_lab"{"discussion"}else{"prose"}});
@@ -689,6 +820,8 @@ async fn generate_stream_response(state: &AppState, mut body: Value) -> ApiResul
 }
 
 async fn generate(state: &AppState, mut body: Value) -> ApiResult<Response> {
+    let mut telemetry = generation_telemetry(&body, &state.runtime_config()?);
+    let run_id = telemetry.run_id().to_owned();
     ensure_schema(state).await?;
     hydrate_session_scope(state, &mut body)?;
     validate_images(&body)?;
@@ -718,32 +851,30 @@ async fn generate(state: &AppState, mut body: Value) -> ApiResult<Response> {
     } else {
         String::new()
     };
-    let (context, analytical) = prepare_generation(state, &body, &history).await?;
-    let run_id = format!("run-{}", Uuid::new_v4());
+    let (context, analytical, budgets) =
+        match prepare_generation(state, &body, &history, &mut telemetry).await {
+            Ok(value) => value,
+            Err(error) => return Ok(profiled_error(error, &mut telemetry)),
+        };
     let generation_mode = payload_string(&body, "generation_mode", "single");
     let (story, reasoning, raw, provider_request, beat_stats) = if generation_mode == "beats" {
-        let count = body
-            .get("beat_count")
-            .and_then(Value::as_u64)
-            .unwrap_or(3)
-            .clamp(1, 24);
-        let per_beat = body
-            .get("beat_tokens")
-            .and_then(Value::as_u64)
-            .unwrap_or(512)
-            .max(256);
+        let count = budgets.writers.len();
+        let per_beat = budgets.writers[0].visible;
+        let total_budget: u64 = budgets.writers.iter().map(|b| b.visible).sum();
         let mut stories = Vec::new();
         let mut thoughts = Vec::new();
         let mut raws = Vec::new();
         let mut requests = Vec::new();
+        let mut beat_usage = Vec::new();
         for index in 1..=count {
             let mut beat_body = body.clone();
             let previous = stories.join("\n\n");
             let instruction = format!("{}\n\nBeat {index} of {count}; advance one coherent narrative unit. Do not recap earlier beats.\n{}", prompt, if previous.is_empty(){String::new()}else{format!("Previous surface:\n{}", previous.chars().rev().take(9000).collect::<String>().chars().rev().collect::<String>())});
             beat_body["prompt"] = json!(instruction);
-            beat_body["visible_output_tokens"] = json!(per_beat);
+            let resolved = &budgets.writers[index - 1];
+            beat_body["visible_output_tokens"] = json!(resolved.visible);
             let (part, thought, raw, request) =
-                match model_stream(state, &beat_body, &context).await {
+                match model_stream(state, &beat_body, &context, resolved, &mut telemetry).await {
                     Ok(value) => value,
                     Err(error) => {
                         // A failed middle beat must remain visible to callers and to
@@ -753,6 +884,22 @@ async fn generate(state: &AppState, mut body: Value) -> ApiResult<Response> {
                         if !stories.is_empty() {
                             let partial_story = stories.join("\n\n");
                             let partial_reasoning = thoughts.join("\n\n");
+                            let mut partial_stats =
+                                crate::inference::budget::aggregate(&beat_usage);
+                            for (key, value) in [
+                                ("run_status", json!("partial")),
+                                ("partial", json!(true)),
+                                ("failed_beat", json!(index)),
+                                ("completed_beats", json!(stories.len())),
+                                ("generation_mode", json!("beats")),
+                                ("beat_count", json!(count)),
+                                ("tokens_per_beat", json!(per_beat)),
+                                ("total_budget", json!(total_budget)),
+                                ("beats", json!(beat_usage)),
+                                ("inference", inference_snapshot(&mut telemetry)),
+                            ] {
+                                partial_stats[key] = value;
+                            }
                             let _ = state.store.insert("turns", json!({
                             "id": Uuid::new_v4().to_string(),
                             "session_id": session_id.clone(),
@@ -764,32 +911,32 @@ async fn generate(state: &AppState, mut body: Value) -> ApiResult<Response> {
                             "model": payload_string(&body, "model", ""),
                             "mode": payload_string(&body, "input_mode", "smart_hybrid"),
                             "session_context": context.clone(),
-                            "stats_json": {
-                                "run_status": "partial",
-                                "partial": true,
-                                "failed_beat": index,
-                                "completed_beats": stories.len(),
-                                "generation_mode": "beats",
-                                "beat_count": count,
-                                "tokens_per_beat": per_beat,
-                                "total_budget": count * per_beat
-                            },
+                            "stats_json": partial_stats,
                             "lineage_json": {"run_id": run_id.clone(), "failed_beat": index},
                             "created_at": now(),
                             "updated_at": now()
                         }));
                         }
-                        return Err(error);
+                        return Ok(profiled_error(error, &mut telemetry));
                     }
                 };
             stories.push(part);
+            beat_usage.push(run_stats(
+                &raw,
+                &request,
+                &beat_body,
+                &state.runtime_config()?,
+                "completed",
+                resolved,
+            ));
             if !thought.trim().is_empty() {
                 thoughts.push(format!("[Beat {index}]\n{thought}"));
             }
             raws.push(raw);
             requests.push(request);
         }
-        let stats = json!({"generation_mode":"beats","beat_count":count,"tokens_per_beat":per_beat,"total_budget":count*per_beat,"beats":(0..count).map(|i| json!({"beat":i+1,"tokens":per_beat})).collect::<Vec<_>>()});
+        let stats = json!({"generation_mode":"beats","beat_count":count,"tokens_per_beat":if budgets.writers.iter().all(|b|b.visible==per_beat){json!(per_beat)}else{Value::Null},"total_budget":total_budget,
+            "aggregate":crate::inference::budget::aggregate(&beat_usage),"beats":beat_usage.iter().enumerate().map(|(i,stats)|json!({"beat":i+1,"tokens":budgets.writers[i].visible,"stats":stats})).collect::<Vec<_>>()});
         (
             stories.join("\n\n"),
             thoughts.join("\n\n"),
@@ -798,7 +945,11 @@ async fn generate(state: &AppState, mut body: Value) -> ApiResult<Response> {
             stats,
         )
     } else {
-        let (story, reasoning, raw, request) = model_stream(state, &body, &context).await?;
+        let (story, reasoning, raw, request) =
+            match model_stream(state, &body, &context, &budgets.writers[0], &mut telemetry).await {
+                Ok(value) => value,
+                Err(error) => return Ok(profiled_error(error, &mut telemetry)),
+            };
         (
             story,
             reasoning,
@@ -807,8 +958,10 @@ async fn generate(state: &AppState, mut body: Value) -> ApiResult<Response> {
             json!({"generation_mode":"single"}),
         )
     };
+    let validation_started = Instant::now();
     let quality =
         crate::analysis::quality_report_with_context(&story, analytical.get("writer_context"));
+    telemetry.record_stage("validation", validation_started.elapsed());
     let analysis_id = run_id.clone();
     let projections = analytical
         .get("projections")
@@ -818,26 +971,56 @@ async fn generate(state: &AppState, mut body: Value) -> ApiResult<Response> {
         .get("wcf_validation")
         .cloned()
         .unwrap_or_else(|| json!({}));
-    let mut stats = run_stats(
-        &raw,
-        &provider_request,
-        &body,
-        &state.runtime_config()?,
-        "completed",
-    )
+    let mut stats = if generation_mode == "beats" {
+        beat_stats["aggregate"].clone()
+    } else {
+        run_stats(
+            &raw,
+            &provider_request,
+            &body,
+            &state.runtime_config()?,
+            "completed",
+            &budgets.writers[0],
+        )
+    }
     .as_object()
     .cloned()
     .unwrap_or_default();
     stats.insert("continuity_context_used".into(), json!(!context.is_empty()));
+    stats.insert("run_status".into(), json!("completed"));
+    stats.insert("partial".into(), json!(false));
+    if let Some(calls) = beat_stats["beats"].as_array() {
+        for key in ["requested_reasoning", "api_reasoning"] {
+            let common = calls
+                .first()
+                .filter(|first| {
+                    calls
+                        .iter()
+                        .all(|call| call["stats"][key] == first["stats"][key])
+                })
+                .map(|first| first["stats"][key].clone())
+                .unwrap_or(Value::Null);
+            stats.insert(key.into(), common);
+        }
+    }
     stats.insert("generation".into(), beat_stats.clone());
-    let stats = Value::Object(stats);
+    let mut stats = Value::Object(stats);
+    let persistence_started = Instant::now();
     let turn = state.store.insert("turns", json!({"id":Uuid::new_v4().to_string(),"session_id":session_id,"run_id":run_id,"user_prompt":prompt,"story":story,"reasoning":reasoning,"reasoning_text":reasoning,"model":payload_string(&body,"model",""),"mode":payload_string(&body,"input_mode","smart_hybrid"),"projection_mode":payload_string(&body,"projection_mode","balanced"),"stats_json":stats,"wcf":analytical["wcf"],"aif_core":analytical["aif_core"],"session_context":context,"projections_json":projections,"post_validation_json":{"quality_report":quality},"wcf_validation_json":wcf_validation,"lineage_json":{"analysis_id":analysis_id,"run_id":run_id},"created_at":now(),"updated_at":now()}))?;
+    telemetry.record_stage("persistence", persistence_started.elapsed());
+    let memory_started = Instant::now();
+    let _ = crate::foundation::memory::refresh_turn(state, turn["id"].as_str().unwrap_or_default());
+    telemetry.record_stage("memory_index", memory_started.elapsed());
+    // Snapshot before publishing telemetry itself: self-report writes are not
+    // recursively included in their own elapsed time.
+    stats["inference"] = inference_snapshot(&mut telemetry);
+    state.store.update(
+        "turns",
+        turn["id"].as_str().unwrap_or_default(),
+        json!({"stats_json":stats}),
+    )?;
     let bundle = json!({"analysis_id":analysis_id,"run_id":run_id,"turn_id":turn["id"],"input_mode":payload_string(&body,"input_mode","smart_hybrid"),"projection_mode":payload_string(&body,"projection_mode","balanced"),"wcf":analytical["wcf"],"aif_core":analytical["aif_core"],"narrative_brief":analytical["narrative_brief"],"deliberation":analytical["deliberation"],"projections":projections,"wcf_validation":wcf_validation,"extracted_state":analytical["extracted_state"],"events":analytical["events"],"semantic_core":analytical["semantic_core"],"writer_context":analytical["writer_context"],"world_runtime":analytical.get("world_runtime").cloned().unwrap_or_else(||json!({})),"narrative_runtime":analytical.get("narrative_runtime").cloned().unwrap_or_else(||json!({})),"model_input":provider_request.get("input").cloned().unwrap_or_else(||json!(provider_request["beats"].as_array().into_iter().flatten().map(|r|r["input"].clone()).collect::<Vec<_>>())),"story":turn["story"],"reasoning":turn["reasoning"],"stats":stats,"post_validation":{"quality_report":quality},"raw_response":raw,"trace_choices":analytical["trace_choices"]});
     crate::analysis::cache_run(state, &analysis_id, &bundle)?;
-    // Keep the canonical turn projection and discovery index current after a
-    // completed generation.  This mirrors the Python completion hook while
-    // remaining fail-open for older databases without memory tables.
-    let _ = crate::foundation::memory::refresh_turn(state, turn["id"].as_str().unwrap_or_default());
     let result = json!({"run_id":run_id,"analysis_id":analysis_id,"session_id":turn.get("session_id").cloned().unwrap_or(Value::Null),"turn_id":turn.get("id"),"story":turn.get("story"),"reasoning":turn.get("reasoning"),"wcf":analytical["wcf"],"aif_core":analytical["aif_core"],"narrative_brief":analytical["narrative_brief"],"deliberation":analytical["deliberation"],"projections":projections,"trace_choices":analytical["trace_choices"],"stats":stats,"summary":{"response_kind":if payload_string(&body,"conversation_mode","story_writer")=="story_lab" {"discussion"} else {"prose"}},"quality_report":quality,"post_validation":{"quality_report":quality},"wcf_validation":wcf_validation,"context_breakdown":{"continuity_context_used":!context.is_empty()},"raw_response":raw});
     Response::builder()
         .status(StatusCode::OK)
@@ -1035,18 +1218,15 @@ pub async fn handle(
             Ok(value) => value,
             Err(error) => return Some(Err(error)),
         };
+        if let Err(error) = crate::inference::budget::validate_request(&body, &config) {
+            return Some(Err(error));
+        }
         for (key, setting) in [
             ("input_mode", "writer.input_mode"),
             ("projection_mode", "projection.mode"),
             ("reasoning", "generation.reasoning"),
             ("generation_mode", "generation.generation_mode"),
-            ("beat_count", "generation.beat_count"),
-            ("beat_tokens", "generation.beat_tokens"),
-            ("visible_output_tokens", "generation.visible_output_tokens"),
-            (
-                "reasoning_reserve_tokens",
-                "generation.reasoning_reserve_tokens",
-            ),
+            ("output_budget_mode", "generation.output_budget_mode"),
         ] {
             if body.get(key).is_none_or(Value::is_null) {
                 if let Some(value) = setting
@@ -1269,15 +1449,18 @@ async fn ablation(state: &AppState, body: &Value) -> ApiResult<Response> {
         request["prompt"] = json!(prompt);
         request["input_mode"] = json!(mode);
         request["reasoning"] = json!(reasoning);
-        let (context, analysis) = prepare_generation(state, &request, "").await?;
-        match model_stream(state, &request, &context).await {
+        let mut telemetry = generation_telemetry(&request, &state.runtime_config()?);
+        let (context, analysis, budgets) =
+            prepare_generation(state, &request, "", &mut telemetry).await?;
+        match model_stream(state, &request, &context, &budgets.writers[0], &mut telemetry).await {
             Ok((story, thoughts, raw, provider_request)) => {
                 let report=crate::analysis::quality_report_with_context(&story,analysis.get("writer_context"));
                 let violations=report["violations"].as_array().map_or(0,Vec::len) as f64;
                 let warnings=report["warnings"].as_array().map_or(0,Vec::len) as f64;
                 let metric=|key:&str|report["metrics"][key].as_f64().unwrap_or(0.0);
                 let score=(100.0-18.0*violations-5.0*warnings-3.0*metric("repetition_pairs")-3.0*metric("spec_recitations")-5.0*metric("unsupported_specificities")).clamp(0.0,100.0);
-                let stats=run_stats(&raw,&provider_request,&request,&state.runtime_config()?,"completed");
+                let mut stats=run_stats(&raw,&provider_request,&request,&state.runtime_config()?,"completed",&budgets.writers[0]);
+                stats["inference"]=inference_snapshot(&mut telemetry);
                 outcomes.push(json!({"key":format!("{mode}__thinking_{reasoning}"),"mode":mode,"reasoning":reasoning,"story":story,"reasoning_text":thoughts,"stats":stats,"post_validation":{"quality_report":report},"diagnostic_score":score,"raw_response":raw}));
             },
             Err(error) => outcomes.push(json!({"mode":mode,"reasoning":reasoning,"story":"","post_validation":{},"stats":{},"diagnostic_score":0.0,"error":error.message})),
@@ -1319,6 +1502,10 @@ fn command_catalog() -> Value {
 }
 
 fn parse_directives(body: &Value) -> ApiResult<Response> {
+    Ok(json_response_value(directive_context(body)))
+}
+
+pub(crate) fn directive_context(body: &Value) -> Value {
     let prompt = payload_string(body, "prompt", "");
     let mut stack = Vec::new();
     let mut semantic = Vec::new();
@@ -1366,7 +1553,7 @@ fn parse_directives(body: &Value) -> ApiResult<Response> {
                         }
                     }
                 }
-                stack.push(json!({"id":id,"label":command["label"],"role":command["role"],"raw":trimmed,"options":options,"execution_contract":command["execution_contract"]}));
+                stack.push(json!({"id":id,"label":command["label"],"role":command["role"],"raw":trimmed,"options":options,"planner_intent":command["planner_intent"],"deliberation_mode":command["deliberation_mode"],"output_mode":command["output_mode"],"execution_contract":command["execution_contract"]}));
                 if !goal.is_empty() {
                     semantic.push(goal.join(" "));
                 }
@@ -1384,19 +1571,61 @@ fn parse_directives(body: &Value) -> ApiResult<Response> {
     } else {
         clean_prompt.clone()
     };
-    Ok(json_response_value(
-        json!({"version":"1.2.4a1","runtime_version":"1.2.5a1","active":!stack.is_empty() || !references.is_empty(),"command":primary,"stack":stack,"options":primary["options"].clone(),"reference_expressions":references,"resolved_references":[],"dynamic_scopes":[],"unresolved_references":unresolved,"planner_intent":primary["planner_intent"].clone().as_str().unwrap_or("continue"),"deliberation_mode":primary["deliberation_mode"].clone().as_str().unwrap_or("auto"),"output_mode":primary["output_mode"].clone().as_str().unwrap_or("fiction"),"execution_contract":primary["execution_contract"].clone(),"semantic_prompt":semantic_prompt,"clean_prompt":clean_prompt,"diagnostics":unresolved}),
-    ))
+
+    json!({"version":"1.2.4a1","runtime_version":"1.2.5a1","active":!stack.is_empty() || !references.is_empty(),"command":primary,"stack":stack,"options":primary["options"].clone(),"reference_expressions":references,"resolved_references":[],"dynamic_scopes":[],"unresolved_references":unresolved,"planner_intent":primary["planner_intent"].clone().as_str().unwrap_or("continue"),"deliberation_mode":primary["deliberation_mode"].clone().as_str().unwrap_or("auto"),"output_mode":primary["output_mode"].clone().as_str().unwrap_or("fiction"),"execution_contract":primary["execution_contract"].clone(),"semantic_prompt":semantic_prompt,"clean_prompt":clean_prompt,"diagnostics":unresolved})
 }
 
 async fn prepare_generation(
     state: &AppState,
     body: &Value,
     history: &str,
-) -> ApiResult<(String, Value)> {
-    let mut analytical = crate::analysis::analyze_async(state, body).await?;
-    analytical["deliberation"] = crate::analysis::deliberate(state, body, &analytical).await;
+    telemetry: &mut RunTelemetry,
+) -> ApiResult<(String, Value, crate::inference::budget::BudgetPlan)> {
+    let preparation_started = Instant::now();
     let config = state.runtime_config()?;
+    crate::inference::deliberation::validate_mode(body, &config)?;
+    crate::inference::budget::resolve(body, &config, "short_continue")?;
+    let mut analytical =
+        crate::analysis::analyze_async_profiled(state, body, Some(telemetry)).await?;
+    let decision = crate::inference::deliberation::route(
+        body,
+        &analytical,
+        &directive_context(body),
+        &config,
+    )?;
+    let routing = decision.to_value();
+    let budgets = crate::inference::budget::resolve(
+        body,
+        &config,
+        routing["task"].as_str().unwrap_or("short_continue"),
+    )?;
+    let deliberation_started = Instant::now();
+    analytical["deliberation"] = crate::analysis::deliberate_with_override(
+        state,
+        body,
+        &analytical,
+        Some(decision.planning_enabled),
+        Some(&budgets.planner),
+    )
+    .await;
+    let planner_usage = analytical["deliberation"]
+        .as_object_mut()
+        .and_then(|v| v.remove("_output_usage"));
+    telemetry.record_stage("deliberation", deliberation_started.elapsed());
+    telemetry.record_metadata(
+        "deliberation_status",
+        analytical["deliberation"]["status"].clone(),
+    );
+    for (key, field) in [
+        ("deliberation_requested_mode", "requested_mode"),
+        ("deliberation_effective_mode", "effective_mode"),
+        ("deliberation_route_reason", "reason"),
+        ("generation_task", "task"),
+        ("preparation_fast_path", "preparation_fast_path"),
+    ] {
+        telemetry.record_metadata(key, routing[field].clone());
+    }
+    let context_started = Instant::now();
     let cap = config.u64("history.continuity_chars", 12000).min(64000) as usize;
     let history = history
         .chars()
@@ -1434,7 +1663,19 @@ async fn prepare_generation(
             format!("<CONVERSATION_HISTORY>\n{history}\n</CONVERSATION_HISTORY>\n\n{context}");
     }
     analytical["model_input"] = json!(context);
-    Ok((context, analytical))
+    // Routing diagnostics belong to the response/cache, not the writer prompt.
+    analytical["deliberation"]["routing"] = routing;
+    if decision.planning_enabled {
+        analytical["deliberation"]["output_budget"] = planner_usage
+            .unwrap_or_else(|| crate::inference::budget::usage(&Value::Null, &budgets.planner));
+    }
+    telemetry.record_metadata(
+        "output_budget_mode",
+        json!(crate::inference::budget::mode(body, &config)?),
+    );
+    telemetry.record_stage("context_assembly", context_started.elapsed());
+    telemetry.record_stage("preparation", preparation_started.elapsed());
+    Ok((context, analytical, budgets))
 }
 
 fn json_response(value: &Value) -> ApiResult<Response> {
@@ -1453,6 +1694,11 @@ fn json_response_value(value: Value) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn chat_payload(body: &Value, cfg: &crate::RuntimeConfig, context: &str) -> Value {
+        let budgets = crate::inference::budget::resolve(body, cfg, "short_continue").unwrap();
+        super::chat_payload(body, cfg, context, &budgets.writers[0])
+    }
 
     #[test]
     fn sse_frames_are_consumable_by_browser_parser() {

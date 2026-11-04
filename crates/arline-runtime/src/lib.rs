@@ -7,6 +7,7 @@ pub mod foundation;
 pub mod foundation_extended;
 pub mod generation;
 pub mod import;
+pub mod inference;
 pub mod io_services;
 pub mod models;
 pub mod profile;

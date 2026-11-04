@@ -203,6 +203,43 @@ async fn http_stream_delivers_delta_before_provider_completion_and_persists_turn
     assert_eq!(turns.len(), 1);
     assert_eq!(turns[0]["story"], "first");
     assert_eq!(turns[0]["stats"]["run_status"], "completed");
+    let inference = &turns[0]["stats"]["inference"];
+    assert_eq!(inference["run_id"], turns[0]["run_id"]);
+    assert_eq!(inference["provider"]["call_count"], 1);
+    assert!(inference["provider"]["ttft_ms"].is_null());
+    for stage in [
+        "analyze",
+        "memory_retrieval",
+        "deliberation",
+        "context_assembly",
+        "preparation",
+        "provider_capabilities",
+        "persistence",
+        "total",
+        "server_first_visible_text",
+    ] {
+        assert!(
+            inference["durations_ms"][stage].is_number(),
+            "missing timing: {stage}"
+        );
+    }
+    let server_first = inference["durations_ms"]["server_first_visible_text"]
+        .as_u64()
+        .unwrap();
+    let provider_first = inference["durations_ms"]["provider_request_first_text"]
+        .as_u64()
+        .unwrap();
+    assert!(server_first >= provider_first);
+    let profile = inference.to_string();
+    for sensitive in [
+        "test-bearer",
+        "Loaded system prompt.",
+        "Write a beginning.",
+        "\"story\"",
+        "\"prompt\"",
+    ] {
+        assert!(!profile.contains(sensitive));
+    }
     runtime_task.abort();
     provider_task.abort();
 }
@@ -244,6 +281,16 @@ async fn dropping_http_client_marks_partial_turn_cancelled() {
         {
             cancelled = true;
             assert_eq!(turns[0]["stats"]["partial"], true);
+            assert_eq!(
+                turns[0]["stats"]["output_budget"]["api_max_output_tokens"],
+                64
+            );
+            assert!(turns[0]["stats"]["output_cutoff"].is_null());
+            let inference = &turns[0]["stats"]["inference"];
+            assert_eq!(inference["run_id"], turns[0]["run_id"]);
+            assert_eq!(inference["provider"]["call_count"], 1);
+            assert!(inference["durations_ms"]["server_first_visible_text"].is_number());
+            assert!(inference["durations_ms"]["total"].is_number());
             break;
         }
     }
@@ -346,6 +393,15 @@ async fn beat_generation_chains_previous_surface_and_persists_budget() {
         .contains("Previous surface:\nbeat-1"));
     assert!(requests[2]["input"].as_str().unwrap().contains("beat-2"));
     assert_eq!(result["stats"]["generation"]["total_budget"], 768);
+    assert_eq!(result["stats"]["run_status"], "completed");
+    assert_eq!(result["stats"]["partial"], false);
+    assert_eq!(result["stats"]["requested_reasoning"], "off");
+    let inference = &result["stats"]["inference"];
+    assert_eq!(inference["provider"]["call_count"], 3);
+    assert_eq!(inference["provider"]["calls"].as_array().unwrap().len(), 3);
+    assert!(inference["provider"]["output_tokens_per_sec"].is_null());
+    assert!(inference["durations_ms"]["provider_request_first_text"].is_null());
+    assert!(inference["durations_ms"]["provider_request_total"].is_number());
     assert!(result["story"]
         .as_str()
         .unwrap()
@@ -381,7 +437,41 @@ async fn failed_middle_beat_persists_completed_prefix() {
     assert_eq!(turns.len(), 1);
     assert_eq!(turns[0]["stats"]["run_status"], "partial");
     assert_eq!(turns[0]["stats"]["failed_beat"], 2);
+    assert_eq!(
+        turns[0]["stats"]["output_budget"]["visible_target_tokens"],
+        256
+    );
+    assert_eq!(turns[0]["stats"]["api_max_output_tokens"], 256);
     assert_eq!(turns[0]["story"], "beat-1");
+    runtime_task.abort();
+    provider_task.abort();
+}
+
+#[tokio::test]
+async fn failed_provider_keeps_run_identity_and_unknown_performance() {
+    let (provider_url, _provider, provider_task) = beat_provider(Some(1)).await;
+    let (_temp, state, runtime_url, runtime_task) = fixture(&provider_url).await;
+    let response = reqwest::Client::new()
+        .post(format!("{runtime_url}/api/generate"))
+        .json(&json!({"session_id":"profiled-error","prompt":"A synthetic failure."}))
+        .send()
+        .await
+        .unwrap();
+    assert!(!response.status().is_success());
+    let body: Value = response.json().await.unwrap();
+    assert!(body["detail"].is_string());
+    assert!(body["run_id"].as_str().unwrap().starts_with("run-"));
+    let inference = &body["stats"]["inference"];
+    assert_eq!(inference["run_id"], body["run_id"]);
+    assert_eq!(inference["provider"]["call_count"], 1);
+    assert!(inference["provider"]["ttft_ms"].is_null());
+    assert!(inference["durations_ms"]["provider_request_first_text"].is_null());
+    assert!(inference["durations_ms"]["provider_request_total"].is_number());
+    assert!(state
+        .store
+        .list("turns", &[("session_id", json!("profiled-error"))])
+        .unwrap()
+        .is_empty());
     runtime_task.abort();
     provider_task.abort();
 }
@@ -544,6 +634,23 @@ async fn terminal_only_provider_output_preserves_text_stats_and_raw_response() {
                 .unwrap();
         assert_eq!(bundle["raw_response"]["stats"]["tokens_per_second"], 12.5);
         assert_eq!(bundle["stats"]["output_tokens"], 5);
+        let inference = &result["stats"]["inference"];
+        assert_eq!(inference["run_id"], result["run_id"]);
+        assert_eq!(inference["provider"]["output_tokens"], 5);
+        assert_eq!(inference["provider"]["output_tokens_per_sec"], 12.5);
+        assert!(inference["provider"]["input_tokens"].is_null());
+        assert!(inference["provider"]["ttft_ms"].is_null());
+        assert_eq!(inference, &bundle["stats"]["inference"]);
+        let saved = state
+            .store
+            .get("turns", result["turn_id"].as_str().unwrap())
+            .unwrap()
+            .unwrap();
+        assert_eq!(inference, &saved["stats"]["inference"]);
+        assert_eq!(
+            inference["durations_ms"]["server_first_visible_text"].is_number(),
+            endpoint.ends_with("stream")
+        );
     }
     task.abort();
     provider.abort();
