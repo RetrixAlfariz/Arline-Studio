@@ -29,7 +29,7 @@ async fn http_fixture() -> HttpFixture {
                 .route(
                     "/api/v1/models",
                     get(|| async {
-                        Json(json!({"models":[{"key":"testmodel","capabilities":{"reasoning":{"allowed_options":["off","on"]}}}]}))
+                        Json(json!({"models":[{"type":"llm","key":"testmodel","loaded_instances":[{"id":"testmodel","config":{"context_length":32768}}],"capabilities":{"reasoning":{"allowed_options":["off","on"]}}}]}))
                     }),
                 )
                 .route(
@@ -151,7 +151,7 @@ async fn planning_override_is_independent_of_saved_default_and_reasoning() {
                 .route(
                     "/api/v1/models",
                     get(|| async {
-                        Json(json!({"models":[{"key":"testmodel","capabilities":{"reasoning":{"allowed_options":["off","on"]}}}]}))
+                        Json(json!({"models":[{"type":"llm","key":"testmodel","loaded_instances":[{"id":"testmodel","config":{"context_length":32768}}],"capabilities":{"reasoning":{"allowed_options":["off","on"]}}}]}))
                     }),
                 )
                 .route(

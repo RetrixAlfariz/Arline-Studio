@@ -342,7 +342,9 @@ async fn all_legacy_routes_are_native_recognized_without_server_errors() {
             .and_then(serde_json::Value::as_str)
             .unwrap_or("");
         let detail_lower = detail.to_ascii_lowercase();
-        if status >= 500
+        // A recognized route whose local provider is offline (CI, LM Studio closed) is not a gap.
+        let provider_offline = status == 503 && detail.starts_with("LM Studio connection failed");
+        if status >= 500 && !provider_offline
             || detail_lower.contains("workspace route not implemented")
             || detail_lower.contains("unknown api route")
             || detail_lower.contains("unsupported")

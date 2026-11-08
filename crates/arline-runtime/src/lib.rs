@@ -43,10 +43,21 @@ pub struct AppState {
     pub root: PathBuf,
     pub storage_gate: Arc<tokio::sync::RwLock<()>>,
     pub projection_gate: Arc<std::sync::Mutex<()>>,
+    pub embeddings: Arc<foundation::memory::embedding::EmbeddingService>,
 }
 
 impl AppState {
     pub fn open(config: RuntimeConfig) -> ApiResult<Self> {
+        Self::open_inner(config, true)
+    }
+
+    /// Index tooling can share storage without declaring a live writer's turn
+    /// interrupted. Normal application startup retains its recovery behavior.
+    pub fn open_index_maintenance(config: RuntimeConfig) -> ApiResult<Self> {
+        Self::open_inner(config, false)
+    }
+
+    fn open_inner(config: RuntimeConfig, recover_generation: bool) -> ApiResult<Self> {
         let store = Store::open(config.database_path())?;
         let client = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(10))
@@ -61,6 +72,9 @@ impl AppState {
         foundation::FoundationStore::new(store.clone())?;
         foundation::memory::initialize(&store)?;
         generation::initialize(&store)?;
+        if recover_generation {
+            generation::recover_interrupted(&store)?;
+        }
         analysis::ensure_schema(&store)?;
         domain_events::initialize(&store)?;
         Ok(Self {
@@ -70,6 +84,7 @@ impl AppState {
             client,
             storage_gate: Arc::new(tokio::sync::RwLock::new(())),
             projection_gate: Arc::new(std::sync::Mutex::new(())),
+            embeddings: Arc::new(foundation::memory::embedding::EmbeddingService::default()),
         })
     }
 
@@ -85,6 +100,7 @@ impl AppState {
 pub struct ApiError {
     pub status: StatusCode,
     pub message: String,
+    pub diagnostic: Option<Value>,
 }
 
 pub type ApiResult<T> = Result<T, ApiError>;
@@ -94,11 +110,13 @@ impl ApiError {
         Self {
             status,
             message: message.into(),
+            diagnostic: None,
         }
     }
     pub fn bad_request(message: impl Into<String>) -> Self {
         Self::new(StatusCode::BAD_REQUEST, message)
     }
+    pub fn with_diagnostic(mut self,diagnostic:Value)->Self {self.diagnostic=Some(diagnostic);self}
     pub fn not_found(message: impl Into<String>) -> Self {
         Self::new(StatusCode::NOT_FOUND, message)
     }
@@ -114,7 +132,9 @@ impl std::fmt::Display for ApiError {
 impl std::error::Error for ApiError {}
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        (self.status, Json(json!({"detail":self.message}))).into_response()
+        let mut body=json!({"detail":self.message});
+        if let Some(diagnostic)=self.diagnostic {body["input_budget"]=diagnostic;}
+        (self.status, Json(body)).into_response()
     }
 }
 impl From<rusqlite::Error> for ApiError {

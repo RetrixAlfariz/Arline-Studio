@@ -15,13 +15,18 @@ path = "src/lib.rs"
 name = "arline"
 path = "src/main.rs"
 
+[[example]]
+name = "bekko_diagnostic"
+required-features = ["native-bekko"]
+
 [features]
 default = []
 desktop = ["dep:tauri", "dep:tauri-build"]
+native-bekko = ["dep:fastembed", "dep:ort", "dep:libloading"]
 
 [dependencies]
 axum = { version = "0.8.9", features = ["json", "macros"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time", "fs"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time", "fs", "process", "io-util"] }
 reqwest = { version = "0.12.28", default-features = false, features = ["json", "stream", "rustls-tls"] }
 rusqlite = { version = "0.32.1", features = ["bundled", "backup", "functions"] }
 serde = { version = "1", features = ["derive"] }
@@ -37,6 +42,9 @@ clap = { version = "4.6", features = ["derive"] }
 url = "2"
 percent-encoding = "2"
 zip = { version = "8.6", default-features = false }
+fastembed = { version = "=7.5.0", default-features = false, features = ["ort-load-dynamic"], optional = true }
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["load-dynamic", "api-24"], optional = true }
+libloading = { version = "=0.9.0", optional = true }
 tauri = { version = "2", optional = true, features = [] }
 
 [build-dependencies]

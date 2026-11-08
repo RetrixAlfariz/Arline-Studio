@@ -44,6 +44,13 @@ pub fn replace_chunks(
     let overlap = cfg["chunk_overlap_chars"].as_u64().unwrap_or(180) as usize;
     let revision = format!("base_sha256:{}", digest_hex(content.as_bytes()));
     let chunks = chunking::chunk(content, source_id, max_chars, overlap);
+    let layout = digest_hex(format!("structural-v1|{max_chars}|{overlap}"));
+    // 48-bit layout identity remains exact in JavaScript API clients as well as SQLite.
+    let chunker_version = i64::from_str_radix(&layout[..12], 16).expect("hex digest") + 2;
+    let make_id=|ordinal| {
+        let tag=revision.strip_prefix("base_sha256:").unwrap_or(&revision);
+        format!("MEM-{source_type}-{source_id}-{}-{chunker_version}-{ordinal}",&tag[..tag.len().min(16)])
+    };
     if chunks.is_empty() {
         let con = state.store.connection()?;
         con.execute("UPDATE memory_chunks SET semantic_status='stale',index_state='stale',updated_at=? WHERE source_type=? AND source_id=? AND semantic_status='active'", params![now(),source_type,source_id]).map_err(sql)?;
@@ -54,8 +61,15 @@ pub fn replace_chunks(
     let mut con = state.store.connection()?;
     con.execute_batch("CREATE TABLE IF NOT EXISTS memory_links(memory_chunk_id TEXT NOT NULL,resource_type TEXT NOT NULL,resource_id TEXT NOT NULL,relation TEXT NOT NULL DEFAULT 'mentions',confidence REAL NOT NULL DEFAULT 1.0,resolution_method TEXT NOT NULL DEFAULT 'exact',PRIMARY KEY(memory_chunk_id,resource_type,resource_id,relation)); CREATE INDEX IF NOT EXISTS idx_memory_links_resource ON memory_links(resource_type,resource_id,relation);").map_err(sql)?;
     let tx = con.transaction().map_err(sql)?;
-    let active: i64 = tx.query_row("SELECT COUNT(*) FROM memory_chunks WHERE source_type=? AND source_id=? AND source_revision=? AND semantic_status='active'", params![source_type,source_id,revision], |r| r.get(0)).unwrap_or(0);
-    if active as usize == chunks.len() {
+    let active: i64 = tx.query_row("SELECT COUNT(*) FROM memory_chunks WHERE source_type=? AND source_id=? AND source_revision=? AND chunker_version=? AND semantic_status='active'", params![source_type,source_id,revision,chunker_version], |r| r.get(0)).unwrap_or(0);
+    let identical=if active as usize==chunks.len() {
+        let expected=chunks.iter().map(|chunk|(make_id(chunk.ordinal),(digest_hex(chunk.text.trim().as_bytes()),chunk.text.trim()))).collect::<std::collections::HashMap<_,_>>();
+        let mut statement=tx.prepare("SELECT id,checksum,text FROM memory_chunks WHERE source_type=? AND source_id=? AND semantic_status='active'").map_err(sql)?;
+        let rows=statement.query_map(params![source_type,source_id],|row|Ok((row.get::<_,String>(0)?,row.get::<_,String>(1)?,row.get::<_,String>(2)?))).map_err(sql)?;
+        let rows=rows.collect::<Result<Vec<_>,_>>().map_err(sql)?;
+        rows.len()==chunks.len() && rows.iter().all(|(id,checksum,text)|expected.get(id).is_some_and(|(want,body)|want==checksum && body==text))
+    }else{false};
+    if identical {
         tx.execute("UPDATE memory_chunks SET project_id=?,world_id=?,branch_id=?,session_id=?,authority=COALESCE(?,authority),trust_level=COALESCE(?,trust_level),source_recorded_at=?,world_time_json=?,story_order=?,semantic_class=COALESCE(?,semantic_class),importance=COALESCE(?,importance),updated_at=? WHERE source_type=? AND source_id=? AND source_revision=? AND semantic_status='active'", params![text(metadata,"project_id"),text(metadata,"world_id"),text(metadata,"branch_id"),text(metadata,"session_id"),text(metadata,"authority"),text(metadata,"trust_level"),text(metadata,"source_recorded_at"),metadata.get("world_time").map(Value::to_string),metadata["story_order"].as_f64(),text(metadata,"semantic_class"),metadata["importance"].as_f64(),now(),source_type,source_id,revision]).map_err(sql)?;
         let rows = tx.query_row("SELECT COALESCE(json_group_array(json_object('id',id,'text',text)),json('[]')) FROM memory_chunks WHERE source_type=? AND source_id=? AND source_revision=? AND semantic_status='active'", params![source_type,source_id,revision], |r| r.get::<_,String>(0)).unwrap_or_else(|_| "[]".into());
         tx.commit().map_err(sql)?;
@@ -79,21 +93,15 @@ pub fn replace_chunks(
         .cloned();
     let story_order = metadata.get("story_order").and_then(Value::as_f64);
     let mut result = Vec::new();
+    tx.execute("UPDATE memory_chunks SET semantic_status='stale',index_state='stale',updated_at=? WHERE source_type=? AND source_id=? AND semantic_status='active'", params![timestamp,source_type,source_id]).map_err(sql)?;
     for chunk in &chunks {
         let clean = chunk.text.trim();
         if clean.is_empty() {
             continue;
         }
-        let revision_tag = revision.strip_prefix("base_sha256:").unwrap_or(&revision);
-        let chunk_id = format!(
-            "MEM-{}-{}-{}-{}",
-            source_type,
-            source_id,
-            &revision_tag[..revision_tag.len().min(16)],
-            chunk.ordinal
-        );
+        let chunk_id = make_id(chunk.ordinal);
         let display = clean.chars().take(500).collect::<String>();
-        tx.execute("INSERT INTO memory_chunks(id,source_type,source_id,source_revision,project_id,world_id,branch_id,session_id,source_start_id,source_end_id,source_recorded_at,world_time_json,story_order,scope_kind,semantic_class,authority,trust_level,text,retrieval_text,display_excerpt,token_count,importance,extraction_confidence,identity_confidence,semantic_status,index_state,checksum,chunker_version,index_generation,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'active','indexed',?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET source_revision=excluded.source_revision,project_id=excluded.project_id,world_id=excluded.world_id,branch_id=excluded.branch_id,session_id=excluded.session_id,text=excluded.text,retrieval_text=excluded.retrieval_text,display_excerpt=excluded.display_excerpt,authority=excluded.authority,trust_level=excluded.trust_level,semantic_status='active',index_state='indexed',checksum=excluded.checksum,updated_at=excluded.updated_at", params![chunk_id,source_type,source_id,revision,project,world,branch,session,chunk.start_id,chunk.end_id,source_recorded,world_time.as_ref().map(|v| serde_json::to_string(v).unwrap_or_else(|_| "null".into())),story_order,scope_kind,semantic,authority,trust,clean,clean,display,(clean.chars().count()/4).max(1),metadata.get("importance").and_then(Value::as_f64).unwrap_or(0.5),metadata.get("extraction_confidence").and_then(Value::as_f64).unwrap_or(1.0),metadata.get("identity_confidence").and_then(Value::as_f64).unwrap_or(1.0),digest_hex(clean.as_bytes()),1,Option::<i64>::None,timestamp,timestamp]).map_err(sql)?;
+        tx.execute("INSERT INTO memory_chunks(id,source_type,source_id,source_revision,project_id,world_id,branch_id,session_id,source_start_id,source_end_id,source_recorded_at,world_time_json,story_order,scope_kind,semantic_class,authority,trust_level,text,retrieval_text,display_excerpt,token_count,importance,extraction_confidence,identity_confidence,semantic_status,index_state,checksum,chunker_version,index_generation,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'active','indexed',?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET source_revision=excluded.source_revision,project_id=excluded.project_id,world_id=excluded.world_id,branch_id=excluded.branch_id,session_id=excluded.session_id,text=excluded.text,retrieval_text=excluded.retrieval_text,display_excerpt=excluded.display_excerpt,authority=excluded.authority,trust_level=excluded.trust_level,semantic_status='active',index_state='indexed',checksum=excluded.checksum,chunker_version=excluded.chunker_version,updated_at=excluded.updated_at", params![chunk_id,source_type,source_id,revision,project,world,branch,session,chunk.start_id,chunk.end_id,source_recorded,world_time.as_ref().map(|v| serde_json::to_string(v).unwrap_or_else(|_| "null".into())),story_order,scope_kind,semantic,authority,trust,clean,clean,display,(clean.chars().count()/4).max(1),metadata.get("importance").and_then(Value::as_f64).unwrap_or(0.5),metadata.get("extraction_confidence").and_then(Value::as_f64).unwrap_or(1.0),metadata.get("identity_confidence").and_then(Value::as_f64).unwrap_or(1.0),digest_hex(clean.as_bytes()),chunker_version,Option::<i64>::None,timestamp,timestamp]).map_err(sql)?;
         tx.execute("INSERT OR IGNORE INTO memory_links(memory_chunk_id,resource_type,resource_id,relation,confidence,resolution_method) VALUES(?,?,?,?,?,?)",params![chunk_id,source_type,source_id,"source",1.0,"source"] ).map_err(sql)?;
         let lower = clean.to_ascii_lowercase();
         let families = tx

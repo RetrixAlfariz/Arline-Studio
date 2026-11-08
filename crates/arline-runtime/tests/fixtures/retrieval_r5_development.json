@@ -1,0 +1,758 @@
+{
+  "version": "arline.retrieval-r5.v1",
+  "split": "development",
+  "provenance": "Original authored synthetic multi-chapter narrative; no live/user manuscript. Agent-authored labels pending independent review.",
+  "title": "The Sluice Receipts",
+  "canon_constraints": [
+    "Leila and Sami are friends, not siblings.",
+    "Mira Sen the cartographer and Mira the baker are two different people.",
+    "The brass key opens the north sluice cabinet; the silver whistle is not a key."
+  ],
+  "documents": [
+    {
+      "id": "d01",
+      "title": "The brass key",
+      "text": "At first light Leila reached the customs house carrying a brass key on a green cord. She had inherited the key from her mother, not from the harbor council. It opened the north sluice cabinet, where the repair ledger and a disconnected alarm bell were kept. Sami watched her unlock the cabinet, then went downstairs to fetch a lamp. He did not receive the key. Leila put it back beneath her collar before they crossed the flooded yard.\n\nThe water was rising more slowly than the town notices claimed. Someone had copied last winter's measurements into the new ledger, and Leila marked the unreliable lines with a small question mark rather than erasing them. A previous reader might still need to understand why the council had ordered the wrong timber. She told Sami that a record could explain an error without becoming a true description of the present.\n\nNear the stairs a boy asked whether every metal object belonged to the council. Leila showed him the maker's flower stamped on her key. Her mother had paid for that lock when the town had no money. The boy drew the flower in the dust with his shoe. By breakfast the water had covered the drawing, but Leila still possessed the key and the cabinet remained closed.",
+      "branch_id": "r5-main",
+      "story_order": 1,
+      "world_time": 1,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "d02",
+      "title": "A promise at the ferry",
+      "text": "Sami and Leila were friends, not siblings. They had learned to count boats together at the east ferry, and strangers often mistook their easy quarrels for family resemblance. Sami promised to carry Leila's survey bag while she measured the damaged rail. He kept the promise until the measuring was finished, then handed the bag back in front of the ferryman.\n\nA silver whistle hung from Sami's belt. It belonged to him and had never opened a lock. When a passenger called it the sluice key, he corrected her patiently. The whistle summoned the ferry crew in fog. The brass key that opened the cabinet was still on Leila's green cord, under her collar.\n\nThe ferryman had two daughters and a troublesome habit of inventing kinships for people he liked. He called Sami Leila's brother again while pouring tea. Neither of them accepted the description. They were old friends employed on the same survey. Before leaving, Leila wrote the names of the three unpaid boatmen on a dry page. Sami asked her to keep the list until the council paid them, because a promise to repair a bridge was not a promise to forget the people who had already built it.",
+      "branch_id": "r5-main",
+      "story_order": 2,
+      "world_time": 2,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "d03",
+      "title": "Surat di gudang",
+      "text": "Leila menemukan surat tanpa tanda tangan di gudang garam. Surat itu menuduh Sami mencuri dana perbaikan, tetapi tidak menyertakan angka, saksi, atau tanggal. Ia tidak menganggap tuduhan itu sebagai fakta. Ia melipat kertas tersebut dan menulis kata BELUM TERBUKTI pada amplopnya. Gudang sedang ramai; penjaga menimbang karung sementara anak magang membersihkan timbangan yang macet.\n\nSami datang membawa kuitansi pembelian papan. Kuitansi itu membuktikan bahwa pembayaran terakhir dilakukan oleh bendahara, bukan oleh Sami. Leila belum tahu siapa penulis surat. Ia juga belum menyimpulkan bahwa surat itu sengaja dipalsukan. Ia hanya memisahkan tuduhan dari bukti agar percakapan berikutnya tidak berubah menjadi pengadilan tanpa saksi.\n\nDi luar, penjual roti menawarkan sisa dagangannya kepada pekerja yang belum menerima upah. Leila membeli dua potong dan membagi satu dengan Sami. Persahabatan mereka belum berubah oleh surat itu. Namun, ketika lonceng sore berbunyi, Leila memutuskan membawa kuitansi ke rapat umum. Orang-orang yang menunggu pembayaran berhak melihat catatan belanja, bukan sekadar mendengar siapa yang sedang dituduh. Kunci kuningan masih tergantung pada tali hijau di lehernya ketika ia menutup pintu gudang.",
+      "branch_id": "r5-main",
+      "story_order": 3,
+      "world_time": 3,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "d04",
+      "title": "The map room",
+      "text": "Mira the cartographer worked upstairs in the old observatory. Mira the ferryman's daughter worked at the riverside bakery. They were different people, and the cartographer signed her drawings Mira Sen to prevent the council from sending invoices to the bakery. Only Mira Sen had surveyed the western culvert. The baker knew the price of flour and had never drawn a drainage chart.\n\nLeila visited the observatory with a rolled sheet of measurements. Mira Sen spread the sheet beneath two flat stones and found a missing bend in the printed canal map. The bend led to a shallow basin, not to the sea. If the council drained the north sluice according to the printed map, the basin would overflow into the schoolyard.\n\nThey made a correction in blue ink and dated it before tea. Sami was not present. Neither woman pretended that the corrected map had existed yesterday. The cartographer kept the old printed map in a separate drawer so that earlier decisions could still be reconstructed. Leila copied the new route into her notebook, returned the survey bag to her shoulder, and went downstairs. Mira Sen remained in the observatory, arranging the stones so the damp paper would dry without curling.",
+      "branch_id": "r5-main",
+      "story_order": 4,
+      "world_time": 4,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "d05",
+      "title": "The concealed warrant",
+      "text": "After the workers left, Treasurer Oren opened a narrow compartment behind his desk. Inside lay an unsigned order to sell the schoolyard to a private warehouse company. Only Oren knew of the order at this point. Leila, Sami, and Mira Sen had neither seen it nor heard its contents. The document was not a public decree and had no legal effect.\n\nOren read the company's offer twice. The offered sum would clear the council's oldest debts, but the sale would leave the children with no dry playground during the wet season. He put the order back without signing. His hesitation did not make the sale a completed event. Outside his room, a clerk counted candles and assumed the late meeting concerned lamp oil.\n\nThe following morning the clerk told Sami that the treasurer had worked late. That observation did not reveal the hidden order. The clerk had not entered the compartment, and Sami did not gain secret knowledge merely by walking past the office. Oren alone carried the knowledge into the next meeting. He asked for fresh water and listened while Leila explained the blue correction to the canal map, carefully avoiding any mention of the company.",
+      "branch_id": "r5-main",
+      "story_order": 5,
+      "world_time": 5,
+      "semantic_status": "active",
+      "authority": "author_only",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "d06",
+      "title": "An injury on the walkway",
+      "text": "A loose railing gave way while Leila crossed the mill walkway. She caught the rope with her left hand and struck her right wrist against the post. The physician diagnosed a sprain, not a severed tendon and not a permanent paralysis. She wrapped the wrist in linen and instructed Leila not to lift survey weights for seven days.\n\nSami carried the weights back to the customs house. Leila could still walk, read, and hold a cup in her left hand. Her temporary injury did not change the ownership of the brass key. She kept the green cord around her neck while the physician tied the final bandage.\n\nThat evening Leila dictated the measurements she could not comfortably write. Sami read each number back before putting it in the ledger. When he accidentally called the western basin a harbor, she corrected him immediately. The basin was inland and shallow. They left the erroneous word visible beneath a single line, rather than tearing out the page. At sunset Leila was staying in the physician's spare room, with a sprained right wrist and a borrowed blanket. She had not moved permanently out of town.",
+      "branch_id": "r5-main",
+      "story_order": 6,
+      "world_time": 6,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "d07",
+      "title": "Receipt for a transfer",
+      "text": "Leila gave the brass key to Mira Sen at noon in the observatory. Mira signed a receipt stating that she would hold the key until the north sluice repair was inspected. The green cord went with it. Leila did not give the key to Sami, and Sami did not witness the transfer. Two apprentices saw Mira place it in the locked drawer beneath her drafting table.\n\nThe receipt mattered because Leila was leaving for the western basin and could not open the cabinet for every inspection party. Mira was licensed to record the repairs, so the arrangement saved a long walk without making either woman a council officer. Leila kept a copy of the receipt in her survey bag. The original stayed beside the drawer.\n\nBefore departure Leila asked whether Mira the baker might deliver food to the work crew. The cartographer laughed and wrote the baker's full shop address on a separate slip. Sharing a first name did not make the two women interchangeable. By evening Leila was on the basin road, while Mira Sen still held the brass key at the observatory. The next morning the cabinet could be opened only after an inspector asked Mira for it.",
+      "branch_id": "r5-main",
+      "story_order": 7,
+      "world_time": 7,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "d08",
+      "title": "Nama di perbatasan",
+      "text": "Di pos jalan barat, Sami memakai nama panggilan Raka. Nama itu berasal dari masa kecilnya dan bukan identitas orang kedua. Penjaga pos mengenalnya dengan nama tersebut karena pernah bekerja bersama ayahnya. Ia menunjukkan surat tugas yang tetap mencantumkan nama resmi Sami. Tidak ada penyamaran kerajaan, gelar bangsawan, atau hubungan darah baru di dalam surat itu.\n\nSami mengantar obat dan kain pembalut ke rumah dokter. Ia tidak membawa kunci kuningan. Ketika penjaga bertanya apakah tasnya berisi uang pajak, ia membuka tas agar isinya dapat diperiksa. Dua botol obat, gulungan linen, dan roti adalah seluruh kiriman hari itu. Penjaga menandatangani penerimaan lalu mengembalikan surat tugas.\n\nDi seberang jalan, anak-anak berlatih menyebut nama desa yang tertera di peta baru. Sami berhenti untuk membantu mereka membaca huruf kecil. Ia menjelaskan bahwa satu orang kadang mempunyai nama resmi dan panggilan, sedangkan dua orang yang sama-sama bernama Mira tetap dua orang yang berbeda. Setelah gerbang ditutup, ia berjalan kembali ke kota lewat jalan kering. Ia belum pernah melihat surat penjualan sekolah yang disimpan Oren.",
+      "branch_id": "r5-main",
+      "story_order": 8,
+      "world_time": 8,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "d09",
+      "title": "The apology",
+      "text": "At the public meeting the bookkeeper compared the unsigned accusation with the purchase receipts. The missing money had paid an invoice twice because the council recorded a duplicate number. Sami had not stolen it. Oren apologized to Sami in front of the workers and ordered the duplicate payment recovered from the supplier.\n\nLeila and Sami remained friends. They were not enemies secretly pretending to cooperate. The letter had caused strain, but neither treated its unsupported claim as an enduring truth. Sami asked the bookkeeper to leave a note beside the duplicate entry so future readers would understand both the loss and its correction.\n\nA worker asked whether clearing Sami also proved every council decision was honest. Leila said it did not. The evidence settled this accusation and no more. There were still unpaid wages, damaged boards, and the disputed map to address. After the meeting Sami helped stack benches. Leila used her left hand to gather the papers because her right wrist was still healing. The key remained with Mira Sen, and no one at the meeting announced a change in its custody.",
+      "branch_id": "r5-main",
+      "story_order": 9,
+      "world_time": 9,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "d10",
+      "title": "The healed wrist",
+      "text": "The physician removed Leila's bandage after the rest period. Her right wrist had recovered enough for ordinary surveying, although she would rebuild strength gradually. The old diagnosis of an active sprain no longer described her current condition. She lifted an empty measuring frame, turned her hand, and wrote her name without pain.\n\nShe moved from the physician's spare room to a rented room above the western basin workshop. The move shortened the walk to the repair site. It was not a flight from the town and did not end her friendship with Sami. He carried a kettle and two books to the new room, then went home to his own lodging by the ferry.\n\nOn the first evening Leila watched the water settle behind the repaired bank. A group of children counted the stakes from the dry path, and she asked them not to climb the unfinished rails. She wrote a fresh status note: working wrist recovered; residence western basin workshop. She left the earlier injury account unchanged because it still explained why Sami had carried the weights. A history of illness was not an instruction to keep the character ill forever.",
+      "branch_id": "r5-main",
+      "story_order": 10,
+      "world_time": 10,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "d11",
+      "title": "The unsigned order is exposed",
+      "text": "Oren brought the unsigned schoolyard order to the public council table. For the first time Leila and Sami learned that a warehouse company had proposed buying the playground. The proposal had not been accepted, the land had not been sold, and no children had been moved. Sami read the offer aloud and asked the clerk to record those distinctions.\n\nThe council rejected the sale. Oren destroyed no evidence; he filed the rejected proposal with the meeting minutes. He admitted that he had kept the offer private because he feared the unpaid creditors. Leila said that explanation did not make secrecy a substitute for consent.\n\nOutside the hall, Mira the baker handed bread to the workers while Mira Sen carried a rolled inspection chart. The two women stood next to each other, an ordinary demonstration that the town contained more than one Mira. The brass key was still in the cartographer's custody. The council agreed to pay the remaining wages through a smaller loan, and the meeting ended before rain reached the school windows.",
+      "branch_id": "r5-main",
+      "story_order": 11,
+      "world_time": 11,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "d12",
+      "title": "Inspection at the cabinet",
+      "text": "Mira Sen returned the brass key to Leila after the final sluice inspection. Leila signed the receipt beneath the earlier transfer entry. The north cabinet was dry, its ledger complete, and its disconnected bell had been repaired. Leila tied the green cord around her neck before leaving the customs house.\n\nSami brought the last bundle of timber vouchers. The supplier had refunded the duplicate payment, and every worker on the original list had now been paid. The repaired sluice did not make the entire town immune to floods; it made this outlet safe to operate at the measured water level.\n\nThey walked back along the ferry road, arguing about whether the opening ceremony needed music. Leila wanted a short speech, Sami wanted none, and neither disagreement made them enemies. At this point the accepted main history and an alternative author draft diverge. Everything through the signed return receipt is shared. Events written after this inspection must be read within their own branch, rather than combined into a single impossible evening.",
+      "branch_id": "r5-main",
+      "story_order": 12,
+      "world_time": 12,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "d13",
+      "title": "Main route: the north departure",
+      "text": "In the accepted main route, Leila left for the northern measuring station. She still possessed the brass key on its green cord and kept it inside her coat during the journey. Sami stayed in town to finish the ferry accounts. Their separation was practical and friendly; it was not a betrayal.\n\nAt the station Leila rented a desk beside the window and hung her wet coat on a peg. The key remained in the coat pocket while she copied the new measurements. She sent Mira Sen a note thanking her for keeping the receipt. She did not throw the key into the river or leave it in a market stall.\n\nThat night the station keeper lent her a lantern. The object was a loan, not a replacement for the sluice key. Leila planned to return it after inspecting the bank. The north route therefore ended its first day with Leila at the measuring station and Sami near the ferry, both able to write to the other. A reader continuing this route must not import an incompatible loss from an abandoned alternative.",
+      "branch_id": "r5-main",
+      "story_order": 13,
+      "world_time": 13,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "d14",
+      "title": "Fork route: a deliberate deposit",
+      "text": "In the alternative fork, Leila did not travel north. She deposited the brass key in a sealed locker at the south archive and gave the signed locker receipt to the archivist. The key was not thrown into water. Leila remained in town to organize a public map exhibit with Sami.\n\nThe archivist checked the maker's flower stamped on the key and wrote its description on the envelope. He locked the envelope away in front of Leila. The green cord remained attached. Leila no longer carried the key, but a signed deposit made its location known rather than mysterious.\n\nWhen Sami arrived, he asked why the exhibit included both the old canal map and the blue correction. Leila explained that the first map showed the council's mistaken assumption and the second showed what the surveyors actually measured. He offered to build two equal frames. In this fork their work was still a collaboration. The northern station journey belongs to the other route and must not be used as their current address.",
+      "branch_id": "r5-fork",
+      "story_order": 13,
+      "world_time": 13,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "d15",
+      "title": "A rumour corrected",
+      "text": "A traveler reported that Leila had sold the brass key to a glass merchant. The traveler was mistaken. Leila showed the key, still tied to its green cord, to the station keeper and asked him to witness her reply. No sale had taken place, and she had received no money for the key.\n\nThe rumor arose because a glass merchant had bought an ordinary spare padlock from another surveyor. Similar metal objects and an unfamiliar town had encouraged the traveler to merge two stories. Leila described the difference without accusing him of theft. She asked that the correction be carried back along the same road as the claim.\n\nSami received the correction before the market closed. He pinned it beside the ferry notice rather than tearing down the traveler's original message. Both documents could explain the misunderstanding, but only the correction described the key's present custody. In the main route Leila was still at the north measuring station, her wrist recovered, and the key still hers.",
+      "branch_id": "r5-main",
+      "story_order": 15,
+      "world_time": 15,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "d16",
+      "title": "Rejected reconstruction",
+      "text": "This rejected reconstruction claimed that Leila and Sami were siblings and that Sami had stolen the brass key before the first survey. The editor marked the reconstruction superseded. It is not accepted narrative history and must not supply facts to a continuation. Its account conflicts with the witnessed custody receipts and the explicit friendship established at the ferry.\n\nThe draft also described Leila as permanently unable to use her right hand. The accepted physician's note instead records a temporary sprain followed by recovery. A discarded reconstruction can be preserved for author review without becoming an active source. Keeping old words is different from authorizing them as present truth.",
+      "branch_id": "r5-main",
+      "story_order": 16,
+      "world_time": 16,
+      "semantic_status": "superseded",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "d17",
+      "title": "Exhibit agreement",
+      "text": "In the archive fork, Leila and Sami signed the exhibit agreement. They were co-curators and friends. Mira Sen would lend the blue correction, and Mira the baker would provide food. The archive retained custody of the brass key. Nobody opened the sealed envelope during the meeting.\n\nThe agreement included a rule against pretending that old maps had always contained new information. Each drawing would display its date and purpose. Sami suggested showing a child's drawing of the maker's flower beside the signed receipts. Leila agreed, provided the caption did not imply the child had ever held the key.\n\nAfter the meeting they walked to the schoolyard, which remained public because the sale had been rejected before the fork. They measured places for tables without moving the children off the grounds. The exhibit was a temporary use agreed with the teacher, not a private warehouse project. Their next decision would be whether the opening should take place before or after the next rain.",
+      "branch_id": "r5-fork",
+      "story_order": 19,
+      "world_time": 19,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "d18",
+      "title": "Nested route: the traveling exhibit",
+      "text": "In the nested draft, the exhibit traveled to the hill monastery instead of opening in the schoolyard. Leila and Sami remained co-curators. The archivist continued to keep the brass key in the sealed south-archive locker; the exhibit carried only a drawing and copies of the receipts.\n\nMira Sen accompanied the maps, while Mira the baker stayed in town. At the monastery a novice mistook the drawing for a plan to manufacture another key. Leila explained that it was a record of a particular object, not instructions for a locksmith. The novice changed the caption before the doors opened.\n\nThe nested route inherits the archive deposit and exhibit agreement from its parent fork. It does not inherit later events from the accepted northern route. The practical distinction mattered when a visitor asked whether Leila had brought the key up the hill. She had not. She could describe its place in the archive without producing it from her coat.",
+      "branch_id": "r5-nested",
+      "story_order": 21,
+      "world_time": 21,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    }
+  ],
+  "queries": [
+    {
+      "id": "dev-custody-start",
+      "query": "Who carries the brass key on the green cord at the first survey?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 2,
+        "world_time": 2,
+        "context_lens": "author"
+      },
+      "relevant": [
+        "d01"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Leila carries the brass key.",
+      "answer_claims": [
+        "Leila carries the brass key."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "historical",
+        "possession"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "dev-custody-transfer",
+      "query": "Who holds the brass key after the signed noon transfer?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 8,
+        "world_time": 8,
+        "context_lens": "author"
+      },
+      "relevant": [
+        "d07"
+      ],
+      "forbidden": [],
+      "contradicted": [
+        "d01"
+      ],
+      "expected_answer": "Mira Sen holds it in the observatory drawer.",
+      "answer_claims": [
+        "Mira Sen holds it in the observatory drawer."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "current_state",
+        "possession"
+      ],
+      "continuity_probe": true
+    },
+    {
+      "id": "dev-custody-current",
+      "query": "Where is the brass key now, after the northern rumor is corrected?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 28,
+        "world_time": 28,
+        "context_lens": "author"
+      },
+      "relevant": [
+        "d15"
+      ],
+      "forbidden": [
+        "d14",
+        "d17",
+        "d18",
+        "d16"
+      ],
+      "contradicted": [
+        "d07"
+      ],
+      "expected_answer": "Leila still has the key at the north measuring station.",
+      "answer_claims": [
+        "Leila still has the key at the north measuring station."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "current_state",
+        "negation"
+      ],
+      "continuity_probe": true
+    },
+    {
+      "id": "dev-alias",
+      "query": "Siapa Raka dalam surat tugas Sami?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 28,
+        "world_time": 28,
+        "context_lens": "author"
+      },
+      "relevant": [
+        "d08"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Raka adalah nama panggilan Sami.",
+      "answer_claims": [
+        "Raka adalah nama panggilan Sami."
+      ],
+      "no_answer": false,
+      "exact": true,
+      "categories": [
+        "alias",
+        "multilingual"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "dev-mira",
+      "query": "Which Mira surveyed the western culvert?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 28,
+        "world_time": 28,
+        "context_lens": "author"
+      },
+      "relevant": [
+        "d04"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Mira Sen, the cartographer, not the baker.",
+      "answer_claims": [
+        "Mira Sen, the cartographer, not the baker."
+      ],
+      "no_answer": false,
+      "exact": true,
+      "categories": [
+        "ambiguous_name",
+        "exact_name"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "dev-relationship",
+      "query": "Are Sami and Leila siblings or friends?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 28,
+        "world_time": 28,
+        "context_lens": "author"
+      },
+      "relevant": [
+        "d02"
+      ],
+      "forbidden": [
+        "d16"
+      ],
+      "contradicted": [],
+      "expected_answer": "They are friends, not siblings.",
+      "answer_claims": [
+        "They are friends, not siblings."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "relationship",
+        "negation"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "dev-injury-before",
+      "query": "What is wrong with Leila right after the walkway accident?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 6,
+        "world_time": 6,
+        "context_lens": "author"
+      },
+      "relevant": [
+        "d06"
+      ],
+      "forbidden": [
+        "d10",
+        "d16"
+      ],
+      "contradicted": [],
+      "expected_answer": "A temporary sprain of the right wrist.",
+      "answer_claims": [
+        "A temporary sprain of the right wrist."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "historical",
+        "attribute"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "dev-injury-now",
+      "query": "What is Leila current wrist condition after the physician removes the bandage?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 28,
+        "world_time": 28,
+        "context_lens": "author"
+      },
+      "relevant": [
+        "d10"
+      ],
+      "forbidden": [
+        "d16"
+      ],
+      "contradicted": [
+        "d06"
+      ],
+      "expected_answer": "Her right wrist has recovered for ordinary surveying.",
+      "answer_claims": [
+        "Her right wrist has recovered for ordinary surveying."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "current_state",
+        "attribute"
+      ],
+      "continuity_probe": true
+    },
+    {
+      "id": "dev-location",
+      "query": "Where does Leila stay immediately after moving out of the physician spare room?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 10,
+        "world_time": 10,
+        "context_lens": "author"
+      },
+      "relevant": [
+        "d10"
+      ],
+      "forbidden": [],
+      "contradicted": [
+        "d06"
+      ],
+      "expected_answer": "A rented room above the western basin workshop.",
+      "answer_claims": [
+        "A rented room above the western basin workshop."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "location",
+        "temporal"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "dev-money",
+      "query": "Apakah Sami mencuri dana perbaikan?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 28,
+        "world_time": 28,
+        "context_lens": "author"
+      },
+      "relevant": [
+        "d09"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Tidak; pembayaran ganda menyebabkan selisih dana.",
+      "answer_claims": [
+        "Tidak; pembayaran ganda menyebabkan selisih dana."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "negation",
+        "multilingual"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "dev-secret-author",
+      "query": "What unsigned proposal does only Oren know about before the public meeting?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 6,
+        "world_time": 6,
+        "context_lens": "author"
+      },
+      "relevant": [
+        "d05"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "An unsigned proposal to sell the schoolyard to a warehouse company.",
+      "answer_claims": [
+        "An unsigned proposal to sell the schoolyard to a warehouse company."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "secret",
+        "author_only"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "dev-secret-pov",
+      "query": "What does Sami know about the hidden schoolyard sale order before it is exposed?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 6,
+        "world_time": 6,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [],
+      "forbidden": [
+        "d05",
+        "d11"
+      ],
+      "contradicted": [],
+      "expected_answer": "",
+      "answer_claims": [],
+      "no_answer": true,
+      "exact": false,
+      "categories": [
+        "secret",
+        "pov",
+        "no_answer"
+      ],
+      "continuity_probe": true
+    },
+    {
+      "id": "dev-sale",
+      "query": "Was the schoolyard sold to the warehouse company?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 28,
+        "world_time": 28,
+        "context_lens": "author"
+      },
+      "relevant": [
+        "d11"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "No; the unsigned sale proposal was rejected.",
+      "answer_claims": [
+        "No; the unsigned sale proposal was rejected."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "current_state",
+        "negation"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "dev-fork",
+      "query": "Where is the key in the archive fork after its deposit?",
+      "scope": {
+        "branch_id": "r5-fork",
+        "story_order": 28,
+        "world_time": 28,
+        "context_lens": "author"
+      },
+      "relevant": [
+        "d14"
+      ],
+      "forbidden": [
+        "d13",
+        "d15",
+        "d18",
+        "d16"
+      ],
+      "contradicted": [
+        "d12"
+      ],
+      "expected_answer": "In a sealed locker at the south archive.",
+      "answer_claims": [
+        "In a sealed locker at the south archive."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "branch",
+        "possession"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "dev-nested",
+      "query": "Did Leila bring the real key to the hill monastery in the nested route?",
+      "scope": {
+        "branch_id": "r5-nested",
+        "story_order": 28,
+        "world_time": 28,
+        "context_lens": "author"
+      },
+      "relevant": [
+        "d18"
+      ],
+      "forbidden": [
+        "d13",
+        "d15",
+        "d16"
+      ],
+      "contradicted": [],
+      "expected_answer": "No; the key remains in the south archive locker.",
+      "answer_claims": [
+        "No; the key remains in the south archive locker."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "nested_fork",
+        "negation"
+      ],
+      "continuity_probe": true
+    },
+    {
+      "id": "dev-retcon",
+      "query": "Were Sami and Leila siblings, as the rejected reconstruction claims?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 28,
+        "world_time": 28,
+        "context_lens": "author"
+      },
+      "relevant": [
+        "d02"
+      ],
+      "forbidden": [
+        "d16"
+      ],
+      "contradicted": [],
+      "expected_answer": "No; they are friends, not siblings.",
+      "answer_claims": [
+        "No; they are friends, not siblings."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "retcon",
+        "contradiction"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "dev-noanswer",
+      "query": "What is the name of Leila daughter?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 28,
+        "world_time": 28,
+        "context_lens": "author"
+      },
+      "relevant": [],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "",
+      "answer_claims": [],
+      "no_answer": true,
+      "exact": false,
+      "categories": [
+        "no_answer",
+        "unsupported"
+      ],
+      "continuity_probe": true
+    },
+    {
+      "id": "dev-noanswer-rare",
+      "query": "Where is the platinum astrolabe called Velis-91?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 28,
+        "world_time": 28,
+        "context_lens": "author"
+      },
+      "relevant": [],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "",
+      "answer_claims": [],
+      "no_answer": true,
+      "exact": false,
+      "categories": [
+        "no_answer",
+        "rare_entity"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "dev-map",
+      "query": "Mengapa peta kanal harus diperbaiki dengan tinta biru?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 28,
+        "world_time": 28,
+        "context_lens": "author"
+      },
+      "relevant": [
+        "d04"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Tikungan menuju cekungan dangkal, bukan laut; peta lama dapat membanjiri sekolah.",
+      "answer_claims": [
+        "Tikungan menuju cekungan dangkal, bukan laut; peta lama dapat membanjiri sekolah."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "multilingual",
+        "historical"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "dev-exact",
+      "query": "Mira Sen blue correction observatory",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 28,
+        "world_time": 28,
+        "context_lens": "author"
+      },
+      "relevant": [
+        "d04"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Mira Sen corrected the canal map in the observatory.",
+      "answer_claims": [
+        "Mira Sen corrected the canal map in the observatory."
+      ],
+      "no_answer": false,
+      "exact": true,
+      "categories": [
+        "exact_name"
+      ],
+      "continuity_probe": false
+    }
+  ]
+}

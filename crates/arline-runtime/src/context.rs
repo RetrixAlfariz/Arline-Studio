@@ -307,9 +307,18 @@ fn char_cap(state: &AppState) -> usize {
 
 /// Build bounded generation grounding from an explicit, validated workspace scope.
 pub fn build_context(state: &AppState, body: &Value) -> ApiResult<String> {
+    build_context_with_limit(state,body,char_cap(state))
+}
+
+/// Writer grounding is complete. R4 validates actual capacity and rejects
+/// overflow instead of inheriting the preview's character clipping.
+pub(crate) fn build_writer_context(state:&AppState,body:&Value)->ApiResult<String>{
+    build_context_with_limit(state,body,usize::MAX)
+}
+
+fn build_context_with_limit(state:&AppState,body:&Value,cap:usize)->ApiResult<String>{
     let (project_id, world_id, branch_id) = validate_scope(state, body)?;
     let world_owner = world_owner_project(state, world_id.as_deref())?;
-    let cap = char_cap(state);
     let closing = "</ARLINE_CONTEXT>";
     let content_cap = cap.saturating_sub(closing.chars().count());
     let mut output = format!(

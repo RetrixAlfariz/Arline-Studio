@@ -67,6 +67,7 @@ async fn provider() -> (String, Provider, tokio::task::JoinHandle<()>) {
         let _ = axum::serve(
             listener,
             Router::new()
+                .route("/api/v1/models", axum::routing::get(||async {axum::Json(json!({"models":[{"type":"llm","key":"mock","capabilities":{"reasoning":{"allowed_options":["off","on"]}},"loaded_instances":[{"id":"mock","config":{"context_length":32768}}]}]}))}))
                 .route("/api/v1/chat", route_post(chat))
                 .with_state(task_provider),
         )

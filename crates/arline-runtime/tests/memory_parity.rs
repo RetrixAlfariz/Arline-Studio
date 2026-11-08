@@ -9,6 +9,45 @@ use serde_json::{json, Value};
 use tempfile::TempDir;
 use tower::ServiceExt;
 
+#[tokio::test]
+async fn native_backend_preserves_lexical_fallback_without_loading_models() {
+    let (_dir, state) = fixture();
+    {
+        let mut config = state.config.write().unwrap();
+        config
+            .set(
+                "memory.embedding.backend",
+                toml::Value::String("native_bekko_onnx".into()),
+            )
+            .unwrap();
+        config
+            .set("memory.embedding.enabled", toml::Value::Boolean(true))
+            .unwrap();
+    }
+    let now = chrono::Utc::now().to_rfc3339();
+    state.store.connection().unwrap().execute(
+        "INSERT INTO memory_chunks(id,source_type,source_id,text,checksum,created_at,updated_at) VALUES('fallback','external_note','fallback','violet lighthouse', 'v1',?,?)",
+        rusqlite::params![now,now],
+    ).unwrap();
+    let (status, result) = request(
+        &state,
+        "POST",
+        "/api/memory/query",
+        json!({"query":"violet"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(result["selected"][0]["source_id"], "fallback");
+    assert_eq!(result["dense_embeddings"], false);
+    assert!(result["dense_fallback_reason"]
+        .as_str()
+        .unwrap()
+        .contains("diagnostic-only"));
+    use arline_runtime::foundation::memory::embedding::EmbeddingProvider;
+    assert_eq!(state.embeddings.diagnostics().successful_loads, 0);
+    assert!(state.embeddings.diagnostics().last_error.is_none());
+}
+
 fn fixture() -> (TempDir, AppState) {
     let dir = tempfile::tempdir().unwrap();
     let cfg = RuntimeConfig::create_default(dir.path().join("config.toml"), dir.path()).unwrap();
@@ -333,7 +372,12 @@ async fn memory_settings_disable_retrieval_and_preserve_status_contract() {
         .iter()
         .find(|row| row["path"] == "/api/memory/status")
         .unwrap();
-    assert_eq!(status["config"], expected["response"]["config"]);
+    // R1 adds native configuration without changing the frozen Python fields.
+    let mut expected_config = expected["response"]["config"].clone();
+    for (key,value) in json!({"backend":"lmstudio","model_dir":"models/bekko-embedding-v1-a8m","runtime_library":"","max_tokens":512,"threads":2,"keep_warm_seconds":300}).as_object().unwrap() {
+        expected_config["embedding"][key] = value.clone();
+    }
+    assert_eq!(status["config"], expected_config);
     state
         .config
         .write()

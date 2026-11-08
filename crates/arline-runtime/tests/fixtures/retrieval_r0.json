@@ -1,0 +1,16 @@
+{
+  "version": "arline.retrieval-r0.v1",
+  "split": "development-baseline-only",
+  "notes": "Frozen synthetic probes, not a held-out quality evaluation. Chunks bypass source extraction to isolate query, scope and packing behavior.",
+  "chunks": [
+    {"id": "exact", "text": "Mara hid the amber key beneath the lighthouse stairs."},
+    {"id": "paraphrase", "text": "Nafila purchased medicine at the pharmacy."},
+    {"id": "crowded", "text": "scopeprobe the eligible mainline observation"}
+  ],
+  "distractors": {"count": 520, "branch_id": "ineligible-sibling", "text": "scopeprobe forbidden sibling observation"},
+  "queries": [
+    {"id": "exact-name", "query": "Mara amber key", "relevant": ["exact"]},
+    {"id": "mixed-language-paraphrase", "query": "Siapa membeli obat di apotek?", "relevant": ["paraphrase"]},
+    {"id": "scope-before-cap", "query": "scopeprobe", "relevant": ["crowded"]}
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "version": "arline.semantic-index-r2.v1",
+  "split": "development-storage-benchmark",
+  "documents": 256,
+  "incremental_edits": 16,
+  "batch_size": 32,
+  "templates": [
+    "Mara keeps the amber letter sealed at the lighthouse. The scene records observation {n}.",
+    "Nafila menyimpan kunci di perpustakaan. Catatan cerita ini memiliki revisi {n}.",
+    "Vian checks the continuity: pintu tetap tertutup, and the witness remembers event {n}.",
+    "The archivist records a state transition without promoting generated prose to Canon. Record {n}."
+  ],
+  "query": "Mara remembers the sealed letter at the lighthouse.",
+  "notes": "Controlled synthetic sources only. Measures durable storage and exact diagnostic search, not narrative recall quality. No held-out tuning."
+}

@@ -75,6 +75,7 @@ impl Store {
 
     pub fn connection(&self) -> ApiResult<Connection> {
         let con = Connection::open(&self.path).map_err(sql_error)?;
+        crate::foundation::memory::semantic_index::register_functions(&con).map_err(sql_error)?;
         con.execute_batch(
             "PRAGMA foreign_keys=ON; PRAGMA busy_timeout=30000; PRAGMA journal_mode=WAL;",
         )
@@ -84,16 +85,7 @@ impl Store {
 
     pub fn query(&self, sql: &str, params: &[&dyn ToSql]) -> ApiResult<Vec<Value>> {
         let con = self.connection()?;
-        let mut stmt = con.prepare(sql).map_err(sql_error)?;
-        let names: Vec<String> = stmt
-            .column_names()
-            .iter()
-            .map(|s| (*s).to_owned())
-            .collect();
-        let rows = stmt
-            .query_map(params, |row| row_to_json(row, &names))
-            .map_err(sql_error)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(sql_error)
+        query_connection(&con, sql, params)
     }
 
     pub fn execute(&self, sql: &str, params: &[&dyn ToSql]) -> ApiResult<usize> {
@@ -675,6 +667,21 @@ pub(crate) fn json_to_sql(value: &Value) -> ApiResult<SqlValue> {
         ),
     })
 }
+pub(crate) fn query_connection(
+    con: &Connection,
+    sql: &str,
+    params: &[&dyn ToSql],
+) -> ApiResult<Vec<Value>> {
+    let mut statement = con.prepare(sql)?;
+    let names = statement
+        .column_names()
+        .iter()
+        .map(|name| (*name).to_owned())
+        .collect::<Vec<_>>();
+    let rows = statement.query_map(params, |row| row_to_json(row, &names))?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(sql_error)
+}
+
 fn row_to_json(row: &rusqlite::Row<'_>, names: &[String]) -> rusqlite::Result<Value> {
     let mut out = Map::new();
     for (i, name) in names.iter().enumerate() {

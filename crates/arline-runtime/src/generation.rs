@@ -9,7 +9,11 @@ use axum::{
 };
 use futures_util::StreamExt;
 use serde_json::{json, Value};
-use std::{collections::HashMap, convert::Infallible, time::Instant};
+use std::{
+    collections::HashMap,
+    convert::Infallible,
+    time::{Duration, Instant},
+};
 use uuid::Uuid;
 
 use crate::inference::{ProviderAppTimings, RunTelemetry};
@@ -52,11 +56,14 @@ fn inference_snapshot(telemetry: &mut RunTelemetry) -> Value {
 }
 
 fn profiled_error(error: ApiError, telemetry: &mut RunTelemetry) -> Response {
+    profiled_error_with_partial(error,telemetry,true)
+}
+fn profiled_error_with_partial(error: ApiError, telemetry: &mut RunTelemetry, partial:bool) -> Response {
     let run_id = telemetry.run_id().to_owned();
     let mut response = json_response_value(json!({
         "detail":error.message,
         "run_id":run_id,
-        "stats":{"run_status":"failed","partial":true,"inference":inference_snapshot(telemetry)}
+        "stats":{"run_status":"failed","partial":partial,"input_budget":error.diagnostic,"inference":inference_snapshot(telemetry)}
     }));
     *response.status_mut() = error.status;
     response
@@ -106,6 +113,7 @@ fn generation_telemetry(body: &Value, cfg: &crate::RuntimeConfig) -> RunTelemetr
 const CHAT_SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, pinned INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0, project TEXT, project_id TEXT, world_id TEXT, branch_id TEXT, folder_id TEXT, session_kind TEXT NOT NULL DEFAULT 'chat', tags_json TEXT NOT NULL DEFAULT '[]', workspace_refs_json TEXT NOT NULL DEFAULT '[]', parent_session_id TEXT, forked_from_turn_id TEXT, scratch_mode INTEGER NOT NULL DEFAULT 0, conversation_mode TEXT NOT NULL DEFAULT 'story_writer', conversation_profile_json TEXT NOT NULL DEFAULT '{}', mode_events_json TEXT NOT NULL DEFAULT '[]', world_fork_id TEXT, last_model TEXT, last_mode TEXT, last_reasoning TEXT);
 CREATE TABLE IF NOT EXISTS turns (id TEXT PRIMARY KEY, session_id TEXT NOT NULL, run_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, user_prompt TEXT NOT NULL, story TEXT NOT NULL, model TEXT, mode TEXT, reasoning TEXT, projection_mode TEXT, reasoning_text TEXT NOT NULL DEFAULT '', stats_json TEXT NOT NULL DEFAULT '{}', wcf TEXT NOT NULL DEFAULT '', aif_core TEXT NOT NULL DEFAULT '', session_context TEXT NOT NULL DEFAULT '', workspace_context TEXT NOT NULL DEFAULT '', workspace_scope_json TEXT NOT NULL DEFAULT '{}', workspace_refs_json TEXT NOT NULL DEFAULT '[]', lineage_json TEXT NOT NULL DEFAULT '{}', projections_json TEXT NOT NULL DEFAULT '[]', post_validation_json TEXT NOT NULL DEFAULT '{}', wcf_validation_json TEXT NOT NULL DEFAULT '{}', feedback_status TEXT NOT NULL DEFAULT 'unreviewed', feedback_issues_json TEXT NOT NULL DEFAULT '[]', feedback_note TEXT NOT NULL DEFAULT '', edited_story TEXT NOT NULL DEFAULT '', FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE);
+CREATE TABLE IF NOT EXISTS generation_requests (idempotency_key TEXT PRIMARY KEY, endpoint TEXT NOT NULL, scope_hash TEXT NOT NULL, payload_hash TEXT NOT NULL, run_id TEXT NOT NULL, created_at TEXT NOT NULL);
 "#;
 
 fn now() -> String {
@@ -128,8 +136,48 @@ struct CancellationGuard {
     telemetry: RunTelemetry,
     provider_timer: Option<ProviderTimer>,
     output_budget: crate::inference::budget::OutputBudget,
+    story: String,
+    reasoning: String,
+    last_checkpoint: Option<Instant>,
+    checkpoint_writes: u64,
+    checkpoint_failures: u64,
 }
+
+/// Partial-output checkpoints are throttled: cancel/failure paths write the full
+/// in-memory text, so only a process crash can lose at most this window.
+const CHECKPOINT_INTERVAL: Duration = Duration::from_millis(250);
+
 impl CancellationGuard {
+    fn checkpoint(&mut self) {
+        if self
+            .last_checkpoint
+            .is_some_and(|at| at.elapsed() < CHECKPOINT_INTERVAL)
+        {
+            return;
+        }
+        let started = Instant::now();
+        // Best effort: the final write is authoritative and startup recovery
+        // marks a turn left "running" as interrupted.
+        match self.store.update("turns", &self.turn_id, json!({"story":self.story,"reasoning":self.reasoning,"reasoning_text":self.reasoning,"stats_json":{"run_status":"running","partial":true}})) {
+            Ok(_) => self.checkpoint_writes += 1,
+            Err(_) => self.checkpoint_failures += 1,
+        }
+        self.last_checkpoint = Some(Instant::now());
+        self.telemetry
+            .accumulate_stage("persistence", started.elapsed());
+    }
+
+    /// Persist a failed run with whatever text arrived; returns whether it was saved.
+    fn fail(&mut self, error: &Value) -> bool {
+        self.finish_provider(&Value::Null);
+        self.finished = true;
+        let mut stats = self.status_stats("failed");
+        stats["error"] = error.clone();
+        self.store
+            .update("turns", &self.turn_id, json!({"story":self.story,"reasoning":self.reasoning,"reasoning_text":self.reasoning,"stats_json":stats}))
+            .is_ok()
+    }
+
     fn finish_provider(&mut self, raw: &Value) {
         if let Some(timer) = self.provider_timer.take() {
             timer.finish(&mut self.telemetry, raw);
@@ -152,10 +200,14 @@ impl Drop for CancellationGuard {
         let store = self.store.clone();
         let id = self.turn_id.clone();
         self.finish_provider(&Value::Null);
-        let stats = self.status_stats("cancelled");
+        let mut stats = self.status_stats("cancelled");
+        stats["checkpoint_writes"] = json!(self.checkpoint_writes);
+        let patch = json!({"story":std::mem::take(&mut self.story),"reasoning":self.reasoning,"reasoning_text":std::mem::take(&mut self.reasoning),"stats_json":stats});
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             handle.spawn_blocking(move || {
-                let _ = store.update("turns", &id, json!({"stats_json":stats}));
+                // Nobody is listening anymore; if this fails the turn stays
+                // "running" and startup recovery marks it interrupted.
+                let _ = store.update("turns", &id, patch);
             });
         }
     }
@@ -163,6 +215,143 @@ impl Drop for CancellationGuard {
 
 pub fn initialize(store: &crate::store::Store) -> ApiResult<()> {
     store.connection()?.execute_batch(CHAT_SCHEMA).map_err(err)
+}
+
+/// Startup only: no run can be in flight yet, so any turn still marked
+/// "running" was cut off by a crash or shutdown. Its checkpointed text is kept.
+pub fn recover_interrupted(store: &crate::store::Store) -> ApiResult<usize> {
+    store
+        .connection()?
+        .execute(
+            "UPDATE turns SET stats_json=json_set(CASE WHEN json_valid(stats_json) THEN stats_json ELSE '{}' END,'$.run_status','interrupted','$.partial',json('true')) WHERE json_valid(stats_json) AND json_extract(stats_json,'$.run_status')='running'",
+            [],
+        )
+        .map_err(err)
+}
+
+/// Commit a completed streaming run. `done` may only be sent after this
+/// returns Ok: the final stats write is the point where the turn reads as completed.
+fn finalize_stream_turn(
+    state: &AppState,
+    turn_id: &str,
+    run_id: &str,
+    analysis: &Value,
+    bundle: &mut Value,
+    stats: &mut Value,
+    telemetry: &mut RunTelemetry,
+) -> ApiResult<()> {
+    let started = Instant::now();
+    state.store.update("turns", turn_id, json!({"story":bundle["story"],"reasoning":bundle["reasoning"],"reasoning_text":bundle["reasoning"],"wcf":analysis["wcf"],"aif_core":analysis["aif_core"],"projections_json":analysis["projections"],"post_validation_json":bundle["post_validation"],"wcf_validation_json":analysis["wcf_validation"],"lineage_json":{"analysis_id":run_id}}))?;
+    telemetry.accumulate_stage("persistence", started.elapsed());
+    let memory_started = Instant::now();
+    // The memory index is derived and rebuildable, so it must not fail the run.
+    if let Err(error) = crate::foundation::memory::refresh_turn(state, turn_id) {
+        stats["memory_index_error"] = json!(error.message);
+    }
+    telemetry.record_stage("memory_index", memory_started.elapsed());
+    stats["inference"] = inference_snapshot(telemetry);
+    bundle["stats"] = stats.clone();
+    crate::analysis::cache_run(state, run_id, bundle)?;
+    state
+        .store
+        .update("turns", turn_id, json!({"stats_json":stats}))?;
+    Ok(())
+}
+
+/// INF-10: reserve `idempotency_key` for this run before any writer call.
+/// Returns a 409 response for a duplicate; a key reused with another scope or
+/// payload is rejected. Requests without a key keep the old behaviour.
+fn context_rejection(state:&AppState,original:&Value,session:&str,run_id:&str,error:ApiError,telemetry:&mut RunTelemetry)->Response {
+    if original.get("idempotency_key").is_some_and(|v|!v.is_null()) && matches!(error.status,StatusCode::PAYLOAD_TOO_LARGE|StatusCode::UNPROCESSABLE_ENTITY|StatusCode::SERVICE_UNAVAILABLE) {
+        // A claimed request rejected before a writer call gets a terminal owner
+        // record. A retry with the same key cannot become a second run.
+        let persisted=state.store.insert("turns",json!({"session_id":session,"run_id":run_id,"user_prompt":original["prompt"],"story":"","reasoning":"","stats_json":{"run_status":"failed","failure_phase":"context_compilation","partial":false,"overflow_reason":error.message,"input_budget":error.diagnostic}})).is_ok();
+        telemetry.record_metadata("context_rejection_persisted",json!(persisted));
+    }
+    let partial=error.diagnostic.is_none();
+    profiled_error_with_partial(error,telemetry,partial)
+}
+
+fn claim_request(
+    state: &AppState,
+    original: &Value,
+    endpoint: &str,
+    run_id: &str,
+) -> ApiResult<Option<Response>> {
+    use sha2::{Digest, Sha256};
+    let Some(key) = original.get("idempotency_key").filter(|v| !v.is_null()) else {
+        return Ok(None);
+    };
+    let key = key
+        .as_str()
+        .map(str::trim)
+        .filter(|k| !k.is_empty() && k.len() <= 200)
+        .ok_or_else(|| {
+            ApiError::bad_request(
+                "idempotency_key must be a non-empty string of at most 200 characters",
+            )
+        })?;
+    let digest = |value: &Value| format!("{:x}", Sha256::digest(value.to_string()));
+    let scope = digest(&json!([
+        endpoint,
+        original["session_id"],
+        original["project_id"],
+        original["world_id"],
+        original["branch_id"]
+    ]));
+    let mut payload = original.clone();
+    if let Some(object) = payload.as_object_mut() {
+        object.remove("idempotency_key");
+    }
+    let payload = digest(&payload);
+    let connection = state.store.connection()?;
+    // The primary key makes concurrent claims race-free: exactly one insert wins.
+    let claimed = connection.execute(
+        "INSERT OR IGNORE INTO generation_requests(idempotency_key,endpoint,scope_hash,payload_hash,run_id,created_at) VALUES(?,?,?,?,?,?)",
+        rusqlite::params![key, endpoint, scope, payload, run_id, now()],
+    )?;
+    if claimed == 1 {
+        return Ok(None);
+    }
+    let (owner_scope, owner_payload, owner_run): (String, String, String) = connection.query_row(
+        "SELECT scope_hash,payload_hash,run_id FROM generation_requests WHERE idempotency_key=?",
+        [key],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+    let mismatch = if owner_scope != scope {
+        Some("a different endpoint or session/project/world/branch scope")
+    } else if owner_payload != payload {
+        Some("a different request payload")
+    } else {
+        None
+    };
+    if let Some(what) = mismatch {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            format!(
+                "idempotency_key was already used with {what}; use a new key for a new request"
+            ),
+        ));
+    }
+    let turn = connection
+        .query_row(
+            "SELECT id, json_extract(stats_json,'$.run_status') FROM turns WHERE run_id=? ORDER BY rowid DESC LIMIT 1",
+            [&owner_run],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+        )
+        .ok();
+    let body = json!({
+        "detail":"Duplicate generation request: this idempotency_key already owns a run",
+        "duplicate":true,"run_id":owner_run,
+        "turn_id":turn.as_ref().map(|t| t.0.clone()),
+        "run_status":turn.and_then(|t| t.1),
+    });
+    Response::builder()
+        .status(StatusCode::CONFLICT)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
+        .map(Some)
+        .map_err(err)
 }
 
 pub async fn ensure_schema(state: &AppState) -> ApiResult<()> {
@@ -194,25 +383,17 @@ fn hydrate_session_scope(state: &AppState, body: &mut Value) -> ApiResult<()> {
     }
     Ok(())
 }
-fn session_history(state: &AppState, id: &str) -> ApiResult<String> {
+fn session_history(state: &AppState, id: &str) -> ApiResult<Vec<crate::inference::context::HistoryTurn>> {
     let limit = state
         .runtime_config()?
         .u64("history.continuity_turns", 2)
         .min(100) as i64;
-    let rows=state.store.query("SELECT user_prompt,CASE WHEN feedback_status='edited_accept' AND edited_story<>'' THEN edited_story ELSE story END AS final_story FROM turns WHERE session_id=? AND story<>'' ORDER BY rowid DESC LIMIT ?",&[&id,&limit])?;
-    Ok(rows
-        .iter()
-        .rev()
-        .map(|turn| {
-            format!(
-                "User: {}\nAssistant: {}",
-                turn["user_prompt"].as_str().unwrap_or(""),
-                turn["final_story"].as_str().unwrap_or("")
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n\n"))
+    let rows=state.store.query("SELECT id,user_prompt,CASE WHEN feedback_status='edited_accept' AND edited_story<>'' THEN edited_story ELSE story END AS final_story FROM turns WHERE session_id=? AND story<>'' ORDER BY rowid DESC LIMIT ?",&[&id,&limit])?;
+    Ok(rows.iter().rev().map(|turn|crate::inference::context::HistoryTurn{
+        id:turn["id"].as_str().unwrap_or_default().into(),user:turn["user_prompt"].as_str().unwrap_or_default().into(),assistant:turn["final_story"].as_str().unwrap_or_default().into()
+    }).collect())
 }
+
 pub(crate) fn delete_history(state: &AppState, kind: &str, id: &str) -> ApiResult<Response> {
     let table = if kind == "turn" { "turns" } else { "sessions" };
     let existing = state
@@ -300,6 +481,8 @@ fn take_sse_line(buffer: &mut Vec<u8>) -> Option<String> {
     Some(line)
 }
 
+/// Conservative token estimate: retrieval packs at 4 chars/token, but the final
+/// input uses 3 because overflowing the provider window truncates or fails the run.
 fn config_string(cfg: &crate::RuntimeConfig, key: &str, default: &str) -> String {
     cfg.str(key, default)
 }
@@ -317,7 +500,7 @@ fn config_num(cfg: &crate::RuntimeConfig, key: &str, default: f64) -> f64 {
         .unwrap_or(default)
 }
 
-fn chat_payload(
+pub(crate) fn chat_payload(
     body: &Value,
     cfg: &crate::RuntimeConfig,
     context: &str,
@@ -450,6 +633,7 @@ async fn resolve_reasoning(
             models.iter().find(|item| {
                 item.get("key").and_then(Value::as_str) == Some(model)
                     || item.get("id").and_then(Value::as_str) == Some(model)
+                    || item.get("loaded_instances").and_then(Value::as_array).is_some_and(|instances|instances.iter().any(|instance|instance["id"]==model))
             })
         });
     let config = info
@@ -480,10 +664,10 @@ async fn resolve_reasoning(
 async fn model_stream(
     state: &AppState,
     body: &Value,
-    context: &str,
+    context: &crate::inference::context::CompiledWriterContext,
     budget: &crate::inference::budget::OutputBudget,
     telemetry: &mut RunTelemetry,
-) -> ApiResult<(String, String, Value, Value)> {
+) -> ApiResult<(String, String, Value, Value, crate::inference::context::CompiledWriterContext)> {
     let cfg = state.runtime_config()?;
     let model = payload_string(body, "model", &config_string(&cfg, "lmstudio.model", ""));
     let configured_reasoning = cfg.str("generation.reasoning", "off");
@@ -499,12 +683,12 @@ async fn model_stream(
         .trim_end_matches('/')
         .to_owned();
     let url = format!("{base}/api/v1/chat");
-    let mut provider_body = chat_payload(body, &cfg, context, budget);
-    if let Some(reasoning) = effective_reasoning {
-        provider_body["reasoning"] = json!(reasoning);
-    } else if let Some(object) = provider_body.as_object_mut() {
-        object.remove("reasoning");
-    }
+    let mut compiled = crate::inference::context::compile(state,&cfg,body,&context.selection,budget.api_max,|text|{
+        let mut payload=chat_payload(body,&cfg,text,budget);
+        if let Some(ref reasoning)=effective_reasoning {payload["reasoning"]=json!(reasoning);}else if let Some(object)=payload.as_object_mut(){object.remove("reasoning");}
+        payload
+    }).await?;
+    let provider_body=compiled.payload.clone();
     telemetry.record_metadata(
         "effective_reasoning",
         provider_body
@@ -618,14 +802,15 @@ async fn model_stream(
         } else {
             final_response
         };
-        Ok((story.trim().to_owned(), reasoning, raw, provider_body))
+        crate::inference::context::observe_usage(&mut compiled.report,&raw);
+        Ok((story.trim().to_owned(), reasoning, raw, provider_body, compiled))
     }
     .await;
     provider_timer.finish(
         telemetry,
         result
             .as_ref()
-            .map(|(_, _, raw, _)| raw)
+            .map(|(_, _, raw, _, _)| raw)
             .unwrap_or(&Value::Null),
     );
     result
@@ -663,7 +848,11 @@ fn run_stats(
     Value::Object(stats)
 }
 
-async fn generate_stream_response(state: &AppState, mut body: Value) -> ApiResult<Response> {
+async fn generate_stream_response(
+    state: &AppState,
+    mut body: Value,
+    original: &Value,
+) -> ApiResult<Response> {
     let mut telemetry = generation_telemetry(&body, &state.runtime_config()?);
     let run_id = telemetry.run_id().to_owned();
     ensure_schema(state).await?;
@@ -690,21 +879,23 @@ async fn generate_stream_response(state: &AppState, mut body: Value) -> ApiResul
             }
         }
     }
+    if let Some(duplicate) = claim_request(state, original, "generate/stream", &run_id)? {
+        return Ok(duplicate);
+    }
     if state.store.get("sessions", &session_id)?.is_none() {
         state.store.insert("sessions", json!({"id":session_id,"title":prompt.chars().take(80).collect::<String>(),"project_id":body.get("project_id"),"world_id":body.get("world_id"),"branch_id":body.get("branch_id"),"conversation_mode":payload_string(&body,"conversation_mode","story_writer"),"conversation_profile_json":body.get("conversation_profile").cloned().unwrap_or(json!({})),"workspace_refs_json":body.get("references").cloned().unwrap_or(json!([])),"scratch_mode":body.get("scratch_mode").and_then(Value::as_bool).unwrap_or(false),"created_at":now(),"updated_at":now()}))?;
     }
     let history = session_history(state, &session_id)?;
-    let (context, analytical, budgets) =
+    let (context, mut analytical, budgets) =
         match prepare_generation(state, &body, &history, &mut telemetry).await {
             Ok(value) => value,
-            Err(error) => return Ok(profiled_error(error, &mut telemetry)),
+            Err(error) => return Ok(context_rejection(state,original,&session_id,&run_id,error,&mut telemetry)),
         };
     let cfg = state.runtime_config()?;
     let base = cfg.str("lmstudio.base_url", "http://127.0.0.1:1234");
     let url = format!("{}/api/v1/chat", base.trim_end_matches('/'));
     let mut provider_body = chat_payload(&body, &cfg, &context, &budgets.writers[0]);
     let deliberation = analytical["deliberation"].clone();
-    let model_input = provider_body["input"].clone();
     let model = payload_string(&body, "model", &cfg.str("lmstudio.model", ""));
     let configured_reasoning = cfg.str("generation.reasoning", "off");
     let requested_reasoning = body
@@ -719,6 +910,14 @@ async fn generate_stream_response(state: &AppState, mut body: Value) -> ApiResul
     } else if let Some(object) = provider_body.as_object_mut() {
         object.remove("reasoning");
     }
+    let compiled=match crate::inference::context::compile(state,&cfg,&body,&context.selection,budgets.writers[0].api_max,|text|{
+        let mut payload=chat_payload(&body,&cfg,text,&budgets.writers[0]);
+        if let Some(value)=provider_body.get("reasoning"){payload["reasoning"]=value.clone();}else{payload.as_object_mut().unwrap().remove("reasoning");}payload
+    }).await {Ok(value)=>value,Err(error)=>return Ok(context_rejection(state,original,&session_id,&run_id,error,&mut telemetry))};
+    apply_compiled(&mut analytical,&compiled);
+    let context=compiled;
+    let provider_body=context.payload.clone();
+    let model_input=provider_body["input"].clone();
     let mut request = state.client.post(url).json(&provider_body);
     let api_key = cfg.str("lmstudio.api_key", "");
     if !api_key.is_empty() {
@@ -737,13 +936,13 @@ async fn generate_stream_response(state: &AppState, mut body: Value) -> ApiResul
     );
     let stream_state = state.clone();
     let stream = async_stream::stream! {
-        let mut cancellation = CancellationGuard { store: stream_state.store.clone(), turn_id: turn_id.clone(), finished: false, telemetry, provider_timer: None, output_budget:budgets.writers[0].clone() };
-        let mut story=String::new(); let mut reasoning=String::new(); let mut pending=Vec::<u8>::new();
+        let mut cancellation = CancellationGuard { store: stream_state.store.clone(), turn_id: turn_id.clone(), finished: false, telemetry, provider_timer: None, output_budget:budgets.writers[0].clone(), story: String::new(), reasoning: String::new(), last_checkpoint: None, checkpoint_writes: 0, checkpoint_failures: 0 };
+        let mut pending=Vec::<u8>::new();
         let mut raw_response=json!({});
         yield Ok::<_,Infallible>(sse("run.start",&json!({"run_id":run_id,"session_id":session_id})));
         cancellation.provider_timer = Some(ProviderTimer::new());
-        let response=match request.send().await{Ok(v)=>v,Err(e)=>{cancellation.finish_provider(&Value::Null);cancellation.finished=true;let mut stats=cancellation.status_stats("failed");stats["error"]=json!(e.to_string());let _=stream_state.store.update("turns",&turn_id,json!({"stats_json":stats}));yield Ok(sse("error",&json!({"message":e.to_string(),"run_id":run_id})));return;}};
-        if !response.status().is_success(){let status=response.status();let text=response.text().await.unwrap_or_default();cancellation.finish_provider(&Value::Null);cancellation.finished=true;let mut stats=cancellation.status_stats("failed");stats["error"]=json!(format!("LM Studio HTTP {status}"));let _=stream_state.store.update("turns",&turn_id,json!({"stats_json":stats}));yield Ok(sse("error",&json!({"message":format!("LM Studio HTTP {status}: {}",preview(&text)),"run_id":run_id})));return;}
+        let response=match request.send().await{Ok(v)=>v,Err(e)=>{let persisted=cancellation.fail(&json!(e.to_string()));yield Ok(sse("error",&json!({"message":e.to_string(),"run_id":run_id,"persisted":persisted})));return;}};
+        if !response.status().is_success(){let status=response.status();let text=response.text().await.unwrap_or_default();let persisted=cancellation.fail(&json!(format!("LM Studio HTTP {status}")));yield Ok(sse("error",&json!({"message":format!("LM Studio HTTP {status}: {}",preview(&text)),"run_id":run_id,"persisted":persisted})));return;}
         let mut bytes=response.bytes_stream(); let mut current_event=String::from("message"); let mut provider_failed=false; let mut provider_error=String::new();
         while let Some(item)=bytes.next().await {
             let chunk=match item{Ok(v)=>v,Err(e)=>{provider_failed=true;provider_error=e.to_string();break;}};
@@ -757,13 +956,11 @@ async fn generate_stream_response(state: &AppState, mut body: Value) -> ApiResul
                 let typ=v.get("type").and_then(Value::as_str).unwrap_or(&current_event);
                 if typ.contains("error")||v.get("error").is_some(){provider_failed=true;provider_error=v.to_string();break;}
                 if let Some(result)=v.get("result"){raw_response=result.clone();}
-                if !content.is_empty()&&typ.contains("reason"){if let Some(timer)=cancellation.provider_timer.as_mut(){timer.first_text();} reasoning.push_str(content);yield Ok(sse("reasoning.delta",&json!({"content":content})));}
+                if !content.is_empty()&&typ.contains("reason"){if let Some(timer)=cancellation.provider_timer.as_mut(){timer.first_text();} cancellation.reasoning.push_str(content);yield Ok(sse("reasoning.delta",&json!({"content":content})));}
                 else if !content.is_empty()&&(typ.contains("message")||typ.ends_with("delta")){
                     if let Some(timer) = cancellation.provider_timer.as_mut() { timer.first_text(); }
-                    story.push_str(content);
-                    let write_started = Instant::now();
-                    let _=stream_state.store.update("turns",&turn_id,json!({"story":story,"reasoning":reasoning,"reasoning_text":reasoning,"stats_json":{"run_status":"running","partial":true}}));
-                    cancellation.telemetry.accumulate_stage("persistence", write_started.elapsed());
+                    cancellation.story.push_str(content);
+                    cancellation.checkpoint();
                     cancellation.telemetry.record_server_first_visible_text(cancellation.telemetry.elapsed());
                     yield Ok(sse("answer.delta",&json!({"content":content})));
                 }
@@ -773,43 +970,46 @@ async fn generate_stream_response(state: &AppState, mut body: Value) -> ApiResul
         if let Some(output)=raw_response["output"].as_array(){
             let final_story=output.iter().filter(|item|item["type"]=="message").filter_map(|item|item["content"].as_str()).collect::<String>();
             let final_reasoning=output.iter().filter(|item|item["type"]=="reasoning").filter_map(|item|item["content"].as_str()).collect::<String>();
-            if story.is_empty()&&!final_story.is_empty(){if let Some(timer)=cancellation.provider_timer.as_mut(){timer.first_text();} story=final_story;cancellation.telemetry.record_server_first_visible_text(cancellation.telemetry.elapsed());yield Ok(sse("answer.delta",&json!({"content":story})));}
-            if reasoning.is_empty()&&!final_reasoning.is_empty(){if let Some(timer)=cancellation.provider_timer.as_mut(){timer.first_text();} reasoning=final_reasoning;yield Ok(sse("reasoning.delta",&json!({"content":reasoning})));}
+            if cancellation.story.is_empty()&&!final_story.is_empty(){if let Some(timer)=cancellation.provider_timer.as_mut(){timer.first_text();} cancellation.story=final_story;cancellation.telemetry.record_server_first_visible_text(cancellation.telemetry.elapsed());yield Ok(sse("answer.delta",&json!({"content":cancellation.story})));}
+            if cancellation.reasoning.is_empty()&&!final_reasoning.is_empty(){if let Some(timer)=cancellation.provider_timer.as_mut(){timer.first_text();} cancellation.reasoning=final_reasoning;yield Ok(sse("reasoning.delta",&json!({"content":cancellation.reasoning})));}
         }
-        let status=if provider_failed||story.trim().is_empty(){"failed"}else{"completed"};
+        let completed=!provider_failed&&!cancellation.story.trim().is_empty();
         cancellation.finish_provider(&raw_response);
-        let mut done_bundle = json!({});
-        let mut stats=run_stats(&raw_response,&provider_body,&body,&cfg,status,&budgets.writers[0]);
-        stats["inference"]=inference_snapshot(&mut cancellation.telemetry);
-        if status == "completed" {
-            {
-                let analysis=&analytical;
-                let analysis_id = run_id.clone();
-                let validation_started=Instant::now();
-                let quality=crate::analysis::quality_report_with_context(&story, analysis.get("writer_context"));
-                cancellation.telemetry.record_stage("validation",validation_started.elapsed());
-                done_bundle = json!({"analysis_id":analysis_id,"run_id":run_id,"turn_id":turn_id,"input_mode":payload_string(&body,"input_mode","smart_hybrid"),"projection_mode":payload_string(&body,"projection_mode","balanced"),"wcf":analysis["wcf"],"aif_core":analysis["aif_core"],"narrative_brief":analysis["narrative_brief"],"deliberation":deliberation,"projections":analysis["projections"],"wcf_validation":analysis["wcf_validation"],"extracted_state":analysis["extracted_state"],"events":analysis["events"],"semantic_core":analysis["semantic_core"],"writer_context":analysis["writer_context"],"world_runtime":analysis["world_runtime"],"narrative_runtime":analysis["narrative_runtime"],"model_input":model_input,"trace_choices":analysis["trace_choices"],"story":story,"reasoning":reasoning,"stats":stats,"post_validation":{"quality_report":quality},"raw_response":raw_response});
-                let write_started = Instant::now();
-                let _ = crate::analysis::cache_run(&stream_state, &analysis_id, &done_bundle);
-                let _ = stream_state.store.update("turns", &turn_id, json!({"wcf":analysis["wcf"],"aif_core":analysis["aif_core"],"projections_json":analysis["projections"],"post_validation_json":done_bundle["post_validation"],"wcf_validation_json":analysis["wcf_validation"],"lineage_json":{"analysis_id":analysis_id}}));
-                cancellation.telemetry.accumulate_stage("persistence", write_started.elapsed());
-            }
-        }
-        let write_started = Instant::now();
-        let _=stream_state.store.update("turns",&turn_id,json!({"story":story,"reasoning":reasoning,"reasoning_text":reasoning,"stats_json":stats}));
-        cancellation.telemetry.accumulate_stage("persistence", write_started.elapsed());
-        if status == "completed" {let memory_started=Instant::now(); let _ = crate::foundation::memory::refresh_turn(&stream_state, &turn_id); cancellation.telemetry.record_stage("memory_index",memory_started.elapsed());}
-        stats["inference"]=inference_snapshot(&mut cancellation.telemetry);
-        let _=stream_state.store.update("turns",&turn_id,json!({"stats_json":stats}));
-        if status=="completed"{
+        let mut stats=run_stats(&raw_response,&provider_body,&body,&cfg,if completed{"completed"}else{"failed"},&budgets.writers[0]);
+        stats["checkpoint_writes"]=json!(cancellation.checkpoint_writes);
+        stats["checkpoint_failures"]=json!(cancellation.checkpoint_failures);
+        stats["input_budget"]=analytical["input_budget"].clone();
+        crate::inference::context::observe_usage(&mut stats["input_budget"],&raw_response);
+        if !completed {
+            let message=if provider_error.is_empty(){"LM Studio returned no message output".to_owned()}else{provider_error};
+            stats["inference"]=inference_snapshot(&mut cancellation.telemetry);
+            stats["error"]=json!(message);
             cancellation.finished=true;
-            done_bundle["stats"]=stats;
-            let _=crate::analysis::cache_run(&stream_state,&run_id,&done_bundle);
-            done_bundle["session_id"]=json!(session_id);
-            done_bundle["quality_report"]=done_bundle["post_validation"]["quality_report"].clone();
-            done_bundle["summary"]=json!({"response_kind":if payload_string(&body,"conversation_mode","story_writer")=="story_lab"{"discussion"}else{"prose"}});
-            yield Ok(sse("done",&done_bundle));
-        }else{cancellation.finished=true;yield Ok(sse("error",&json!({"message":if provider_error.is_empty(){"LM Studio returned no message output"}else{&provider_error},"run_id":run_id,"session_id":session_id,"turn_id":turn_id})));}
+            let persisted=stream_state.store.update("turns",&turn_id,json!({"story":cancellation.story,"reasoning":cancellation.reasoning,"reasoning_text":cancellation.reasoning,"stats_json":stats})).is_ok();
+            yield Ok(sse("error",&json!({"message":message,"run_id":run_id,"session_id":session_id,"turn_id":turn_id,"persisted":persisted})));
+            return;
+        }
+        let story=cancellation.story.clone();
+        let reasoning=cancellation.reasoning.clone();
+        let validation_started=Instant::now();
+        let quality=crate::analysis::quality_report_with_context(&story, analytical.get("writer_context"));
+        cancellation.telemetry.record_stage("validation",validation_started.elapsed());
+        let analysis=&analytical;
+        let mut done_bundle = json!({"analysis_id":run_id,"run_id":run_id,"turn_id":turn_id,"input_mode":payload_string(&body,"input_mode","smart_hybrid"),"projection_mode":payload_string(&body,"projection_mode","balanced"),"wcf":analysis["wcf"],"aif_core":analysis["aif_core"],"narrative_brief":analysis["narrative_brief"],"deliberation":deliberation,"projections":analysis["projections"],"wcf_validation":analysis["wcf_validation"],"extracted_state":analysis["extracted_state"],"events":analysis["events"],"semantic_core":analysis["semantic_core"],"writer_context":analysis["writer_context"],"world_runtime":analysis["world_runtime"],"narrative_runtime":analysis["narrative_runtime"],"model_input":model_input,"trace_choices":analysis["trace_choices"],"story":story,"reasoning":reasoning,"stats":stats,"post_validation":{"quality_report":quality},"raw_response":raw_response});
+        let finalized=finalize_stream_turn(&stream_state,&turn_id,&run_id,analysis,&mut done_bundle,&mut stats,&mut cancellation.telemetry);
+        cancellation.finished=true;
+        if let Err(error)=finalized {
+            // The run produced output but could not be committed: never report done.
+            stats["run_status"]=json!("failed");
+            stats["error"]=json!(format!("persistence failed: {}",error.message));
+            let persisted=stream_state.store.update("turns",&turn_id,json!({"stats_json":stats})).is_ok();
+            yield Ok(sse("error",&json!({"message":format!("Generation output could not be saved: {}",error.message),"run_id":run_id,"session_id":session_id,"turn_id":turn_id,"persisted":persisted})));
+            return;
+        }
+        done_bundle["session_id"]=json!(session_id);
+        done_bundle["quality_report"]=done_bundle["post_validation"]["quality_report"].clone();
+        done_bundle["summary"]=json!({"response_kind":if payload_string(&body,"conversation_mode","story_writer")=="story_lab"{"discussion"}else{"prose"}});
+        yield Ok(sse("done",&done_bundle));
     };
     Response::builder()
         .status(StatusCode::OK)
@@ -819,7 +1019,7 @@ async fn generate_stream_response(state: &AppState, mut body: Value) -> ApiResul
         .map_err(err)
 }
 
-async fn generate(state: &AppState, mut body: Value) -> ApiResult<Response> {
+async fn generate(state: &AppState, mut body: Value, original: &Value) -> ApiResult<Response> {
     let mut telemetry = generation_telemetry(&body, &state.runtime_config()?);
     let run_id = telemetry.run_id().to_owned();
     ensure_schema(state).await?;
@@ -842,6 +1042,9 @@ async fn generate(state: &AppState, mut body: Value) -> ApiResult<Response> {
             }
         }
     }
+    if let Some(duplicate) = claim_request(state, original, "generate", &run_id)? {
+        return Ok(duplicate);
+    }
     if existing.is_none() {
         let title = prompt.chars().take(80).collect::<String>();
         state.store.insert("sessions", json!({"id":session_id,"title":title,"project_id":body.get("project_id"),"world_id":body.get("world_id"),"branch_id":body.get("branch_id"),"conversation_mode":payload_string(&body,"conversation_mode","story_writer"),"conversation_profile_json":body.get("conversation_profile").cloned().unwrap_or(json!({})),"workspace_refs_json":body.get("references").cloned().unwrap_or(json!([])),"scratch_mode":body.get("scratch_mode").and_then(Value::as_bool).unwrap_or(false),"created_at":now(),"updated_at":now()}))?;
@@ -849,12 +1052,12 @@ async fn generate(state: &AppState, mut body: Value) -> ApiResult<Response> {
     let history = if existing.is_some() {
         session_history(state, &session_id)?
     } else {
-        String::new()
+        Vec::new()
     };
-    let (context, analytical, budgets) =
+    let (mut context, mut analytical, budgets) =
         match prepare_generation(state, &body, &history, &mut telemetry).await {
             Ok(value) => value,
-            Err(error) => return Ok(profiled_error(error, &mut telemetry)),
+            Err(error) => return Ok(context_rejection(state,original,&session_id,&run_id,error,&mut telemetry)),
         };
     let generation_mode = payload_string(&body, "generation_mode", "single");
     let (story, reasoning, raw, provider_request, beat_stats) = if generation_mode == "beats" {
@@ -869,14 +1072,14 @@ async fn generate(state: &AppState, mut body: Value) -> ApiResult<Response> {
         for index in 1..=count {
             let mut beat_body = body.clone();
             let previous = stories.join("\n\n");
-            let instruction = format!("{}\n\nBeat {index} of {count}; advance one coherent narrative unit. Do not recap earlier beats.\n{}", prompt, if previous.is_empty(){String::new()}else{format!("Previous surface:\n{}", previous.chars().rev().take(9000).collect::<String>().chars().rev().collect::<String>())});
+            let instruction = format!("{}\n\nBeat {index} of {count}; advance one coherent narrative unit. Do not recap earlier beats.\n{}", prompt, if previous.is_empty(){String::new()}else{format!("Previous surface:\n{}", previous)});
             beat_body["prompt"] = json!(instruction);
             let resolved = &budgets.writers[index - 1];
             beat_body["visible_output_tokens"] = json!(resolved.visible);
-            let (part, thought, raw, request) =
+            let (part, thought, raw, request, compiled) =
                 match model_stream(state, &beat_body, &context, resolved, &mut telemetry).await {
                     Ok(value) => value,
-                    Err(error) => {
+                    Err(mut error) => {
                         // A failed middle beat must remain visible to callers and to
                         // continuation/history queries.  Persist the completed prefix
                         // before returning the provider error; this mirrors the
@@ -900,7 +1103,7 @@ async fn generate(state: &AppState, mut body: Value) -> ApiResult<Response> {
                             ] {
                                 partial_stats[key] = value;
                             }
-                            let _ = state.store.insert("turns", json!({
+                            let saved = state.store.insert("turns", json!({
                             "id": Uuid::new_v4().to_string(),
                             "session_id": session_id.clone(),
                             "run_id": run_id.clone(),
@@ -916,11 +1119,18 @@ async fn generate(state: &AppState, mut body: Value) -> ApiResult<Response> {
                             "created_at": now(),
                             "updated_at": now()
                         }));
+                            if let Err(persist) = saved {
+                                error.message = format!(
+                                    "{}; completed beat prefix could not be saved: {}",
+                                    error.message, persist.message
+                                );
+                            }
                         }
                         return Ok(profiled_error(error, &mut telemetry));
                     }
                 };
             stories.push(part);
+            apply_compiled(&mut analytical,&compiled);
             beat_usage.push(run_stats(
                 &raw,
                 &request,
@@ -929,11 +1139,13 @@ async fn generate(state: &AppState, mut body: Value) -> ApiResult<Response> {
                 "completed",
                 resolved,
             ));
+            if let Some(last)=beat_usage.last_mut(){last["input_budget"]=compiled.report.clone();}
             if !thought.trim().is_empty() {
                 thoughts.push(format!("[Beat {index}]\n{thought}"));
             }
             raws.push(raw);
             requests.push(request);
+            context=compiled;
         }
         let stats = json!({"generation_mode":"beats","beat_count":count,"tokens_per_beat":if budgets.writers.iter().all(|b|b.visible==per_beat){json!(per_beat)}else{Value::Null},"total_budget":total_budget,
             "aggregate":crate::inference::budget::aggregate(&beat_usage),"beats":beat_usage.iter().enumerate().map(|(i,stats)|json!({"beat":i+1,"tokens":budgets.writers[i].visible,"stats":stats})).collect::<Vec<_>>()});
@@ -945,11 +1157,13 @@ async fn generate(state: &AppState, mut body: Value) -> ApiResult<Response> {
             stats,
         )
     } else {
-        let (story, reasoning, raw, request) =
+        let (story, reasoning, raw, request, compiled) =
             match model_stream(state, &body, &context, &budgets.writers[0], &mut telemetry).await {
                 Ok(value) => value,
-                Err(error) => return Ok(profiled_error(error, &mut telemetry)),
+                Err(error) => return Ok(context_rejection(state,original,&session_id,&run_id,error,&mut telemetry)),
             };
+        apply_compiled(&mut analytical,&compiled);
+        context=compiled;
         (
             story,
             reasoning,
@@ -987,6 +1201,7 @@ async fn generate(state: &AppState, mut body: Value) -> ApiResult<Response> {
     .cloned()
     .unwrap_or_default();
     stats.insert("continuity_context_used".into(), json!(!context.is_empty()));
+    stats.insert("input_budget".into(), analytical["input_budget"].clone());
     stats.insert("run_status".into(), json!("completed"));
     stats.insert("partial".into(), json!(false));
     if let Some(calls) = beat_stats["beats"].as_array() {
@@ -1009,7 +1224,12 @@ async fn generate(state: &AppState, mut body: Value) -> ApiResult<Response> {
     let turn = state.store.insert("turns", json!({"id":Uuid::new_v4().to_string(),"session_id":session_id,"run_id":run_id,"user_prompt":prompt,"story":story,"reasoning":reasoning,"reasoning_text":reasoning,"model":payload_string(&body,"model",""),"mode":payload_string(&body,"input_mode","smart_hybrid"),"projection_mode":payload_string(&body,"projection_mode","balanced"),"stats_json":stats,"wcf":analytical["wcf"],"aif_core":analytical["aif_core"],"session_context":context,"projections_json":projections,"post_validation_json":{"quality_report":quality},"wcf_validation_json":wcf_validation,"lineage_json":{"analysis_id":analysis_id,"run_id":run_id},"created_at":now(),"updated_at":now()}))?;
     telemetry.record_stage("persistence", persistence_started.elapsed());
     let memory_started = Instant::now();
-    let _ = crate::foundation::memory::refresh_turn(state, turn["id"].as_str().unwrap_or_default());
+    // The memory index is derived and rebuildable, so it must not fail the run.
+    if let Err(error) =
+        crate::foundation::memory::refresh_turn(state, turn["id"].as_str().unwrap_or_default())
+    {
+        stats["memory_index_error"] = json!(error.message);
+    }
     telemetry.record_stage("memory_index", memory_started.elapsed());
     // Snapshot before publishing telemetry itself: self-report writes are not
     // recursively included in their own elapsed time.
@@ -1210,6 +1430,12 @@ pub async fn handle(
     query: &HashMap<String, String>,
     mut body: Value,
 ) -> Option<Result<Response, ApiError>> {
+    // Idempotency compares what the client sent, not config defaults filled in below.
+    let original = if matches!(path, ["generate"] | ["generate", "stream"]) {
+        body.clone()
+    } else {
+        Value::Null
+    };
     if matches!(
         path,
         ["generate"] | ["generate", "stream"] | ["analyze"] | ["ablation"]
@@ -1255,8 +1481,8 @@ pub async fn handle(
         }
     }
     let result = match (method, path) {
-        ("POST", ["generate"]) => generate(&state, body).await,
-        ("POST", ["generate", "stream"]) => generate_stream_response(&state, body).await,
+        ("POST", ["generate"]) => generate(&state, body, &original).await,
+        ("POST", ["generate", "stream"]) => generate_stream_response(&state, body, &original).await,
         ("GET", ["sessions"]) => {
             if let Err(e) = ensure_schema(&state).await {
                 Err(e)
@@ -1451,9 +1677,9 @@ async fn ablation(state: &AppState, body: &Value) -> ApiResult<Response> {
         request["reasoning"] = json!(reasoning);
         let mut telemetry = generation_telemetry(&request, &state.runtime_config()?);
         let (context, analysis, budgets) =
-            prepare_generation(state, &request, "", &mut telemetry).await?;
+            prepare_generation(state, &request, &[], &mut telemetry).await?;
         match model_stream(state, &request, &context, &budgets.writers[0], &mut telemetry).await {
-            Ok((story, thoughts, raw, provider_request)) => {
+            Ok((story, thoughts, raw, provider_request, compiled)) => {
                 let report=crate::analysis::quality_report_with_context(&story,analysis.get("writer_context"));
                 let violations=report["violations"].as_array().map_or(0,Vec::len) as f64;
                 let warnings=report["warnings"].as_array().map_or(0,Vec::len) as f64;
@@ -1461,6 +1687,7 @@ async fn ablation(state: &AppState, body: &Value) -> ApiResult<Response> {
                 let score=(100.0-18.0*violations-5.0*warnings-3.0*metric("repetition_pairs")-3.0*metric("spec_recitations")-5.0*metric("unsupported_specificities")).clamp(0.0,100.0);
                 let mut stats=run_stats(&raw,&provider_request,&request,&state.runtime_config()?,"completed",&budgets.writers[0]);
                 stats["inference"]=inference_snapshot(&mut telemetry);
+                stats["input_budget"]=compiled.report;
                 outcomes.push(json!({"key":format!("{mode}__thinking_{reasoning}"),"mode":mode,"reasoning":reasoning,"story":story,"reasoning_text":thoughts,"stats":stats,"post_validation":{"quality_report":report},"diagnostic_score":score,"raw_response":raw}));
             },
             Err(error) => outcomes.push(json!({"mode":mode,"reasoning":reasoning,"story":"","post_validation":{},"stats":{},"diagnostic_score":0.0,"error":error.message})),
@@ -1575,18 +1802,24 @@ pub(crate) fn directive_context(body: &Value) -> Value {
     json!({"version":"1.2.4a1","runtime_version":"1.2.5a1","active":!stack.is_empty() || !references.is_empty(),"command":primary,"stack":stack,"options":primary["options"].clone(),"reference_expressions":references,"resolved_references":[],"dynamic_scopes":[],"unresolved_references":unresolved,"planner_intent":primary["planner_intent"].clone().as_str().unwrap_or("continue"),"deliberation_mode":primary["deliberation_mode"].clone().as_str().unwrap_or("auto"),"output_mode":primary["output_mode"].clone().as_str().unwrap_or("fiction"),"execution_contract":primary["execution_contract"].clone(),"semantic_prompt":semantic_prompt,"clean_prompt":clean_prompt,"diagnostics":unresolved})
 }
 
+fn apply_compiled(analysis:&mut Value,compiled:&crate::inference::context::CompiledWriterContext){
+    analysis["input_budget"]=compiled.report.clone();analysis["model_input"]=json!(compiled.context);
+    analysis["wcf"]=json!(crate::analysis::with_memory_block(&compiled.selection.wcf,&compiled.evidence));
+    analysis["memory"]=json!(compiled.evidence);analysis["analysis"]["evidence"]=json!(compiled.evidence);analysis["summary"]["memory_items"]=json!(compiled.evidence.len());
+}
+
 async fn prepare_generation(
     state: &AppState,
     body: &Value,
-    history: &str,
+    history: &[crate::inference::context::HistoryTurn],
     telemetry: &mut RunTelemetry,
-) -> ApiResult<(String, Value, crate::inference::budget::BudgetPlan)> {
+) -> ApiResult<(crate::inference::context::CompiledWriterContext, Value, crate::inference::budget::BudgetPlan)> {
     let preparation_started = Instant::now();
     let config = state.runtime_config()?;
     crate::inference::deliberation::validate_mode(body, &config)?;
     crate::inference::budget::resolve(body, &config, "short_continue")?;
     let mut analytical =
-        crate::analysis::analyze_async_profiled(state, body, Some(telemetry)).await?;
+        crate::analysis::analyze_writer_profiled(state, body, Some(telemetry)).await?;
     let decision = crate::inference::deliberation::route(
         body,
         &analytical,
@@ -1599,6 +1832,10 @@ async fn prepare_generation(
         &config,
         routing["task"].as_str().unwrap_or("short_continue"),
     )?;
+    let mut preflight=crate::inference::context::ContextSelection::from_analysis(body,&analytical,Vec::new());
+    preflight.evidence.clear();preflight.deliberation=json!({"status":"disabled"});
+    let reserve=budgets.writers.iter().map(|b|b.api_max).max().unwrap_or(0);
+    crate::inference::context::compile(state,&config,body,&preflight,reserve,|text|chat_payload(body,&config,text,&budgets.writers[0])).await?;
     let deliberation_started = Instant::now();
     analytical["deliberation"] = crate::analysis::deliberate_with_override(
         state,
@@ -1626,43 +1863,10 @@ async fn prepare_generation(
         telemetry.record_metadata(key, routing[field].clone());
     }
     let context_started = Instant::now();
-    let cap = config.u64("history.continuity_chars", 12000).min(64000) as usize;
-    let history = history
-        .chars()
-        .rev()
-        .take(cap)
-        .collect::<String>()
-        .chars()
-        .rev()
-        .collect::<String>();
-    // Keep the provider boundary mode aware.  The analytical bundle is
-    // deterministic and cached by /analyze; generation also assembles it so a
-    // direct /generate call has identical writer input semantics.
-    let mode = payload_string(body, "input_mode", "smart_hybrid");
-    let prompt = payload_string(body, "prompt", "");
-    let unresolved = analytical["unresolved"]
-        .as_array()
-        .map(|xs| {
-            xs.iter()
-                .filter_map(Value::as_str)
-                .map(ToOwned::to_owned)
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let mut context = crate::analysis::compose_input(
-        &prompt,
-        analytical["wcf"].as_str().unwrap_or(""),
-        &mode,
-        analytical["aif_core"].as_str().unwrap_or(""),
-        analytical["narrative_brief"]["text"].as_str().unwrap_or(""),
-        &unresolved,
-        analytical.get("deliberation"),
-    );
-    if !history.is_empty() && config.bool("history.smart_hybrid_continuity", true) {
-        context =
-            format!("<CONVERSATION_HISTORY>\n{history}\n</CONVERSATION_HISTORY>\n\n{context}");
-    }
-    analytical["model_input"] = json!(context);
+    let history=if config.bool("history.smart_hybrid_continuity",true){history.to_vec()}else{Vec::new()};
+    let selection=crate::inference::context::ContextSelection::from_analysis(body,&analytical,history);
+    let context=crate::inference::context::compile(state,&config,body,&selection,reserve,|text|chat_payload(body,&config,text,&budgets.writers[0])).await?;
+    apply_compiled(&mut analytical,&context);
     // Routing diagnostics belong to the response/cache, not the writer prompt.
     analytical["deliberation"]["routing"] = routing;
     if decision.planning_enabled {

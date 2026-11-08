@@ -115,6 +115,10 @@ language_mode = "follow_prompt"
 
 
 [memory]
+# Explicit rollout: legacy (default), shadow (comparison only), hybrid (opt-in).
+engine_mode = "legacy"
+# No fixed similarity cutoff until narrative qualification; exact cosine + RRF.
+semantic_min_score = -1.0
 enabled = true
 fts_enabled = true
 dense_enabled = false
@@ -132,6 +136,7 @@ trace_enabled = true
 max_pack_tokens = 4096
 
 [memory.embedding]
+backend = "lmstudio" # Native Bekko is an explicit opt-in; see docs/RETRIEVAL_R1_BEKKO_REPORT.md.
 # Recommended LM Studio download: lm-kit/bge-m3-gguf (Q4_K_M is a sensible
 # baseline). Use the exact local embedding model key shown by LM Studio if it
 # differs from the common `text-embedding-bge-m3` key below.

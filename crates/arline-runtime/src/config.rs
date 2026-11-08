@@ -212,6 +212,16 @@ impl RuntimeConfig {
             ));
         }
         crate::inference::budget::validate_config(self)?;
+        crate::inference::context::validate_config(self)?;
+        crate::foundation::memory::embedding::validate_config(self)?;
+        if !["legacy", "shadow", "hybrid"].contains(&self.str("memory.engine_mode", "legacy").as_str()) {
+            return Err(ApiError::bad_request("memory.engine_mode must be legacy, shadow or hybrid"));
+        }
+        if self.value("memory.semantic_min_score").is_some()
+            && (!self.f64("memory.semantic_min_score", f64::NAN).is_finite()
+                || !(-1.0..=1.0).contains(&self.f64("memory.semantic_min_score", f64::NAN))) {
+            return Err(ApiError::bad_request("memory.semantic_min_score must be finite in -1..=1"));
+        }
         if self.u64("generation.visible_output_tokens", 4096) == 0 {
             return Err(ApiError::bad_request("Response length must be positive"));
         }

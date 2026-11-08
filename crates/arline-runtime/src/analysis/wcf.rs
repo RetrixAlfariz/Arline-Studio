@@ -28,7 +28,9 @@ fn section(out: &mut String, name: &str, lines: &[String]) {
     out.push('\n');
 }
 
-pub fn render(ctx: &Value) -> Value {
+pub fn render(ctx: &Value) -> Value {render_with_policy(ctx,true)}
+pub(crate) fn render_for_writer(ctx:&Value)->Value {render_with_policy(ctx,false)}
+fn render_with_policy(ctx:&Value,bounded:bool)->Value {
     let mut text = String::from("@ARLINE-WRITER-CONTEXT 0.2\n\n");
     let mut sections = Vec::new();
     let items = |key: &str| -> Vec<String> {
@@ -105,7 +107,7 @@ pub fn render(ctx: &Value) -> Value {
         }
     }
     let estimated_tokens = text.split_whitespace().count();
-    let (text, pruned) = if estimated_tokens > 4096 {
+    let (text, pruned) = if bounded && estimated_tokens > 4096 {
         let mut groups: Vec<(String, Vec<String>)> = Vec::new();
         for line in text.lines() {
             if line.starts_with('[') && line.ends_with(']') {
@@ -158,5 +160,5 @@ pub fn render(ctx: &Value) -> Value {
         })
         .filter(|line| *line != "CONTEXT PRUNED TO BUDGET")
         .collect::<Vec<_>>();
-    serde_json::json!({"version":"0.2","text":text,"metadata":{"wcf_version":"0.2","sections":sections,"characters":text.len(),"lines":text.lines().count(),"estimated_tokens":estimated_tokens,"budget_tokens":4096,"pruned":pruned,"token_counter":"whitespace"}})
+    serde_json::json!({"version":"0.2","text":text,"metadata":{"wcf_version":"0.2","sections":sections,"characters":text.len(),"lines":text.lines().count(),"estimated_tokens":estimated_tokens,"budget_tokens":if bounded{serde_json::json!(4096)}else{Value::Null},"pruned":pruned,"token_counter":"whitespace"}})
 }

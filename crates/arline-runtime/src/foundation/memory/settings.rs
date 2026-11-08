@@ -39,11 +39,12 @@ pub fn settings(config: &RuntimeConfig) -> Value {
             &format!("memory_reranker.{field}"),
         )
     };
-    let dense = bool_value(
-        config,
-        "memory.dense_enabled",
-        bool_value(config, &e("enabled"), false),
-    );
+    // Either explicit disable wins when both legacy and nested gates exist.
+    // Conflicting saved settings must never activate semantic retrieval.
+    let dense = bool_value(config, &e("enabled"), bool_value(config, "memory.dense_enabled", false))
+        && bool_value(config, "memory.dense_enabled", true);
+    let backend = string_value(config, &e("backend"), "lmstudio");
+    let native = backend == "native_bekko_onnx";
     json!({
         "enabled": bool_value(config, "memory.enabled", true),
         "fts_enabled": bool_value(config, "memory.fts_enabled", true),
@@ -59,10 +60,16 @@ pub fn settings(config: &RuntimeConfig) -> Value {
         "trace_enabled": bool_value(config, "memory.trace_enabled", true),
         "max_pack_tokens": usize_value(config, "memory.max_pack_tokens", 4096),
         "embedding": {
-            "enabled": bool_value(config, &e("enabled"), dense),
+            "backend": backend,
+            "enabled": dense,
             "provider": string_value(config, &e("provider"), "lmstudio"),
-            "model": string_value(config, &e("model"), "text-embedding-bge-m3"),
-            "dimension": usize_value(config, &e("dimension"), 1024).max(1),
+            "model": string_value(config, &e("model"), if native { "hotchpotch/bekko-embedding-v1-a8m" } else { "text-embedding-bge-m3" }),
+            "dimension": usize_value(config, &e("dimension"), if native {384} else {1024}).max(1),
+            "model_dir": string_value(config, &e("model_dir"), "models/bekko-embedding-v1-a8m"),
+            "runtime_library": string_value(config, &e("runtime_library"), ""),
+            "max_tokens": usize_value(config, &e("max_tokens"), 512),
+            "threads": usize_value(config, &e("threads"), 2),
+            "keep_warm_seconds": usize_value(config, &e("keep_warm_seconds"), 300),
             "query_prefix": string_value(config, &e("query_prefix"), ""),
             "passage_prefix": string_value(config, &e("passage_prefix"), ""),
             "batch_size": usize_value(config, &e("batch_size"), 32).max(1),

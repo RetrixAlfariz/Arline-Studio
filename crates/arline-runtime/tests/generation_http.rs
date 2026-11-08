@@ -70,6 +70,7 @@ async fn beat_provider(fail_at: Option<usize>) -> (String, BeatProvider, JoinHan
         let _ = axum::serve(
             listener,
             Router::new()
+                .route("/api/v1/models", axum::routing::get(||async {axum::Json(json!({"models":[{"type":"llm","key":"mock","capabilities":{"reasoning":{"allowed_options":["off","on"]}},"loaded_instances":[{"id":"mock","config":{"context_length":32768}}]}]}))}))
                 .route("/api/v1/chat", post(beat_chat))
                 .with_state(server_provider),
         )
@@ -122,6 +123,7 @@ async fn provider(hold_after_delta: bool) -> (String, MockProvider, JoinHandle<(
         let _ = axum::serve(
             listener,
             Router::new()
+                .route("/api/v1/models", axum::routing::get(||async {axum::Json(json!({"models":[{"type":"llm","key":"mock","capabilities":{"reasoning":{"allowed_options":["off","on"]}},"loaded_instances":[{"id":"mock","config":{"context_length":32768}}]}]}))}))
                 .route("/api/v1/chat", post(mock_chat))
                 .with_state(server_provider),
         )
@@ -483,7 +485,7 @@ async fn actual_writer_receives_history_memory_and_one_persisted_planning_pass()
     let base = format!("http://{}", listener.local_addr().unwrap());
     let handler_captured = captured.clone();
     let provider_task = tokio::spawn(async move {
-        axum::serve(listener,Router::new().route("/api/v1/chat",post(move |axum::Json(payload):axum::Json<Value>| {
+        axum::serve(listener,Router::new().route("/api/v1/models", axum::routing::get(||async {axum::Json(json!({"models":[{"type":"llm","key":"mock","capabilities":{"reasoning":{"allowed_options":["off","on"]}},"loaded_instances":[{"id":"mock","config":{"context_length":32768}}]}]}))})).route("/api/v1/chat",post(move |axum::Json(payload):axum::Json<Value>| {
             let captured=handler_captured.clone();async move {
                 captured.lock().unwrap().push(payload.clone());
                 if payload["stream"]==false {
@@ -595,7 +597,7 @@ async fn terminal_only_provider_output_preserves_text_stats_and_raw_response() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let provider = tokio::spawn(async move {
-        axum::serve(listener, Router::new().route("/api/v1/chat", post(|| async {
+        axum::serve(listener, Router::new().route("/api/v1/models", axum::routing::get(||async {axum::Json(json!({"models":[{"type":"llm","key":"mock","capabilities":{"reasoning":{"allowed_options":["off","on"]}},"loaded_instances":[{"id":"mock","config":{"context_length":32768}}]}]}))})).route("/api/v1/chat", post(|| async {
             Response::builder().header("content-type", "text/event-stream").body(Body::from(
                 "event: message.start\ndata: {\"type\":\"message.start\"}\n\nevent: reasoning.start\ndata: {\"type\":\"reasoning.start\"}\n\nevent: chat.end\ndata: {\"result\":{\"output\":[{\"type\":\"reasoning\",\"content\":\"A quiet plan\"},{\"type\":\"message\",\"content\":\"Only the final surface.\"}],\"stats\":{\"output_tokens\":5,\"tokens_per_second\":12.5}}}\n\ndata: [DONE]\n\n"
             )).unwrap()
@@ -661,7 +663,7 @@ async fn ablation_scores_validator_findings_and_keeps_provider_statistics() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let provider = tokio::spawn(async move {
-        axum::serve(listener,Router::new().route("/api/v1/chat",post(||async {
+        axum::serve(listener,Router::new().route("/api/v1/models", axum::routing::get(||async {axum::Json(json!({"models":[{"type":"llm","key":"mock","capabilities":{"reasoning":{"allowed_options":["off","on"]}},"loaded_instances":[{"id":"mock","config":{"context_length":32768}}]}]}))})).route("/api/v1/chat",post(||async {
         Response::builder().header("content-type","text/event-stream").body(Body::from("event: chat.end\ndata: {\"result\":{\"output\":[{\"type\":\"message\",\"content\":\"Mira Mira walks.\"}],\"stats\":{\"total_output_tokens\":5,\"reasoning_output_tokens\":0}}}\n\n")).unwrap()
     }))).await.unwrap();
     });
@@ -729,7 +731,7 @@ async fn provider_error_after_a_prefix_is_never_saved_as_completed() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
     let provider = tokio::spawn(async move {
-        axum::serve(listener,Router::new().route("/api/v1/chat",post(||async{Response::builder().header("content-type","text/event-stream").body(Body::from("event: message\ndata: {\"type\":\"message.delta\",\"content\":\"Partial surface\"}\n\nevent: error\ndata: {\"error\":{\"message\":\"decoder failed\"}}\n\n")).unwrap()}))).await.unwrap();
+        axum::serve(listener,Router::new().route("/api/v1/models", axum::routing::get(||async {axum::Json(json!({"models":[{"type":"llm","key":"mock","capabilities":{"reasoning":{"allowed_options":["off","on"]}},"loaded_instances":[{"id":"mock","config":{"context_length":32768}}]}]}))})).route("/api/v1/chat",post(||async{Response::builder().header("content-type","text/event-stream").body(Body::from("event: message\ndata: {\"type\":\"message.delta\",\"content\":\"Partial surface\"}\n\nevent: error\ndata: {\"error\":{\"message\":\"decoder failed\"}}\n\n")).unwrap()}))).await.unwrap();
     });
     let (_temp, state, runtime, task) = fixture(&base).await;
     let response = reqwest::Client::new()

@@ -1,0 +1,932 @@
+{
+  "version": "r5a-heldout-v2",
+  "split": "heldout",
+  "provenance": "Original independently authored synthetic narrative. Premeasurement review corrected metadata and labels; source prose preserved, except added explicitly superseded historical draft. No development or ranking outcomes used. Agent review is not human review.",
+  "canon_constraints": [
+    "Veyra lighthouse has an east lantern.",
+    "The sealed inlet lies behind a basalt curtain.",
+    "The south jetty is the skiff departure point."
+  ],
+  "documents": [
+    {
+      "id": "h01",
+      "title": "The Red Buoy",
+      "text": "At dawn Mara found a red buoy wedged between the lighthouse rocks. Its brass plate carried the initials E.V., scratched twice as if someone had changed their mind. Ilyan measured the rope and said the buoy had not drifted from open water. Their argument about salvage ended when Mara noticed fresh mud on the knot. She logged the buoy as evidence, not property, and placed it beneath the stairs. The choice was small, but it made the siblings collaborators for one morning. Outside, the tide erased their footprints while leaving the buoy’s red paint bright. Mara used a boat hook to free the buoy, but the hook bent against a hidden chain. Ilyan descended into the wash wearing a borrowed oilskin. He found the chain looped around a stone anchor, not attached to any vessel. Sora wrapped the buoy in sailcloth and warned that salt crystals could erase the initials. Mara sketched the knot before loosening it. The sketch showed a second knot underneath, tied with blue thread. They argued about whether to cut it. Finally Mara cut only the wet outer cord and preserved the inner loop. The buoy became a shared responsibility rather than a prize.",
+      "branch_id": "r5-main",
+      "story_order": 1,
+      "world_time": 1003,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h02",
+      "title": "A Key in Flour",
+      "text": "Sora arrived with bread and a key hidden in the flour sack. She claimed it opened a cabinet in the archive, though her hands shook before Mara touched it. Ilyan recognised the wards as Pell’s work and refused to turn the lock alone. Inside the cabinet lay three tide charts and a receipt signed by Elian. The receipt placed Elian inland during the week the family remembered her at sea. Sora would not call the discrepancy proof; she called it a question that needed witnesses. Mara copied the date into the blue ledger and returned the key to Sora. Sora’s bread cooled while the cabinet resisted the key. Mara filed a burr from the ward, and flour dust turned into paste beneath her fingers. Ilyan read the receipt through the gap before the door opened. It named a purchase of lamp glass in Cindermere, paid by a woman using Elian’s initials. The receipt was not proof of residence, but it narrowed the week. Sora admitted she had carried the key for six years. Mara asked why she waited. Sora said every answer she had inherited came with someone else’s danger. They placed the charts on the table and made three copies, each with a different witness.",
+      "branch_id": "r5-main",
+      "story_order": 2,
+      "world_time": 1006,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h03",
+      "title": "Lantern Shift",
+      "text": "The east lantern guttered when the wind changed. Mara climbed with a spare wick while Ilyan stayed below to count the flashes. A hidden label on the oil tin named Cindermere, a village none of the keepers mentioned. Ilyan admitted he had seen that label before and had chosen silence. Mara did not forgive him, but she let him hold the ladder while she trimmed the wick. The lantern steadied after the repair, casting a clean beam over the black water. In the log, Mara recorded both the repair and Ilyan’s admission. The wind drove grit through the lantern frame and peppered Mara’s cheeks. She braced one knee against the iron rail while Ilyan called the flash count from below. When the wick caught, smoke blackened the glass before clearing. The hidden label had been pasted over an older label, and Mara lifted both with a razor. The older ink named a supplier near Cindermere. Ilyan brought up a ladder and showed her a maintenance mark he had ignored as a boy. They compared the mark with the receipt. The match did not solve Elian’s whereabouts, but it proved the oil route had been deliberate. Mara entered the supplier name beside the repaired lantern.",
+      "branch_id": "r5-main",
+      "story_order": 3,
+      "world_time": 1009,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h04",
+      "title": "The Burned Map",
+      "text": "Sora fed a map to the archive stove one corner at a time. Mara rescued the portion showing a narrow inlet behind a basalt curtain. The surviving line was drawn in violet ink, the same colour as Elian’s scarf. Sora said Pell had used the inlet to move people past the customs station. She denied knowing where Pell went, then corrected herself and said she knew where he had been. That tense change became more important than the map’s missing coastline. Mara sealed the fragment in wax and wrote the word historical on its sleeve. Sora’s map curled as the stove heat reached its ink. Mara used tongs to save the inlet corner, burning a hole in her glove. The violet line ended at a crosshatched shelf rather than a landing. Pell had drawn a warning symbol beside it, then covered the symbol with soot. Sora said Pell feared customs patrols more than storms. Mara asked whether the map had been copied from Elian’s charts. Sora answered that Elian copied everyone’s work and corrected it later. The distinction mattered: the fragment could show knowledge without showing ownership. Wax sealed the paper, and the stove consumed the rest before anyone could read a name.",
+      "branch_id": "r5-main",
+      "story_order": 4,
+      "world_time": 1012,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h05",
+      "title": "Bell House",
+      "text": "The reserve oil sat beneath a cracked bell in the abandoned bell house. An iron key opened a maintenance hatch, but the hatch had been recently greased. Ilyan blamed a gull until Mara found a boot print in the dust. They carried two tins uphill together, passing them hand to hand on the narrow path. At the kitchen table, Ilyan gave Mara the key instead of hiding it again. She accepted it on the condition that every transfer enter the ledger. The bell rang once in the wind, and both siblings looked toward the sea. The bell house door jammed in the salt swollen frame. Ilyan shouldered it while Mara held the lamp outside, keeping the flame from the wind. Beneath the bell, the oil tins were wrapped in sailcloth and numbered in Sora’s handwriting. The greased hatch contained an empty tin, a fresh boot print, and a strand of red wool. Mara measured the print against Ilyan’s boot; it was smaller. They carried the tins one at a time because the hill path was slick. At the kitchen, Ilyan surrendered the key. Mara added the transfer time, weather, and witnesses to the ledger before opening a tin.",
+      "branch_id": "r5-main",
+      "story_order": 5,
+      "world_time": 1015,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h06",
+      "title": "Twelve Minutes",
+      "text": "The tide table was twelve minutes fast, enough to turn a landing into a wreck. Mara compared it with Sora’s pocket watch and found the error repeated across every column. A child’s code in the margin named three safe stones below the north cliff. Ilyan wanted to tear out the table; Mara argued that an error could still be evidence. They marked the correction in red and kept the damaged page. Their disagreement ended without victory, which felt like a new form of trust. That night Mara practised reading the water by the corrected clock. The table’s error emerged when Mara aligned its moon column with Sora’s watch. Every landing calculation shifted by the same twelve minutes, suggesting a copied mistake rather than a broken clock. The child’s code named stones that were visible only at low water. Ilyan tested the first stone with a pole and found a carved notch under barnacles. He wanted to discard the table, fearing a second error. Mara argued that repeated error was a trace of its maker. They marked the safe stones in pencil, then crossed out a dangerous route. Their compromise produced a usable chart without pretending the old one was reliable.",
+      "branch_id": "r5-main",
+      "story_order": 6,
+      "world_time": 1018,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h07",
+      "title": "Violet Thread",
+      "text": "A parcel from the mainland contained half a violet scarf and no letter. Sora recognised the weave from Elian’s winter coat but denied the recognition too quickly. Mara found blue thread in the hem, the same thread used in an old family sail. Ilyan wanted to burn the scarf before rumours reached the village. Mara wrapped it around the ledger instead, making the evidence impossible to overlook. The parcel had been posted from Cindermere, according to the postmark. For the first time, the family’s silence had an address. The parcel’s string had been cut and retied with a sailor’s square knot. Mara photographed the knot before opening it. The scarf smelled of cedar smoke and carried a postmark blurred by rain. Sora tried to fold it away, but Mara found a stitched number beneath the hem. Ilyan compared the number with the blue ledger’s missing-page reference. It matched a box in the archive, not a person. Sora admitted that Elian had taught her the stitch during a winter evacuation. Mara asked whether the scarf was a message. Sora said it was first a garment, then a memory, and only now evidence. They wrapped it around the ledger so neither could hide it.",
+      "branch_id": "r5-main",
+      "story_order": 7,
+      "world_time": 1021,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h08",
+      "title": "The Photograph",
+      "text": "The tunnel ended at a tin cylinder packed with waxed paper. Inside was a tide-worn photograph of Elian standing beside Pell on a mainland pier. Elian wore the violet scarf before anyone remembered giving it to her. Pell’s face was turned away, but his silver ring caught the light. Mara placed the photograph beside the receipt and saw that both dates belonged to the same thaw. Ilyan conceded that the sea story could not explain the pair of documents. They left the cylinder where it was and copied its contents by lamplight. The tin cylinder was wedged behind a loose brick, and the brick came free only after Ilyan removed a rusted nail. Waxed paper kept the photograph dry but left the corners brittle. Mara held it beneath the lantern and identified Pell by the ring before seeing his face. Elian stood beside him with a travel case and the violet scarf. A pier crane in the background carried the same supplier mark as the oil tin. Ilyan checked the date twice. Sora asked them not to infer a journey from one image. Mara agreed and wrote only what the photograph showed. They returned it to the cylinder with a fresh wax seal.",
+      "branch_id": "r5-main",
+      "story_order": 8,
+      "world_time": 1024,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h09",
+      "title": "False North",
+      "text": "The brass compass pointed inland because a magnet had been fitted beneath its case. Ilyan confessed he installed it years ago to discourage trespassers. Mara removed the magnet and watched the needle settle toward ordinary north. The instrument was not a family heirloom after all; it was a deliberate lie. Ilyan returned it to her palm without asking for forgiveness. She wrote that Nera was Elian’s field name, not her own. The correction closed one rumour while opening a more dangerous question. The compass case had been repaired with resin unlike any metalwork in the workshop. Mara heated the seam over a kettle and lifted the false bottom with a needle. The magnet was wrapped in red thread, the same colour as the buoy. Ilyan explained that trespassers followed the needle toward the cliffs and turned back when the path ended. Mara asked whether Elian knew. He said she had objected, then stopped visiting. Once the magnet came free, the compass swung through several directions before settling. They compared it with the lighthouse bearings and found the ordinary error small. Mara changed the ledger’s description from heirloom to modified instrument.",
+      "branch_id": "r5-main",
+      "story_order": 9,
+      "world_time": 1027,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h10",
+      "title": "Pell’s Loft",
+      "text": "Pell’s loft smelled of tar, dried apples, and wet paper. Behind a cracked glass lens, Sora found casualty lists that included sailors omitted from the harbour register. Every list carried a small mark shaped like a red door. Mara read the names aloud while Ilyan repaired the warped window. The work made the dead present without pretending to solve their disappearance. Sora took responsibility for hiding the lists and asked Mara to record that admission. No one called Pell a hero; they called him a witness who had run out of safe places. The loft window rattled whenever the wind crossed the north face. Sora held the casualty lists flat with the cracked lens while Mara read names into a recorder. Ilyan repaired a hinge using wire stripped from an old radio. One list contained a sailor whose family had received a false death notice. Another marked a child without a surname. Pell’s red-door symbol appeared beside both. Mara asked why the harbour register omitted them. Sora said omissions were cheaper than investigations. The glass lens split a beam across the page, revealing a second ink beneath the first. They photographed it and left the original untouched. The loft became an archive rather than a hiding place.",
+      "branch_id": "r5-main",
+      "story_order": 10,
+      "world_time": 1030,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h11",
+      "title": "Cindermere",
+      "text": "At supper Sora finally named Cindermere as Elian’s inland refuge. She said the family had been told Elian drowned because the lie protected a living witness. Mara asked whether protection required leaving a child to grieve. Sora answered in Indonesian, “Kebenaran yang ditunda tetap melukai,” and looked at the blue ledger. Ilyan poured tea for everyone before speaking. The family story changed in the space between two cups. Mara decided the next journey would be inland, not toward the inlet. The supper fire smoked because the chimney cap had shifted. Sora climbed onto a chair to fix it while Mara kept the pot from boiling over. Ilyan found the Cindermere name in an old ration book, written beside Elian’s handwriting. The village had supplied grain to the lighthouse after the wreck. Sora translated her sentence slowly, then repeated it in English so the ledger would hold both versions. Mara asked whether Elian had sent money. Sora said Elian had sent instructions, which was different and worse. They agreed to travel with copies, not originals. Before sleep, Mara placed the brass compass on the table and turned it north.",
+      "branch_id": "r5-main",
+      "story_order": 11,
+      "world_time": 1033,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h12",
+      "title": "Jetty Decision",
+      "text": "Before dawn a canvas skiff waited at the south jetty with three dry suits and one flare. Ilyan wanted to enter the sealed inlet before the tide turned. Mara chose the road to Cindermere instead and handed him the corrected tide table. They agreed that no one had entered the inlet yet. The decision split the narrative without splitting their shared evidence. Sora took the green satchel of casualty records and followed Mara inland. Behind them, Ilyan kept the lighthouse beam moving across the water. At the jetty, the skiff’s drain plug leaked a thin line of seawater. Ilyan replaced it while Mara checked the dry suits for torn seams. The flare’s expiry date was visible beneath the tape. Sora arrived with the satchel and a decision already made: she would take the inland road. Mara compared the corrected tide table with the sky and saw the inlet window narrowing. Ilyan said the water might still be calm. Mara answered that calm water did not erase missing names. They divided the keys, records, and food so neither route held everything. The skiff pushed away with Ilyan aboard, while Mara watched the beam follow him.",
+      "branch_id": "r5-main",
+      "story_order": 12,
+      "world_time": 1036,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h13",
+      "title": "Fork Road",
+      "text": "The road to Cindermere ran through an orchard stripped bare by frost. Sora carried the green satchel under her coat and refused to let Mara read it while walking. A milestone bore Pell’s red-door mark, fresh enough to shed grit. They slept in a tool shed and heard a cart pass without stopping. Mara dreamed of the buoy under the stairs and woke with the key in her fist. At sunrise Sora admitted the records contained names, not a map. The fork’s first lesson was that evidence can be heavy without being directional. The orchard road flooded at a culvert, forcing Mara and Sora to carry the satchel over a fallen gate. Mud soaked the casualty papers’ outer wrapping but not the waxed inner packet. A cart driver offered directions and called the gatekeeper Orin, then corrected himself to Pell. Sora paid with a lighthouse token rather than money. At the tool shed, Mara dried the satchel beside a stove and found a red-door mark carved under the bench. It was older than the milestone mark and pointed east. Sora refused to follow it. She said a sign could be a warning or an invitation, and they did not yet know which.",
+      "branch_id": "r5-fork",
+      "story_order": 13,
+      "world_time": 1039,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h14",
+      "title": "Orin Vale",
+      "text": "The gatekeeper at Cindermere called himself Orin Vale. He wore Elian’s silver ring on a cord beneath his shirt. Mara recognised Pell’s habit of tapping twice before answering. Orin denied knowing the lighthouse, then asked whether Ilyan still falsified the compass. Sora placed the casualty satchel on the gatehouse table. The gate opened only after Orin saw the original blue ledger. Mara wrote both names in the margin: Pell, known as Orin Vale in port. The gatehouse had two locks, one new and one polished by decades of hands. Orin opened the new lock for Sora but kept the old one closed until Mara showed the blue ledger. He recognised Ilyan’s handwriting and laughed without amusement. The silver ring bore a scratch matching the photograph’s glint. Mara asked directly whether he was Pell. Orin answered with a question about the casualty lists. Sora laid the satchel on the table, and he stopped tapping. He admitted the alias was useful in ports where Pell’s real name was watched. Mara recorded the admission, then asked him to sign it. He signed both names on separate lines.",
+      "branch_id": "r5-fork",
+      "story_order": 14,
+      "world_time": 1042,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h15",
+      "title": "Orchard House",
+      "text": "Elian was alive in an orchard house beyond the gate. Her hair was silver at the temples, and she held the other half of the violet scarf. Mara did not embrace her; she asked why the wreck story had been allowed to stand. Elian answered that Pell was carrying names targeted by customs officers. She gave Mara the scarf half and kept the postmarked parcel. Ilyan’s absence filled the room more loudly than anyone’s explanation. By evening, mother and daughter had agreed to compare documents before comparing memories. Elian’s orchard house had a broken shutter and a kettle singing on the stove. She recognised Mara’s boots before seeing her face. The other scarf half hung from a nail beside the door. Mara placed the parcel half on the table, and Elian touched the blue stitching without picking it up. Their first conversation stayed practical: water, food, the road condition. Only after Sora opened the ledger did Elian describe the staged wreck. She had left instructions with Pell and expected to return within a month. Customs officers intercepted the route. Elian’s survival was not a miracle; it was a chain of decisions that left a child uninformed. Mara asked for the documents, and Elian brought them from a locked drawer.",
+      "branch_id": "r5-fork",
+      "story_order": 15,
+      "world_time": 1045,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h16",
+      "title": "Corrected Date",
+      "text": "Elian’s corrected testimony moved the staged wreck from frost month to thaw month. She signed the correction with her own name and listed the earlier date as superseded. Sora witnessed the signature; Mara witnessed Sora’s hand tremble. The old date remained in the archive as a historical draft, not a current fact. Elian explained that the draft had been written to misdirect a search party. Mara asked whether a protective lie could ever become honest. No one answered, but the new page went into an envelope beside the old one. The correction page was written twice because Elian crossed out the first explanation. Sora watched the ink dry and compared the signature with the receipt from the archive. The hand matched, but the pressure was heavier in the new page. Elian attached a statement naming the witness who had requested the false frost date. That witness was dead, so Mara marked the claim unconfirmed. She refused to remove the old page. Instead she labelled it superseded draft and placed it beneath the correction in an envelope. The archive order became part of the evidence. Elian asked whether Mara wanted an apology. Mara said she wanted the sequence of choices, beginning with the first lie.",
+      "branch_id": "r5-fork",
+      "story_order": 16,
+      "world_time": 1048,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h17",
+      "title": "Orchard Bell",
+      "text": "The orchard bell was cast from a salvaged keel and sounded dull in cold air. Elian rang it for sailors whose names Pell had carried inland. Mara tied the two scarf halves together with blue thread while the bell faded. Sora said Ilyan could not hear the bell from the lighthouse. Elian disagreed: she said a keeper hears what a family refuses to say. The sentence did not repair the past, but it allowed Mara to touch her mother’s hand. At dusk, Pell left for the gatehouse to prepare his testimony. The orchard bell had a crack that made its note sound like two voices. Elian tied the scarf halves around its frame while Mara listed the missing sailors. Pell stood at the gatehouse and did not enter. Sora rang once for each name, pausing when the wind covered the sound. Mara noticed Elian’s hands were stained with orchard soil, not lighthouse soot. The difference made the years tangible. Ilyan’s absence remained a fact, not an accusation. When the bell stopped, Elian gave Mara the ring of the house key. Mara did not use it. She put it beside the brass compass and promised to return after the documents were copied.",
+      "branch_id": "r5-fork",
+      "story_order": 17,
+      "world_time": 1051,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h18",
+      "title": "Sealed Inlet",
+      "text": "On the other branch, Ilyan entered the sealed inlet with Pell’s copied chart. The basalt curtain opened at low tide and closed behind the skiff. A red mark on the chart warned of a pressure shelf, not buried treasure. Ilyan tied the rope coil to a stone and waited for the water to fall. He found a dry ledge above the black water and marked it with chalk. The chart’s warning saved time but did not make the passage safe. He kept the flare unused and wrote the depth on his sleeve. Ilyan’s skiff struck the basalt shelf before the tide reached its predicted mark. He lowered the rope coil and climbed onto the ledge with Pell’s chart under his shirt. Water filled the boat to the bench, carrying a loose oar toward the curtain. The red mark on the chart matched a pressure shelf that groaned under his weight. Ilyan waited for the sound to fade before moving. He chalked an arrow above the waterline and checked the compass against the chart’s west edge. The compass was honest now, but the inlet was not predictable. He kept the flare dry in his jacket and wrote the first depth reading on his sleeve.",
+      "branch_id": "r5-nested",
+      "story_order": 21,
+      "world_time": 1063,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h19",
+      "title": "Peat Water",
+      "text": "The inlet flooded early, turning the water black with peat. Pell’s reading had been correct for the old table and wrong for the corrected tide. Ilyan hauled the rope until his palms opened. A second passage appeared above the waterline, narrow enough for one person at a time. They left the skiff tethered and climbed without speaking. The darkness smelled of roots rather than oil. Pell admitted that he had never reached this chamber before. Peat turned the water black enough to hide the rope below a hand’s length. Pell shouted from the skiff while Ilyan tied a second line around the basalt. The corrected table had made them early, not safe. A root tore Pell’s coat when he climbed to the ledge. He showed Ilyan the tear and joked that the inlet had taken a witness fee. They found a narrow passage above the flood line and tested it with the iron key. The key scraped stone but revealed no lock. Their movement became a sequence: lamp, hand, rope, foot. When the chamber opened, both men left the skiff tethered and marked the route.",
+      "branch_id": "r5-nested",
+      "story_order": 22,
+      "world_time": 1066,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h20",
+      "title": "Dry Chamber",
+      "text": "The dry chamber held a sealed radio and a child’s drawing of a red door. The battery was new, which meant someone had visited after the inlet was supposedly abandoned. Pell said Elian once ordered him to hide the names, not the people. Ilyan tuned the radio and heard a weather station promise clear skies tomorrow night. The drawing’s red door matched the mark on the casualty lists. They agreed not to transmit their names until they knew who was listening. Pell’s old alias became a liability rather than a disguise. The radio’s casing was warm despite the chamber’s cold. Ilyan opened the battery compartment and found a date written under the contacts. Pell recognised the station code but would not name the operator. The child’s drawing had been folded around a splinter of red paint. Ilyan placed it beside the casualty list and found the same three vertical strokes. The weather report arrived in fragments, then repeated clearly: passage fair tomorrow night. Pell reached for the transmitter, but Ilyan stopped him. They needed to know whether the signal was a warning or a lure. Pell admitted Elian had once made the same choice in the same darkness.",
+      "branch_id": "r5-nested",
+      "story_order": 23,
+      "world_time": 1069,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h21",
+      "title": "Memorial Door",
+      "text": "The brass compass opened the red door when Ilyan turned it west. Behind the door was a memorial wall for unreported sailors. Elian’s name was absent, confirming that the wall was not a complete history. Pell found his own initials beneath a date he had never spoken aloud. Ilyan offered him the ledger; Pell added one name with a carpenter’s pencil. The act changed the wall from accusation into testimony. They left the compass pointing north on the threshold. The red door’s compass mark was painted over an older direction arrow. Ilyan turned west, waited for the needle to stop, and pressed the brass case to the latch. The door opened onto names cut into damp stone. Pell found his initials below a sailor he had failed to rescue. He took the carpenter’s pencil from his pocket and added the sailor’s full name, including a family name omitted from the harbour list. Ilyan read it back to him. The wall did not explain the deaths, but it made omission visible. They photographed the memorial, then closed the door without taking anything. The compass remained on the threshold as a promise of orientation.",
+      "branch_id": "r5-nested",
+      "story_order": 24,
+      "world_time": 1072,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h22",
+      "title": "Private Notebook",
+      "text": "Sora’s private notebook explained why she hid the name Nera. It called Nera Elian’s operational identity and described no secret belonging to Mara. The notebook was not shown to Pell or to Ilyan. Sora wrote that selective silence had protected a life but also distorted a daughter’s childhood. In the author-facing account, the distinction is explicit; in Mara’s viewpoint it remains unknown. Sora closed the notebook before the radio reply arrived. The boundary between private truth and shared evidence stayed intact. Sora wrote the notebook in a cramped hand because she believed neat writing could be confiscated. One page described Elian’s operational routes; another described Mara’s childhood only by weather. The distinction showed what Sora had chosen to preserve and what she had chosen to conceal. She underlined Nera three times and added that the name belonged to Elian alone. No viewpoint character saw this page during the expedition. Sora closed the cover whenever footsteps approached the radio alcove. When the operator called Mara by the alias, Sora did not correct the voice. Her silence protected the boundary of the notebook, even while it complicated the public record.",
+      "branch_id": "r5-nested",
+      "story_order": 25,
+      "world_time": 1075,
+      "semantic_status": "active",
+      "authority": "author_only",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h23",
+      "title": "White Marker",
+      "text": "Mara later placed a white marker on the inlet roof. From the south jetty it looked like a gull at first and a signal at second glance. The marker was not a grave; it marked the safe return route. Ilyan logged its position using the honest compass. Pell carried the casualty records back toward Cindermere to testify. The family now had a route that did not depend on a false north. Wind worried the marker, but its cord held. The white marker required a rope ladder, two nails, and a calm interval between swells. Mara climbed while Ilyan held the ladder from the jetty and called out distances. The roof stone was slick with salt, so she wrapped the marker’s cord around a natural crack rather than hammering blindly. From above, the lighthouse beam appeared to sweep past the inlet in measured arcs. She sighted the honest compass and recorded the bearing. Pell arrived with the satchel, now lighter because two witnesses had signed its contents. The marker was visible from the south jetty but not from the orchard road. Mara wrote both limits in the ledger.",
+      "branch_id": "r5-nested",
+      "story_order": 26,
+      "world_time": 1078,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h24",
+      "title": "New Winter",
+      "text": "The next winter began with a full oil reserve and a new ledger. Ilyan recorded Elian as alive on the first page and preserved the cut page in an envelope. Mara remained keeper-in-training and repaired the violet scarf beside her mother. Pell signed his testimony with his true name, while Orin Vale remained a historical alias. The radio forecast proved accurate, but no one treated accuracy as absolution. The lighthouse beam crossed the water without a hidden magnet guiding it. At midnight Mara closed the ledger and left the key where everyone could see it. At the new winter’s first storm, the archive roof leaked above the ledger table. Ilyan moved the lamp, Mara moved the envelope, and Elian held a basin beneath the drip. The cut page remained legible after years of salt. Pell’s testimony arrived with his true signature and a note explaining that Orin Vale belonged to an earlier port. Sora signed beneath him. The violet scarf dried on a chair between them, blue thread bright against the purple cloth. No one declared the family healed. They logged the oil, checked the compass, and left the key in the open drawer. The lighthouse beam crossed the water without a hidden magnet.",
+      "branch_id": "r5-main",
+      "story_order": 28,
+      "world_time": 1084,
+      "semantic_status": "active",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    },
+    {
+      "id": "h16-old",
+      "title": "Superseded frost-month testimony draft",
+      "text": "Superseded draft of the testimony: the staged wreck occurred in frost month. This draft is retained for author review only. The signed correction replaces the frost date with thaw month. The old draft is not active narrative evidence and must not be substituted for the correction.",
+      "branch_id": "r5-fork",
+      "story_order": 15,
+      "world_time": 1045,
+      "semantic_status": "superseded",
+      "authority": "project_manuscript",
+      "trust_level": "trusted_local"
+    }
+  ],
+  "queries": [
+    {
+      "id": "q01",
+      "query": "Where was the reserve oil found?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 5,
+        "world_time": 1015,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h05"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Under the cracked bell in the bell house.",
+      "answer_claims": [
+        "Under the cracked bell in the bell house."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "location"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "q02",
+      "query": "What did Mara do with the key?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 5,
+        "world_time": 1015,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h05"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "She required every transfer to enter the ledger.",
+      "answer_claims": [
+        "She required every transfer to enter the ledger."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "possession"
+      ],
+      "continuity_probe": true
+    },
+    {
+      "id": "q03",
+      "query": "How fast was the old tide table?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 6,
+        "world_time": 1018,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h06"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "It was twelve minutes fast.",
+      "answer_claims": [
+        "It was twelve minutes fast."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "attribute"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "q04",
+      "query": "Whose scarf was in the parcel?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 7,
+        "world_time": 1021,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h07"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Elian’s scarf.",
+      "answer_claims": [
+        "Elian’s scarf."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "possession"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "q05",
+      "query": "Who stood beside Elian in the photograph?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 8,
+        "world_time": 1024,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h08"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Pell.",
+      "answer_claims": [
+        "Pell."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "relationship"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "q06",
+      "query": "Siapa Nera, nama lapangan dalam catatan Mara?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 9,
+        "world_time": 1027,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h09"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Elian’s field name, not Mara’s.",
+      "answer_claims": [
+        "Elian’s field name, not Mara’s."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "alias",
+        "negation",
+        "exact_name",
+        "multilingual",
+        "exact_name"
+      ],
+      "continuity_probe": true
+    },
+    {
+      "id": "q07",
+      "query": "What did Pell record?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 10,
+        "world_time": 1030,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h10"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Casualty lists for sailors omitted from the register.",
+      "answer_claims": [
+        "Casualty lists for sailors omitted from the register."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "history"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "q08",
+      "query": "Where did Mara decide to travel?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 12,
+        "world_time": 1036,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h12"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Inland to Cindermere.",
+      "answer_claims": [
+        "Inland to Cindermere."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "location"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "q09",
+      "query": "What was inside the green satchel?",
+      "scope": {
+        "branch_id": "r5-fork",
+        "story_order": 13,
+        "world_time": 1039,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h13"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Pell’s casualty records.",
+      "answer_claims": [
+        "Pell’s casualty records."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "possession"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "q10",
+      "query": "Who is Orin Vale?",
+      "scope": {
+        "branch_id": "r5-fork",
+        "story_order": 14,
+        "world_time": 1042,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h14"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Pell’s port alias.",
+      "answer_claims": [
+        "Pell’s port alias."
+      ],
+      "no_answer": false,
+      "exact": true,
+      "categories": [
+        "alias",
+        "identity",
+        "exact_name",
+        "exact_name"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "q11",
+      "query": "Di mana Elian ditemukan?",
+      "scope": {
+        "branch_id": "r5-fork",
+        "story_order": 15,
+        "world_time": 1045,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h15"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "In an orchard house.",
+      "answer_claims": [
+        "In an orchard house."
+      ],
+      "no_answer": false,
+      "exact": true,
+      "categories": [
+        "location",
+        "multilingual",
+        "branch"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "q12",
+      "query": "What date is current in the testimony?",
+      "scope": {
+        "branch_id": "r5-fork",
+        "story_order": 16,
+        "world_time": 1048,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h16"
+      ],
+      "forbidden": [
+        "h16-old"
+      ],
+      "contradicted": [],
+      "expected_answer": "Thaw month; the frost-month draft is superseded.",
+      "answer_claims": [
+        "Thaw month; the frost-month draft is superseded."
+      ],
+      "no_answer": false,
+      "exact": true,
+      "categories": [
+        "supersession",
+        "current_state"
+      ],
+      "continuity_probe": true
+    },
+    {
+      "id": "q13",
+      "query": "Did Elian die in the wreck?",
+      "scope": {
+        "branch_id": "r5-fork",
+        "story_order": 16,
+        "world_time": 1048,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h15"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "No; she survived.",
+      "answer_claims": [
+        "No; she survived."
+      ],
+      "no_answer": false,
+      "exact": true,
+      "categories": [
+        "negation"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "q14",
+      "query": "What was the orchard bell made from?",
+      "scope": {
+        "branch_id": "r5-fork",
+        "story_order": 17,
+        "world_time": 1051,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h17"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Salvaged keel metal.",
+      "answer_claims": [
+        "Salvaged keel metal."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "possession"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "q15",
+      "query": "What does the red mark warn about?",
+      "scope": {
+        "branch_id": "r5-nested",
+        "story_order": 21,
+        "world_time": 1063,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h18"
+      ],
+      "forbidden": [
+        "h24"
+      ],
+      "contradicted": [],
+      "expected_answer": "A pressure shelf in the inlet, not treasure.",
+      "answer_claims": [
+        "A pressure shelf in the inlet, not treasure."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "warning",
+        "negation",
+        "nested_fork"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "q16",
+      "query": "Why was the inlet water black?",
+      "scope": {
+        "branch_id": "r5-nested",
+        "story_order": 22,
+        "world_time": 1066,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h19"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Peat.",
+      "answer_claims": [
+        "Peat."
+      ],
+      "no_answer": false,
+      "exact": true,
+      "categories": [
+        "attribute"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "q17",
+      "query": "What did the radio forecast?",
+      "scope": {
+        "branch_id": "r5-nested",
+        "story_order": 23,
+        "world_time": 1069,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h20"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Clear skies tomorrow night.",
+      "answer_claims": [
+        "Clear skies tomorrow night."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "forecast"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "q18",
+      "query": "What was behind the red door?",
+      "scope": {
+        "branch_id": "r5-nested",
+        "story_order": 24,
+        "world_time": 1072,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h21"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "A memorial wall for unreported sailors.",
+      "answer_claims": [
+        "A memorial wall for unreported sailors."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "location"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "q19",
+      "query": "Can Pell see Sora’s notebook?",
+      "scope": {
+        "branch_id": "r5-nested",
+        "story_order": 25,
+        "world_time": 1075,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [],
+      "forbidden": [
+        "h22"
+      ],
+      "contradicted": [],
+      "expected_answer": "No answer in his viewpoint; the notebook is author-only.",
+      "answer_claims": [
+        "noanswer"
+      ],
+      "no_answer": true,
+      "exact": false,
+      "categories": [
+        "noanswer",
+        "secret",
+        "pov",
+        "no_answer"
+      ],
+      "continuity_probe": true
+    },
+    {
+      "id": "q20",
+      "query": "What does Sora’s notebook call Nera?",
+      "scope": {
+        "branch_id": "r5-nested",
+        "story_order": 25,
+        "world_time": 1075,
+        "context_lens": "author",
+        "pov_variant_id": null
+      },
+      "relevant": [
+        "h22"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Elian’s operational identity.",
+      "answer_claims": [
+        "Elian’s operational identity."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "alias",
+        "exact_name"
+      ],
+      "continuity_probe": true
+    },
+    {
+      "id": "q21",
+      "query": "Is the white marker a grave?",
+      "scope": {
+        "branch_id": "r5-nested",
+        "story_order": 26,
+        "world_time": 1078,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h23"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "No; it marks a safe return route.",
+      "answer_claims": [
+        "No; it marks a safe return route."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "negation"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "q22",
+      "query": "Who remains to testify?",
+      "scope": {
+        "branch_id": "r5-nested",
+        "story_order": 26,
+        "world_time": 1078,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h23"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Pell.",
+      "answer_claims": [
+        "Pell."
+      ],
+      "no_answer": false,
+      "exact": false,
+      "categories": [
+        "relationship"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "q23",
+      "query": "What does the new ledger record first?",
+      "scope": {
+        "branch_id": "r5-main",
+        "story_order": 28,
+        "world_time": 1084,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [
+        "h24"
+      ],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "Elian alive.",
+      "answer_claims": [
+        "Elian alive."
+      ],
+      "no_answer": false,
+      "exact": true,
+      "categories": [
+        "document",
+        "current_state"
+      ],
+      "continuity_probe": false
+    },
+    {
+      "id": "q24",
+      "query": "Who owns the radio station?",
+      "scope": {
+        "branch_id": "r5-nested",
+        "story_order": 23,
+        "world_time": 1069,
+        "context_lens": "pov",
+        "pov_variant_id": "r5-pov"
+      },
+      "relevant": [],
+      "forbidden": [],
+      "contradicted": [],
+      "expected_answer": "No answer; the station transmits but its owner is not identified.",
+      "answer_claims": [
+        "noanswer"
+      ],
+      "no_answer": true,
+      "exact": false,
+      "categories": [
+        "noanswer"
+      ],
+      "continuity_probe": true
+    }
+  ]
+}

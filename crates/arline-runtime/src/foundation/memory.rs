@@ -2,8 +2,12 @@
 pub mod chunking;
 pub mod contracts;
 pub mod discovery;
+pub mod embedding;
 pub mod indexing;
 pub mod settings;
+pub mod semantic_index;
+pub mod scope;
+mod hybrid;
 pub mod spatial;
 pub mod temporal;
 use crate::{store::Store, ApiError, ApiResult, AppState};
@@ -50,341 +54,8 @@ fn sv(v: &Value, k: &str) -> Option<String> {
 fn sql(e: rusqlite::Error) -> ApiError {
     ApiError::internal(e.to_string())
 }
-fn temporal_allowed(row: &Value, requested: &Value, allow_future: bool) -> bool {
-    let want = requested
-        .as_str()
-        .map(str::to_owned)
-        .or_else(|| requested.as_i64().map(|x| x.to_string()));
-    let Some(want) = want else {
-        return true;
-    };
-    let have = row.get("world_time").or_else(|| row.get("world_time_json"));
-    let Some(have) = have else {
-        return true;
-    };
-    let have_num = have.as_f64().or_else(|| {
-        have.as_str()
-            .and_then(|x| x.trim_matches('"').parse::<f64>().ok())
-    });
-    let want_num = want.parse::<f64>().ok();
-    allow_future
-        || match (have_num, want_num) {
-            (Some(a), Some(b)) => a <= b,
-            _ => have.as_str().unwrap_or("").trim_matches('"') <= want.as_str(),
-        }
-}
-fn explicitly_allowed(row: &Value, b: &Value) -> bool {
-    b.get("explicit_cross_scope_sources")
-        .and_then(Value::as_array)
-        .map(|xs| {
-            xs.iter().any(|x| {
-                x.get("source_type").and_then(Value::as_str)
-                    == row.get("source_type").and_then(Value::as_str)
-                    && x.get("source_id").and_then(Value::as_str)
-                        == row.get("source_id").and_then(Value::as_str)
-            })
-        })
-        .unwrap_or(false)
-}
-fn guarded(row: &Value, b: &Value) -> bool {
-    let explicit = explicitly_allowed(row, b);
-    for k in ["project_id", "world_id"] {
-        if let Some(w) = b.get(k).and_then(Value::as_str) {
-            if let Some(v) = row.get(k).and_then(Value::as_str) {
-                if v != w && !explicit {
-                    return false;
-                }
-            }
-        }
-    }
-    let trust = row
-        .get("trust_level")
-        .and_then(Value::as_str)
-        .unwrap_or("trusted_local");
-    let text = row
-        .get("text")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .to_ascii_lowercase();
-    let scratch_allowed = b
-        .get("allow_scratch")
-        .and_then(Value::as_bool)
-        .unwrap_or(false);
-    explicit
-        || (!matches!(trust, "quarantined")
-            && (scratch_allowed || row.get("authority").and_then(Value::as_str) != Some("scratch"))
-            && ![
-                "ignore all previous instructions",
-                "system prompt",
-                "developer message",
-                "execute this command",
-                "call the tool",
-            ]
-            .iter()
-            .any(|x| text.contains(x)))
-}
-
-/// Apply the database-backed part of Python's ScopeGate.  Memory chunks are
-/// projections, so branch/session lineage must be resolved from the history
-/// tables rather than inferred from the chunk's immediate ids.
 pub(crate) fn scope_allowed(st: &AppState, row: &Value, b: &Value) -> bool {
-    let mut row = row.clone();
-    let kind = row["source_type"].as_str().unwrap_or("").to_owned();
-    let table = match kind.as_str() {
-        "document" => Some("workspace_documents"),
-        "entity_variant" => Some("entity_variants"),
-        "canon_fact" => Some("canon_facts"),
-        "relationship" => Some("relationships"),
-        "timeline_event" => Some("timeline_events"),
-        "turn" | "chat_window" => Some("turns"),
-        _ => None,
-    };
-    if let Some(table) = table {
-        let Some(mut source) = st
-            .store
-            .get(table, row["source_id"].as_str().unwrap_or_default())
-            .ok()
-            .flatten()
-        else {
-            return false;
-        };
-        if matches!(kind.as_str(), "turn" | "chat_window") {
-            if let Some(session) = source["session_id"]
-                .as_str()
-                .and_then(|id| st.store.get("sessions", id).ok().flatten())
-            {
-                for key in ["project_id", "world_id", "branch_id"] {
-                    source[key] = session[key].clone();
-                }
-            }
-        }
-        for key in ["project_id", "world_id", "branch_id", "session_id"] {
-            if let Some(value) = source.get(key) {
-                row[key] = value.clone();
-            }
-        }
-        if kind == "entity_variant" {
-            if let Some(family) = source["family_id"]
-                .as_str()
-                .and_then(|id| st.store.get("entity_families", id).ok().flatten())
-            {
-                source["folder_id"] = family["folder_id"].clone();
-                row["metadata"]["family_id"] = family["id"].clone();
-            }
-        }
-        row["folder_id"] = source["folder_id"].clone();
-    }
-    let mut owners = vec![(
-        if kind == "canon_fact" {
-            "fact".into()
-        } else {
-            kind
-        },
-        row["source_id"].as_str().unwrap_or_default().to_owned(),
-    )];
-    if let Some(family) = row["metadata"]["family_id"].as_str() {
-        owners.push(("entity_family".into(), family.into()));
-    }
-    let mut folder = sv(&row, "folder_id");
-    let mut visited = std::collections::HashSet::new();
-    while let Some(id) = folder {
-        if !visited.insert(id.clone()) {
-            return false;
-        }
-        owners.push(("folder".into(), id.clone()));
-        folder = st
-            .store
-            .get("workspace_folders", &id)
-            .ok()
-            .flatten()
-            .and_then(|folder| sv(&folder, "parent_id"));
-    }
-    for (kind, key) in [
-        ("project", "project_id"),
-        ("world", "world_id"),
-        ("branch", "branch_id"),
-        ("session", "session_id"),
-    ] {
-        if let Some(id) = row[key].as_str() {
-            owners.push((kind.into(), id.into()));
-        }
-    }
-    if let (Some(kind), Some(id)) = (
-        row["metadata"]["owner_type"].as_str(),
-        row["metadata"]["owner_id"].as_str(),
-    ) {
-        owners.push((kind.into(), id.into()));
-    }
-    for (kind, id) in owners {
-        if st.store.query("SELECT 1 AS hidden FROM resource_lifecycle WHERE resource_type=? AND resource_id=? AND (trashed_at IS NOT NULL OR archived_at IS NOT NULL) LIMIT 1",&[&kind,&id]).map_or(true,|rows|!rows.is_empty()){return false;}
-    }
-    scope_allowed_inner(st, &row, b)
-}
-fn scope_allowed_inner(st: &AppState, row: &Value, b: &Value) -> bool {
-    if explicitly_allowed(row, b) || !guarded(row, b) {
-        return explicitly_allowed(row, b);
-    }
-    if let Some(want) = b.get("branch_id").and_then(Value::as_str) {
-        let candidate = row.get("branch_id").and_then(Value::as_str);
-        if candidate.is_some() {
-            let mut visible = std::collections::HashMap::<String, Option<String>>::new();
-            let mut current = Some(want.to_owned());
-            let mut cutoff: Option<String> = None;
-            for _ in 0..128 {
-                let Some(id) = current.take() else {
-                    break;
-                };
-                if visible.contains_key(&id) {
-                    break;
-                }
-                visible.insert(id.clone(), cutoff.clone());
-                let rowb = st
-                    .store
-                    .query(
-                        "SELECT parent_branch_id,created_at FROM world_branches WHERE id=?",
-                        &[&id],
-                    )
-                    .ok()
-                    .and_then(|mut x| x.pop());
-                let Some(rowb) = rowb else {
-                    break;
-                };
-                cutoff = rowb
-                    .get("created_at")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned);
-                current = rowb
-                    .get("parent_branch_id")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned);
-            }
-            let Some(cid) = candidate else {
-                return true;
-            };
-            let Some(branch_cutoff) = visible.get(cid) else {
-                return false;
-            };
-            if let Some(cutoff) = branch_cutoff {
-                let recorded = row.get("source_recorded_at").and_then(Value::as_str);
-                if recorded.is_none() {
-                    return false;
-                }
-                let after = match (
-                    chrono::DateTime::parse_from_rfc3339(recorded.unwrap_or("")),
-                    chrono::DateTime::parse_from_rfc3339(cutoff),
-                ) {
-                    (Ok(left), Ok(right)) => left > right,
-                    _ => recorded.unwrap_or("") > cutoff.as_str(),
-                };
-                if after {
-                    return false;
-                }
-            }
-        }
-    } else if row.get("branch_id").and_then(Value::as_str).is_some() {
-        return false;
-    }
-    if let Some(want) = b.get("session_id").and_then(Value::as_str) {
-        let typ = row.get("source_type").and_then(Value::as_str).unwrap_or("");
-        if matches!(typ, "turn" | "chat_window") {
-            let candidate = row.get("session_id").and_then(Value::as_str);
-            let mut visible = std::collections::HashMap::<String, Option<String>>::new();
-            let mut current = Some(want.to_owned());
-            let mut cutoff: Option<String> = None;
-            for _ in 0..256 {
-                let Some(id) = current.take() else {
-                    break;
-                };
-                if visible.contains_key(&id) {
-                    break;
-                }
-                visible.insert(id.clone(), cutoff.clone());
-                let meta = st
-                    .store
-                    .query(
-                        "SELECT parent_session_id,forked_from_turn_id FROM sessions WHERE id=?",
-                        &[&id],
-                    )
-                    .ok()
-                    .and_then(|mut x| x.pop());
-                let Some(meta) = meta else {
-                    break;
-                };
-                cutoff = meta
-                    .get("forked_from_turn_id")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned);
-                current = meta
-                    .get("parent_session_id")
-                    .and_then(Value::as_str)
-                    .map(str::to_owned);
-            }
-            let Some(cid) = candidate else {
-                return false;
-            };
-            let Some(session_cutoff) = visible.get(cid) else {
-                return false;
-            };
-            if let Some(stop) = session_cutoff {
-                let source_id = row.get("source_id").and_then(Value::as_str).unwrap_or("");
-                let ids = st
-                    .store
-                    .query(
-                        "SELECT id FROM turns WHERE session_id=? ORDER BY created_at,id",
-                        &[&cid],
-                    )
-                    .unwrap_or_default();
-                let mut found = false;
-                for t in ids {
-                    if t.get("id").and_then(Value::as_str) == Some(source_id) {
-                        found = true;
-                    }
-                    if t.get("id").and_then(Value::as_str) == Some(stop) {
-                        break;
-                    }
-                }
-                if !found {
-                    return false;
-                }
-            }
-        }
-    } else if matches!(
-        row.get("source_type").and_then(Value::as_str),
-        Some("turn" | "chat_window")
-    ) && row.get("session_id").and_then(Value::as_str).is_some()
-    {
-        return false;
-    }
-    if let Some(want) = b.get("world_time") {
-        let allow = b
-            .get("allow_future_author_knowledge")
-            .and_then(Value::as_bool)
-            .unwrap_or(false)
-            && b.get("context_lens").and_then(Value::as_str) == Some("author");
-        if !temporal_allowed(row, want, allow) {
-            return false;
-        }
-    }
-    if b.get("pov_variant_id").is_some()
-        && (row.get("authority").and_then(Value::as_str) == Some("author_only")
-            || row.get("semantic_class").and_then(Value::as_str) == Some("private"))
-    {
-        return false;
-    }
-    if let Some(order) = b.get("story_order").and_then(Value::as_f64) {
-        if row
-            .get("story_order")
-            .and_then(Value::as_f64)
-            .is_some_and(|value| value > order)
-            && !(b.get("context_lens").and_then(Value::as_str) == Some("author")
-                && b.get("allow_future_author_knowledge")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(false))
-        {
-            return false;
-        }
-    }
-    true
+    st.store.connection().and_then(|con| scope::ScopeGate::new(&con,b)?.evaluate(row)).is_ok_and(|decision| decision.is_ok())
 }
 
 /// Read structured projections for query intents that cannot be represented by
@@ -453,8 +124,9 @@ fn structured_candidates(st: &AppState, b: &Value, query: &str) -> ApiResult<Vec
             })
         })
         .collect::<std::collections::HashMap<_, _>>();
-    let mut lanes = vec![("structured_state", "current_state_projection")];
-    if b.get("story_order").is_some_and(|v| !v.is_null())
+    let historical = b["story_order"].is_number() || !b["world_time"].is_null() || ["before", "earlier", "histor", "sebelum"].iter().any(|word| lower.contains(word));
+    let mut lanes = if historical { Vec::new() } else { vec![("structured_state", "current_state_projection")] };
+    if historical
         || [
             "before", "after", "when", "earlier", "past", "sebelum", "sesudah",
         ]
@@ -491,18 +163,27 @@ fn structured_candidates(st: &AppState, b: &Value, query: &str) -> ApiResult<Vec
         lanes.push(("spatial", "spatial_edges"));
     }
     let mut out = Vec::new();
+    let connection = st.store.connection()?;
+    let gate = scope::ScopeGate::new(&connection, b)?;
+    let candidate_limit = settings::settings(&st.runtime_config()?)["max_candidates"].as_u64().unwrap_or(60).min(1000) as usize;
     for (lane, table) in lanes {
-        let rows = st.store.query(
+        let lane_start=out.len();
+        let mut offset = 0i64;
+        let tie=if table=="current_state_projection" {"world_id,coalesce(branch_id,''),owner_type,owner_id,state_key"} else {"id"};
+        loop {
+        let rows = crate::store::query_connection(&connection,
             &format!(
-                "SELECT * FROM {table} WHERE (? IS NULL OR world_id=?) ORDER BY {} DESC LIMIT 400",
+                "SELECT * FROM {table} WHERE (? IS NULL OR world_id=?) ORDER BY {} DESC,{tie} LIMIT 64 OFFSET ?",
                 if table == "state_intervals" || table == "epistemic_intervals" {
                     "created_at"
                 } else {
                     "updated_at"
                 }
             ),
-            &[&world, &world],
+            &[&world, &world, &offset],
         )?;
+        if rows.is_empty() { break; }
+        offset += rows.len() as i64;
         for row in rows {
             if row
                 .get("status")
@@ -611,9 +292,12 @@ fn structured_candidates(st: &AppState, b: &Value, query: &str) -> ApiResult<Vec
                 ),
             };
             let candidate = json!({"id":format!("{lane}:{id}"),"source_type":lane,"source_id":id,"project_id":row.get("project_id"),"world_id":row.get("world_id"),"branch_id":row.get("branch_id"),"source_recorded_at":row.get("updated_at").or_else(||row.get("created_at")),"text":text,"authority":row["authority"].as_str().unwrap_or("canon"),"trust_level":"trusted_local","semantic_status":"active","importance":0.9,"metadata":row});
-            if scope_allowed(st, &candidate, b) {
+            if let Ok(candidate) = gate.evaluate(&candidate)? {
                 out.push(candidate);
+                if out.len()-lane_start>=candidate_limit {break;}
             }
+        }
+        if out.len()-lane_start>=candidate_limit {break;}
         }
     }
     Ok(out)
@@ -623,6 +307,7 @@ pub(crate) fn initialize(store: &Store) -> ApiResult<()> {
     spatial::ensure(store)?;
     let c = store.connection()?;
     c.execute_batch(DDL).map_err(sql)?;
+    semantic_index::initialize(store)?;
     c.execute(
         "INSERT INTO memory_chunks_fts(memory_chunks_fts) VALUES('rebuild')",
         [],
@@ -631,6 +316,10 @@ pub(crate) fn initialize(store: &Store) -> ApiResult<()> {
     Ok(())
 }
 fn retrieve(st: &AppState, b: &Value, q: &HashMap<String, String>) -> ApiResult<Value> {
+    lexical_retrieve(st,b,q,false)
+}
+
+fn lexical_retrieve(st: &AppState, b: &Value, _q: &HashMap<String,String>, relevance: bool) -> ApiResult<Value> {
     let query = sv(b, "query").unwrap_or_default();
     if query.trim().is_empty() {
         return Err(ApiError::bad_request("Memory query is empty"));
@@ -642,45 +331,32 @@ fn retrieve(st: &AppState, b: &Value, q: &HashMap<String, String>) -> ApiResult<
         .map(|x| format!("\"{}\"*", x.replace('"', "")))
         .collect::<Vec<_>>()
         .join(" OR ");
-    let mut sqlq = "SELECT c.* FROM memory_chunks c WHERE c.semantic_status='active' AND c.rowid IN(SELECT rowid FROM memory_chunks_fts WHERE memory_chunks_fts MATCH ?) AND NOT EXISTS(SELECT 1 FROM resource_lifecycle l WHERE (l.trashed_at IS NOT NULL OR l.archived_at IS NOT NULL) AND ((l.resource_type=c.source_type AND l.resource_id=c.source_id) OR (l.resource_type='project' AND l.resource_id=c.project_id) OR (l.resource_type='world' AND l.resource_id=c.world_id) OR (l.resource_type='branch' AND l.resource_id=c.branch_id) OR (l.resource_type='session' AND l.resource_id=c.session_id))) AND ((c.source_type='document' AND EXISTS(SELECT 1 FROM workspace_documents d WHERE d.id=c.source_id)) OR (c.source_type='entity_variant' AND EXISTS(SELECT 1 FROM entity_variants v WHERE v.id=c.source_id)) OR c.source_type NOT IN ('document','entity_variant'))".to_owned();
-    let mut vals = vec![SqlValue::Text(terms)];
-    let explicit = b["explicit_cross_scope_sources"]
-        .as_array()
-        .is_some_and(|items| !items.is_empty());
-    for k in ["project_id", "world_id", "trust_level", "semantic_class"] {
-        if explicit && matches!(k, "project_id" | "world_id") {
-            continue;
-        }
-        if let Some(x) = b
-            .get(k)
-            .and_then(Value::as_str)
-            .or_else(|| q.get(k).map(String::as_str))
-        {
-            if matches!(k, "project_id" | "world_id") {
-                sqlq.push_str(&format!(" AND (c.{k}=? OR c.{k} IS NULL)"));
-            } else {
-                sqlq.push_str(&format!(" AND c.{k}=?"));
+    let connection = st.store.connection()?;
+    let read = connection.unchecked_transaction()?;
+    let gate = scope::ScopeGate::new(&read, b)?;
+    let (filter, values) = gate.prefilter("c");
+    let order=if relevance {"lexical_score,c.id"} else {"c.importance DESC,c.updated_at DESC,c.id"};
+    let sqlq = format!("SELECT c.*,bm25(memory_chunks_fts) AS lexical_score FROM memory_chunks_fts JOIN memory_chunks c ON c.rowid=memory_chunks_fts.rowid WHERE memory_chunks_fts MATCH ? AND c.semantic_status='active'{filter} ORDER BY {order} LIMIT 64 OFFSET ?");
+    let mut rows = Vec::new();
+    let max = settings::settings(&st.runtime_config()?)["max_candidates"].as_u64().unwrap_or(60).min(1000) as usize;
+    if st.runtime_config()?.bool("memory.fts_enabled", true) && !terms.is_empty() {
+        let mut offset = 0i64;
+        loop {
+            let mut params = vec![SqlValue::Text(terms.clone())];
+            params.extend(values.clone()); params.push(SqlValue::Integer(offset));
+            let refs: Vec<&dyn ToSql> = params.iter().map(|x| x as &dyn ToSql).collect();
+            let page = crate::store::query_connection(&read, &sqlq, &refs)?;
+            let count = page.len(); offset += count as i64;
+            for row in page {
+                if let Ok(row) = gate.evaluate(&row)? {
+                    if semantic_index::source_current(&read, &row)? { rows.push(row); }
+                }
+                if rows.len() >= max { break; }
             }
-            vals.push(SqlValue::Text(x.into()));
+            if count < 64 || rows.len() >= max { break; }
         }
     }
-    if let Some(x) = b
-        .get("story_order")
-        .and_then(Value::as_f64)
-        .filter(|_| !(b["allow_future_author_knowledge"] == true && b["context_lens"] == "author"))
-    {
-        sqlq.push_str(" AND (c.story_order IS NULL OR c.story_order<=?)");
-        vals.push(SqlValue::Real(x));
-    }
-    sqlq.push_str(" ORDER BY c.importance DESC,c.updated_at DESC,c.id LIMIT ?");
-    vals.push(SqlValue::Integer(500));
-    let refs: Vec<&dyn ToSql> = vals.iter().map(|x| x as &dyn ToSql).collect();
-    let mut rows = if st.runtime_config()?.bool("memory.fts_enabled", true) {
-        st.store.query(&sqlq, &refs)?
-    } else {
-        Vec::new()
-    };
-    rows.retain(|row| scope_allowed(st, row, b));
+    drop(gate); drop(read);
     let mut structured = structured_candidates(st, b, &query)?;
     rows.append(&mut structured);
     let mut seen = std::collections::HashSet::<String>::new();
@@ -693,15 +369,7 @@ fn retrieve(st: &AppState, b: &Value, q: &HashMap<String, String>) -> ApiResult<
         )
     });
     let run = newid("RET");
-    let dense_enabled = st
-        .runtime_config()
-        .map(|cfg| {
-            cfg.bool(
-                "memory.embedding.enabled",
-                cfg.bool("memory.dense_enabled", false),
-            )
-        })
-        .unwrap_or(false);
+    let dense_enabled = settings::settings(&st.runtime_config()?)["dense_enabled"] == true;
     let mut selected = rows.clone();
     let mut excluded = Vec::new();
     if let Some(budget) = b.get("token_budget").and_then(Value::as_u64) {
@@ -841,7 +509,11 @@ pub(crate) async fn retrieve_async(
             json!({"run_id":"disabled","plan":{"normalized_query":b["query"],"scope":b},"results":[],"selected":[],"excluded":[],"packed_text":"","lane_counts":{},"abstain":true,"abstention_reason":"Memory retrieval is disabled."}),
         );
     }
-    let mut body = b.clone();
+    let mut request = b.clone();
+    for key in ["project_id", "world_id", "branch_id", "session_id", "trust_level", "semantic_class"] {
+        if request[key].is_null() { if let Some(value)=q.get(key) {request[key]=json!(value);} }
+    }
+    let mut body = scope::effective_body(st, &request)?;
     for (key, setting) in [
         ("limit", "final_k"),
         ("token_budget", "max_pack_tokens"),
@@ -852,9 +524,21 @@ pub(crate) async fn retrieve_async(
         }
     }
     let b = &body;
+    if cfg.str("memory.engine_mode", "legacy") != "legacy" { return hybrid::retrieve(st, b, q, &settings).await; }
+    legacy_retrieve(st,b,q,&settings).await
+}
+
+async fn legacy_retrieve(st: &AppState, b: &Value, q: &HashMap<String,String>, settings: &Value) -> ApiResult<Value> {
+    let cfg = st.runtime_config()?;
     let mut out = retrieve(st, b, q)?;
     pack_retrieval(&mut out, b);
-    if settings["dense_enabled"] != true {
+    out["engine_mode"]=json!("legacy");
+    out["coverage_inspected"]=json!(false);
+    if settings["dense_enabled"] != true || settings["embedding"]["backend"] == "native_bekko_onnx" {
+        if settings["dense_enabled"] == true {
+            out["provider"] = json!("fts5+structured");
+            out["dense_fallback_reason"] = json!("Native Bekko is diagnostic-only in legacy mode; select explicit R3 hybrid or shadow mode for native retrieval");
+        }
         st.store.execute(
             "UPDATE memory_retrieval_runs SET result_json=? WHERE id=?",
             &[
@@ -896,7 +580,7 @@ pub(crate) async fn retrieve_async(
             .unwrap_or_default();
         let dims = query_vec.len();
         if dims > 0 {
-            let mut candidates=st.store.query("SELECT c.* FROM memory_chunks c WHERE c.semantic_status='active' AND NOT EXISTS(SELECT 1 FROM resource_lifecycle l WHERE (l.trashed_at IS NOT NULL OR l.archived_at IS NOT NULL) AND ((l.resource_type=c.source_type AND l.resource_id=c.source_id) OR (l.resource_type='project' AND l.resource_id=c.project_id) OR (l.resource_type='world' AND l.resource_id=c.world_id) OR (l.resource_type='branch' AND l.resource_id=c.branch_id) OR (l.resource_type='session' AND l.resource_id=c.session_id)) AND ((c.source_type='document' AND EXISTS(SELECT 1 FROM workspace_documents d WHERE d.id=c.source_id)) OR (c.source_type='entity_variant' AND EXISTS(SELECT 1 FROM entity_variants v WHERE v.id=c.source_id)) OR c.source_type NOT IN ('document','entity_variant'))) ORDER BY c.updated_at DESC LIMIT 500",&[])?;
+            let mut candidates=st.store.query("SELECT c.* FROM memory_chunks c WHERE c.semantic_status='active' AND NOT EXISTS(SELECT 1 FROM resource_lifecycle l WHERE (l.trashed_at IS NOT NULL OR l.archived_at IS NOT NULL) AND ((l.resource_type=c.source_type AND l.resource_id=c.source_id) OR (l.resource_type='project' AND l.resource_id=c.project_id) OR (l.resource_type='world' AND l.resource_id=c.world_id) OR (l.resource_type='branch' AND l.resource_id=c.branch_id) OR (l.resource_type='session' AND l.resource_id=c.session_id)) AND ((c.source_type='document' AND EXISTS(SELECT 1 FROM workspace_documents d WHERE d.id=c.source_id)) OR (c.source_type='entity_variant' AND EXISTS(SELECT 1 FROM entity_variants v WHERE v.id=c.source_id)) OR c.source_type NOT IN ('document','entity_variant'))) ORDER BY c.updated_at DESC,c.id",&[])?;
             for key in ["project_id", "world_id"] {
                 if let Some(want) = b.get(key).and_then(Value::as_str) {
                     candidates.retain(|r| {
@@ -907,7 +591,12 @@ pub(crate) async fn retrieve_async(
                     });
                 }
             }
-            candidates.retain(|row| scope_allowed(st, row, b));
+            {
+            let connection = st.store.connection()?;
+            let gate = scope::ScopeGate::new(&connection,b)?;
+            candidates.retain(|row| gate.evaluate(row).is_ok_and(|d| d.is_ok()));
+            candidates.truncate(settings["max_candidates"].as_u64().unwrap_or(60).min(1000) as usize);
+            }
             let mut scored = Vec::new();
             for mut row in candidates.drain(..) {
                 let cid = row.get("id").and_then(Value::as_str).unwrap_or("");
@@ -1183,12 +872,24 @@ pub fn refresh_source(st: &AppState, source_type: &str, source_id: &str) -> ApiR
     let Some(row) = st.store.get(table, source_id)? else {
         return indexing::replace_chunks(st, source_type, source_id, "", &json!({}));
     };
-    let content = if source_type == "document" {
+    let content = source_text(source_type,&row);
+    let metadata = json!({"project_id":source_project(st,source_type,&row)?,"world_id":row.get("world_id"),"branch_id":row.get("branch_id"),"source_recorded_at":row.get("updated_at").or_else(||row.get("created_at")),"world_time":row.get("world_time"),"story_order":row.get("story_order"),"authority":if source_type=="document"{"project_manuscript"}else{"user_accepted_world_canon"},"trust_level":"trusted_local","importance":if source_type=="document"{0.65}else{0.8}});
+    indexing::replace_chunks(st, source_type, source_id, &content, &metadata)
+}
+
+pub(crate) fn source_text(source_type:&str,row:&Value)->String {
+    if source_type == "document" {
         format!(
             "{}\n{}",
             row["title"].as_str().unwrap_or(""),
             row["content"].as_str().unwrap_or("")
         )
+    } else if source_type=="turn" {
+        row["user_prompt"].as_str().unwrap_or_default().to_owned()
+    } else if source_type=="chat_window" {
+        if row["feedback_status"]=="edited_accept" {
+            row["edited_story"].as_str().filter(|s|!s.is_empty()).unwrap_or_else(||row["story"].as_str().unwrap_or_default()).to_owned()
+        } else {row["story"].as_str().unwrap_or_default().to_owned()}
     } else {
         let mut evidence = row.clone();
         if let Some(object) = evidence.as_object_mut() {
@@ -1197,9 +898,7 @@ pub fn refresh_source(st: &AppState, source_type: &str, source_id: &str) -> ApiR
             }
         }
         evidence.to_string()
-    };
-    let metadata = json!({"project_id":source_project(st,source_type,&row)?,"world_id":row.get("world_id"),"branch_id":row.get("branch_id"),"source_recorded_at":row.get("updated_at").or_else(||row.get("created_at")),"world_time":row.get("world_time"),"story_order":row.get("story_order"),"authority":if source_type=="document"{"project_manuscript"}else{"user_accepted_world_canon"},"trust_level":"trusted_local","importance":if source_type=="document"{0.65}else{0.8}});
-    indexing::replace_chunks(st, source_type, source_id, &content, &metadata)
+    }
 }
 pub fn refresh_turn(st: &AppState, turn_id: &str) -> ApiResult<Value> {
     if !st.runtime_config()?.bool("memory.enabled", true) {

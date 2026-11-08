@@ -1,0 +1,60 @@
+{
+  "repo": "hotchpotch/bekko-embedding-v1-a8m",
+  "revision": "c721113d59a1d91b447450324f51c4b3332c924a",
+  "files": [
+    {
+      "path": "onnx/model.onnx",
+      "size": 130099079,
+      "sha256": "96d8cc6199e96357b21b2fb12f6d7ffd2d4abc7b182fe94b5468fbd6dc819af7",
+      "role": "onnx"
+    },
+    {
+      "path": "tokenizer.json",
+      "size": 34363442,
+      "sha256": "8bd47075711f75a143d1b78e01a41cc65c1c591b00d3cfeffc23db07adce1392",
+      "role": "tokenizer"
+    },
+    {
+      "path": "tokenizer_config.json",
+      "size": 46634,
+      "sha256": "2ee40d1066ac855e1ea38ac422dbe1f3ddf84c9d415e79272adce569668f3de4",
+      "role": "tokenizer"
+    },
+    {
+      "path": "special_tokens_map.json",
+      "size": 1051,
+      "sha256": "6e3204c5a4004719c185007a745d1940471a6fb02521cfa0a00306dbb6bc5903",
+      "role": "tokenizer"
+    },
+    {
+      "path": "config.json",
+      "size": 1207,
+      "sha256": "950f344b034bb96a6ac3da045b1cd5ba037c08d8e4978471d407324622f8878e",
+      "role": "config"
+    },
+    {
+      "path": "1_Pooling/config.json",
+      "size": 312,
+      "sha256": "029891eaab443d10165e66e6f3d5d9008a16b712481f71ae7c938234e8fdeca1",
+      "role": "pooling"
+    }
+  ],
+  "onnx_inputs": [
+    "input_ids",
+    "attention_mask"
+  ],
+  "onnx_output": "last_hidden_state",
+  "pooling": "masked_mean_then_l2_normalize",
+  "max_tokens": 512,
+  "dimensions": 384,
+  "prefixes": {
+    "query": "",
+    "document": ""
+  },
+  "source_urls": {
+    "model": "https://huggingface.co/hotchpotch/bekko-embedding-v1-a8m",
+    "revision": "https://huggingface.co/hotchpotch/bekko-embedding-v1-a8m/tree/c721113d59a1d91b447450324f51c4b3332c924a",
+    "api_tree": "https://huggingface.co/api/models/hotchpotch/bekko-embedding-v1-a8m/tree/main?recursive=true&expand=true"
+  },
+  "provenance_note": "Pinned from Verithen benchmark manifest; SHA-256 verifies local integrity, not artifact publisher authenticity."
+}
