@@ -44,6 +44,7 @@ pub struct AppState {
     pub storage_gate: Arc<tokio::sync::RwLock<()>>,
     pub projection_gate: Arc<std::sync::Mutex<()>>,
     pub embeddings: Arc<foundation::memory::embedding::EmbeddingService>,
+    pub llama: Arc<tokio::sync::Mutex<Option<inference::engine::Sidecar>>>,
 }
 
 impl AppState {
@@ -85,6 +86,7 @@ impl AppState {
             storage_gate: Arc::new(tokio::sync::RwLock::new(())),
             projection_gate: Arc::new(std::sync::Mutex::new(())),
             embeddings: Arc::new(foundation::memory::embedding::EmbeddingService::default()),
+            llama: Arc::new(tokio::sync::Mutex::new(None)),
         })
     }
 
@@ -272,20 +274,26 @@ async fn dispatch(State(state): State<AppState>, request: Request) -> Response {
             io_services::handle(&state, &method, api, &query, &body).await
         {
             response
-        } else if let Some(response) =
-            foundation_extended::handle(&state, &method, api, &query, &body)
-        {
-            response.map(|value| Json(value).into_response())
-        } else if let Some(response) = canon_workflows::handle(&state, &method, api, &query, &body)
-        {
-            response.map(|value| Json(value).into_response())
-        } else if let Some(response) =
-            workspace_advanced::handle(&state, &method, api, &query, &body)
+        } else if let Some(response) = run_sync(
+            &state,
+            &method,
+            api,
+            &query,
+            &body,
+            &[
+                foundation_extended::handle,
+                canon_workflows::handle,
+                workspace_advanced::handle,
+            ],
+        )
+        .await
         {
             response.map(|value| Json(value).into_response())
         } else if let Some(response) = models::handle(state.clone(), &method, api, &body).await {
             response
-        } else if let Some(response) = workspace::handle(&state, &method, api, &query, &body) {
+        } else if let Some(response) =
+            run_sync(&state, &method, api, &query, &body, &[workspace::handle]).await
+        {
             response.map(|value| Json(value).into_response())
         } else if let Some(response) =
             generation::handle(state.clone(), &method, api, &query, body.clone()).await
@@ -327,7 +335,12 @@ async fn dispatch(State(state): State<AppState>, request: Request) -> Response {
         Err(ApiError::not_found("Route not found"))
     };
     if matches!(method.as_str(), "POST" | "PUT" | "PATCH" | "DELETE") {
-        if let Err(error) = domain_events::flush(&state) {
+        // Awaited (not detached) so a write's projections are visible to the next read.
+        let flush_state = state.clone();
+        let flushed = tokio::task::spawn_blocking(move || domain_events::flush(&flush_state))
+            .await
+            .unwrap_or_else(|e| Err(ApiError::internal(format!("projection task failed: {e}"))));
+        if let Err(error) = flushed {
             // The source mutation is durable. Retain its queued notification so
             // a subsequent request can retry a failed derived-cache rebuild.
             eprintln!("Workspace projection refresh deferred: {}", error.message);
@@ -342,6 +355,32 @@ async fn dispatch(State(state): State<AppState>, request: Request) -> Response {
         while let Some(chunk)=stream.next().await {yield chunk;}
     };
     Response::from_parts(parts, Body::from_stream(stream))
+}
+
+type SyncHandler =
+    fn(&AppState, &str, &[&str], &HashMap<String, String>, &Value) -> Option<ApiResult<Value>>;
+
+/// Synchronous SQLite handlers run on the blocking pool so they never stall
+/// async workers that are streaming generations. First handler to claim wins.
+async fn run_sync(
+    state: &AppState,
+    method: &str,
+    api: &[&str],
+    query: &HashMap<String, String>,
+    body: &Value,
+    handlers: &'static [SyncHandler],
+) -> Option<ApiResult<Value>> {
+    let (state, method, query, body) =
+        (state.clone(), method.to_owned(), query.clone(), body.clone());
+    let api: Vec<String> = api.iter().map(|part| (*part).to_owned()).collect();
+    tokio::task::spawn_blocking(move || {
+        let api: Vec<&str> = api.iter().map(String::as_str).collect();
+        handlers
+            .iter()
+            .find_map(|handle| handle(&state, &method, &api, &query, &body))
+    })
+    .await
+    .unwrap_or_else(|e| Some(Err(ApiError::internal(format!("handler task failed: {e}")))))
 }
 
 fn mime(path: &str) -> &'static str {

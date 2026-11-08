@@ -732,10 +732,16 @@ async fn describe_media(state: &AppState, id: &str, body: &Value) -> ApiResult<V
     } else {
         server.to_owned()
     };
+    let llama = crate::inference::engine::is_llama(&config);
+    let url = if llama {
+        crate::inference::engine::chat_url(&config)
+    } else {
+        format!("{}/api/v1/chat", server.trim_end_matches('/'))
+    };
     let mut request = state
         .client
-        .post(format!("{}/api/v1/chat", server.trim_end_matches('/')))
-        .json(&payload);
+        .post(url)
+        .json(&crate::inference::engine::provider_body(&config, &payload));
     let key = text(body, "api_key", "");
     let key = if key.is_empty() {
         config.str("lmstudio.api_key", "")
@@ -759,6 +765,7 @@ async fn describe_media(state: &AppState, id: &str, body: &Value) -> ApiResult<V
         .json()
         .await
         .map_err(|e| ApiError::internal(e.to_string()))?;
+    let result = crate::inference::engine::normalize_response(&config, result);
     let description = result["output"]
         .as_array()
         .map(|items| {

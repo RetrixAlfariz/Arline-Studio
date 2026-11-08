@@ -597,35 +597,39 @@ async fn resolve_reasoning(
         return Ok(Some(requested.to_owned()));
     }
     let requested = requested.to_ascii_lowercase();
-    let response = state
-        .client
-        .get(format!(
-            "{}/api/v1/models",
-            cfg.str("lmstudio.base_url", "http://127.0.0.1:1234")
-                .trim_end_matches('/')
-        ))
-        .send()
-        .await;
-    let Ok(response) = response else {
-        if requested == "off" {
-            return Ok(Some("off".to_owned()));
+    let payload: Value = if crate::inference::engine::is_llama(cfg) {
+        crate::inference::engine::models_payload(state, cfg).await
+    } else {
+        let response = state
+            .client
+            .get(format!(
+                "{}/api/v1/models",
+                cfg.str("lmstudio.base_url", "http://127.0.0.1:1234")
+                    .trim_end_matches('/')
+            ))
+            .send()
+            .await;
+        let Ok(response) = response else {
+            if requested == "off" {
+                return Ok(Some("off".to_owned()));
+            }
+            return Err(ApiError::bad_request(
+                "Unable to query model reasoning capabilities",
+            ));
+        };
+        if !response.status().is_success() {
+            if requested == "off" {
+                return Ok(Some("off".to_owned()));
+            }
+            return Err(ApiError::bad_request(
+                "Unable to query model reasoning capabilities",
+            ));
         }
-        return Err(ApiError::bad_request(
-            "Unable to query model reasoning capabilities",
-        ));
+        response
+            .json()
+            .await
+            .map_err(|e| ApiError::bad_request(e.to_string()))?
     };
-    if !response.status().is_success() {
-        if requested == "off" {
-            return Ok(Some("off".to_owned()));
-        }
-        return Err(ApiError::bad_request(
-            "Unable to query model reasoning capabilities",
-        ));
-    }
-    let payload: Value = response
-        .json()
-        .await
-        .map_err(|e| ApiError::bad_request(e.to_string()))?;
     let info = payload
         .get("models")
         .and_then(Value::as_array)
@@ -679,10 +683,8 @@ async fn model_stream(
     let capability_started = Instant::now();
     let effective_reasoning = resolve_reasoning(state, &cfg, &model, &requested_reasoning).await?;
     telemetry.accumulate_stage("provider_capabilities", capability_started.elapsed());
-    let base = config_string(&cfg, "lmstudio.base_url", "http://127.0.0.1:1234")
-        .trim_end_matches('/')
-        .to_owned();
-    let url = format!("{base}/api/v1/chat");
+    let url = crate::inference::engine::chat_url(&cfg);
+    let mut normalizer = crate::inference::engine::StreamNormalizer::for_config(&cfg);
     let mut compiled = crate::inference::context::compile(state,&cfg,body,&context.selection,budget.api_max,|text|{
         let mut payload=chat_payload(body,&cfg,text,budget);
         if let Some(ref reasoning)=effective_reasoning {payload["reasoning"]=json!(reasoning);}else if let Some(object)=payload.as_object_mut(){object.remove("reasoning");}
@@ -696,7 +698,10 @@ async fn model_stream(
             .cloned()
             .unwrap_or(json!("omitted")),
     );
-    let mut request = state.client.post(url.clone()).json(&provider_body);
+    let mut request = state
+        .client
+        .post(url.clone())
+        .json(&crate::inference::engine::provider_body(&cfg, &provider_body));
     let api_key = cfg.str("lmstudio.api_key", "");
     if !api_key.is_empty() {
         request = request.bearer_auth(api_key);
@@ -741,9 +746,10 @@ async fn model_stream(
                 if data == "[DONE]" {
                     continue;
                 }
-                let Ok(v) = serde_json::from_str::<Value>(data) else {
+                let Ok(chunk) = serde_json::from_str::<Value>(data) else {
                     continue;
                 };
+                for v in normalizer.events(chunk) {
                 let content = v.get("content").and_then(Value::as_str).unwrap_or_default();
                 let typ = v
                     .get("type")
@@ -777,6 +783,7 @@ async fn model_stream(
                             }
                         }
                     }
+                }
                 }
             }
         }
@@ -892,8 +899,8 @@ async fn generate_stream_response(
             Err(error) => return Ok(context_rejection(state,original,&session_id,&run_id,error,&mut telemetry)),
         };
     let cfg = state.runtime_config()?;
-    let base = cfg.str("lmstudio.base_url", "http://127.0.0.1:1234");
-    let url = format!("{}/api/v1/chat", base.trim_end_matches('/'));
+    let url = crate::inference::engine::chat_url(&cfg);
+    let mut normalizer = crate::inference::engine::StreamNormalizer::for_config(&cfg);
     let mut provider_body = chat_payload(&body, &cfg, &context, &budgets.writers[0]);
     let deliberation = analytical["deliberation"].clone();
     let model = payload_string(&body, "model", &cfg.str("lmstudio.model", ""));
@@ -918,7 +925,10 @@ async fn generate_stream_response(
     let context=compiled;
     let provider_body=context.payload.clone();
     let model_input=provider_body["input"].clone();
-    let mut request = state.client.post(url).json(&provider_body);
+    let mut request = state
+        .client
+        .post(url)
+        .json(&crate::inference::engine::provider_body(&cfg, &provider_body));
     let api_key = cfg.str("lmstudio.api_key", "");
     if !api_key.is_empty() {
         request = request.bearer_auth(api_key);
@@ -951,7 +961,8 @@ async fn generate_stream_response(
                 if let Some(ev)=line.strip_prefix("event:"){current_event=ev.trim().to_owned();continue}
                 let Some(data)=line.strip_prefix("data:").map(str::trim)else{continue};
                 if data=="[DONE]"{continue}
-                let Ok(v)=serde_json::from_str::<Value>(data)else{continue};
+                let Ok(chunk)=serde_json::from_str::<Value>(data)else{continue};
+                for v in normalizer.events(chunk) {
                 let content=v.get("content").and_then(Value::as_str).unwrap_or_default();
                 let typ=v.get("type").and_then(Value::as_str).unwrap_or(&current_event);
                 if typ.contains("error")||v.get("error").is_some(){provider_failed=true;provider_error=v.to_string();break;}
@@ -964,6 +975,8 @@ async fn generate_stream_response(
                     cancellation.telemetry.record_server_first_visible_text(cancellation.telemetry.elapsed());
                     yield Ok(sse("answer.delta",&json!({"content":content})));
                 }
+                }
+                if provider_failed{break;}
             }
             if provider_failed{break;}
         }

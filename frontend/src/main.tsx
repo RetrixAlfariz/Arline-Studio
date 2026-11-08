@@ -5,6 +5,7 @@ import { StartupErrorBoundary } from "./StartupErrorBoundary";
 import "./theme.css";
 import "./styles.css";
 import "./chat-writing.css";
+import "./notion.css";
 
 document.documentElement.dataset.arlineUi = "react";
 

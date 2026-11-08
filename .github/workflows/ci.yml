@@ -188,8 +188,57 @@ jobs:
           cargo clippy --locked --features native-bekko --all-targets -- -D warnings
           cargo test --locked --features native-bekko --no-fail-fast
 
+  native-browser:
+    name: Native runtime · React browser smoke
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/heads/develop/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/arline-runtime
+      - name: Build React frontend (embedded by build.rs)
+        run: |
+          npm --prefix frontend ci
+          npm --prefix frontend run build
+      - name: Build native runtime
+        working-directory: crates/arline-runtime
+        run: cargo build --locked --release
+      - name: Install browser harness
+        run: |
+          npm --prefix frontend install --no-save playwright@1.55.0
+          npx --prefix frontend playwright install --with-deps chromium
+      - name: Start isolated native runtime
+        run: |
+          crates/arline-runtime/target/release/arline --headless --port 7860 --data-dir /tmp/arline-native >/tmp/arline-native.log 2>&1 &
+          echo $! >/tmp/arline-native.pid
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:7860/api/health >/dev/null; then
+              exit 0
+            fi
+            sleep 0.5
+          done
+          cat /tmp/arline-native.log
+          exit 1
+      - name: Exercise Chromium UI
+        env:
+          ARLINE_BROWSER_URL: http://127.0.0.1:7860
+        run: node frontend/tests/browser_smoke.mjs
+      - name: Native runtime diagnostics
+        if: always()
+        run: |
+          cat /tmp/arline-native.log || true
+          if [ -f /tmp/arline-native.pid ]; then
+            kill "$(cat /tmp/arline-native.pid)" 2>/dev/null || true
+          fi
+
+  # Frozen: exercises the legacy Python/vanilla-JS UI until it is retired.
   browser:
-    name: Chromium browser smoke
+    name: Chromium browser smoke (legacy Python)
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/heads/develop/')
     runs-on: ubuntu-latest
     steps:

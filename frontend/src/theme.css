@@ -14,8 +14,8 @@
   --soft:#65736c;
   --core:#2f9b81;
   --core-bright:#45b99b;
-  --core-soft:rgba(47,155,129,.13);
-  --core-line:rgba(69,185,155,.5);
+  --core-soft:color-mix(in srgb,var(--core) 13%,transparent);
+  --core-line:color-mix(in srgb,var(--core) 50%,transparent);
   color-scheme:dark;
 }
 
@@ -35,7 +35,7 @@
   --soft:#8b9891;
   --core:#2f8e78;
   --core-bright:#287e6b;
-  --core-soft:rgba(47,142,120,.11);
-  --core-line:rgba(47,142,120,.45);
+  --core-soft:color-mix(in srgb,var(--core) 11%,transparent);
+  --core-line:color-mix(in srgb,var(--core) 45%,transparent);
   color-scheme:light;
 }

@@ -3,6 +3,7 @@
 pub(crate) mod budget;
 pub(crate) mod deliberation;
 pub mod context;
+pub mod engine;
 pub mod telemetry;
 
 pub use telemetry::{

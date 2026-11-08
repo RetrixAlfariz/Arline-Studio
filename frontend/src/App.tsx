@@ -295,7 +295,8 @@ export default function App() {
   const inspect = (title: string, data: unknown) => setSelection({ kind: "analysis", title, data });
   const closeWelcome = () => { browserStorage.set("arline:react:welcomed", "yes"); setWelcomeOpen(false); };
 
-  const connectionLabel = config.model ? `LM Studio · ${config.model}` : "LM Studio · no model";
+  const engineLabel = config.inference_engine === "llama_server" ? "llama-server" : "LM Studio";
+  const connectionLabel = `${engineLabel} · ${config.model || "no model"}`;
   const documentTypes = bootstrap?.document_types || ["scene", "chapter", "note", "research", "outline"];
   const entityTypes = bootstrap?.entity_types || ["character", "location", "item", "organization", "lore"];
   const documents = tree?.documents || [];

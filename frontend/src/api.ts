@@ -71,7 +71,8 @@ export const studioApi = {
     restart_required: boolean;
   }>("/api/storage/reset", { method: "POST", body: { mode, confirmation } }),
   saveSettings: (payload: Record<string, unknown>) => api<Record<string, unknown>>("/api/settings", { method: "POST", body: payload }),
-  models: (serverUrl: string, apiKey?: string) => api<{ models: ModelInfo[] }>("/api/models/query", {
+  pickModelsFolder: () => api<{ path: string | null; cancelled: boolean }>("/api/models/pick-folder", { method: "POST", body: {} }),
+  models: (serverUrl: string, apiKey?: string) => api<{ models: ModelInfo[]; models_dir?: string | null }>("/api/models/query", {
     method: "POST",
     body: { server_url: serverUrl || null, api_key: apiKey || null },
   }),

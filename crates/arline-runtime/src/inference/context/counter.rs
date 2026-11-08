@@ -39,27 +39,31 @@ async fn model(state: &AppState, cfg: &RuntimeConfig, body: &Value) -> ApiResult
             .and_then(toml::Value::as_str)
             .unwrap_or_default()
     });
-    let url = format!(
-        "{}/api/v1/models",
-        cfg.str("lmstudio.base_url", "http://127.0.0.1:1234")
-            .trim_end_matches('/')
-    );
-    let mut request = state.client.get(url).timeout(Duration::from_secs(3));
-    let key = cfg.str("lmstudio.api_key", "");
-    if !key.is_empty() {
-        request = request.bearer_auth(key);
-    }
-    let raw = request
-        .send()
-        .await
-        .map_err(|_| unavailable("Loaded writer model information unavailable"))?;
-    if !raw.status().is_success() {
-        return Err(unavailable("Loaded writer context capacity unavailable; load the writer and use LM Studio's v1 model API"));
-    }
-    let raw: Value = raw
-        .json()
-        .await
-        .map_err(|_| unavailable("Invalid loaded-model metadata"))?;
+    let raw: Value = if crate::inference::engine::is_llama(cfg) {
+        crate::inference::engine::ensure_loaded(state, cfg, requested).await?;
+        crate::inference::engine::models_payload(state, cfg).await
+    } else {
+        let url = format!(
+            "{}/api/v1/models",
+            cfg.str("lmstudio.base_url", "http://127.0.0.1:1234")
+                .trim_end_matches('/')
+        );
+        let mut request = state.client.get(url).timeout(Duration::from_secs(3));
+        let key = cfg.str("lmstudio.api_key", "");
+        if !key.is_empty() {
+            request = request.bearer_auth(key);
+        }
+        let raw = request
+            .send()
+            .await
+            .map_err(|_| unavailable("Loaded writer model information unavailable"))?;
+        if !raw.status().is_success() {
+            return Err(unavailable("Loaded writer context capacity unavailable; load the writer and use LM Studio's v1 model API"));
+        }
+        raw.json()
+            .await
+            .map_err(|_| unavailable("Invalid loaded-model metadata"))?
+    };
     let mut matches = vec![];
     for m in raw["models"]
         .as_array()
@@ -111,6 +115,8 @@ pub struct WriterTokenCounter {
     pub model: WriterModel,
     sdk: Option<Sdk>,
     base: String,
+    /// llama-server engine: exact counts via its chat template + tokenizer.
+    llama: Option<(reqwest::Client, String)>,
 }
 impl WriterTokenCounter {
     pub async fn resolve(state: &AppState, cfg: &RuntimeConfig, body: &Value) -> ApiResult<Self> {
@@ -166,6 +172,8 @@ impl WriterTokenCounter {
             model,
             sdk,
             base: cfg.str("lmstudio.base_url", "http://127.0.0.1:1234"),
+            llama: crate::inference::engine::is_llama(cfg)
+                .then(|| (state.client.clone(), crate::inference::engine::base_url(cfg))),
         })
     }
     pub async fn confirm(
@@ -184,6 +192,20 @@ impl WriterTokenCounter {
     pub async fn count(&mut self, payload: &Value) -> ApiResult<TokenCount> {
         if !payload["input"].is_string() {
             return Err(ApiError::new(StatusCode::UNPROCESSABLE_ENTITY,"Image/multimodal token cost is unavailable; no inference was sent. Use text-only input until the writer's image accounting is qualified.").with_diagnostic(json!({"writer_model":self.model,"counting":{"state":"unavailable_or_untrusted"},"overflow_reason":"unknown_multimodal_cost"})));
+        }
+        if let Some((client, base)) = &self.llama {
+            // A failed exact count falls through to the conservative estimate below.
+            if let Ok(tokens) =
+                crate::inference::engine::exact_input_tokens(client, base, payload).await
+            {
+                return Ok(TokenCount {
+                    state: AccountingState::VerifiedModelCompatible,
+                    tokens,
+                    method: "llama_server_apply_template_tokenize".into(),
+                    template_allowance_tokens: 0,
+                    confidence: "exact: loaded instance's chat template and tokenizer".into(),
+                });
+            }
         }
         if let Some(sdk) = self.sdk.as_mut() {
             let exchange = async {

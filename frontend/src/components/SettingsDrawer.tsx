@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
-import { AlertTriangle, BrainCircuit, Check, ChevronDown, ChevronUp, ClipboardPaste, Cpu, Database, Download, GripVertical, Library, Link2, MessageSquareText, Monitor, Moon, MoreHorizontal, Palette, Pause, Plus, RefreshCcw, RotateCcw, Save, Search, ShieldCheck, SlidersHorizontal, Sparkles, Sun, Trash2, UserPlus, UserRound, X } from "lucide-react";
+import { AlertTriangle, BrainCircuit, FolderOpen, Check, ChevronDown, ChevronUp, ClipboardPaste, Cpu, Database, Download, GripVertical, Library, Link2, MessageSquareText, Monitor, Moon, MoreHorizontal, Palette, Pause, Plus, RefreshCcw, RotateCcw, Save, Search, ShieldCheck, SlidersHorizontal, Sparkles, Sun, Trash2, UserPlus, UserRound, X } from "lucide-react";
 import { studioApi } from "../api";
 import { deliberationSelectorMode, resolveDeliberationMode, withDeliberationMode } from "../deliberation";
 import { OUTPUT_BUDGET_OPTIONS, withOutputBudgetMode, withResponseLength } from "../outputBudget";
@@ -7,6 +7,7 @@ import { browserStorage } from "../browserStorage";
 import { appearancePalette, DEFAULT_APPEARANCE, normalizeHex, readableForeground, resolveAccent } from "../theme";
 import type { AppearanceSettings, EntityVariant, JsonMap, ModelInfo, PreferredName, RuntimeConfig, ThemeMode, ThemePreference, UserProfile, WorldBible } from "../types";
 import { ArlineSelect, simpleOptions } from "./ArlineSelect";
+import { ModelPicker } from "./ModelPicker";
 
 interface SettingsDrawerProps {
   open: boolean;
@@ -115,6 +116,12 @@ export function SettingsDrawer({ open, config, onConfig, appearance, onAppearanc
   const [memoryClearOpen, setMemoryClearOpen] = useState(false);
   const [memoryClearSelection, setMemoryClearSelection] = useState<string[]>([]);
 
+  // Fill the model list as soon as the runtime tab is shown, without a manual refresh.
+  useEffect(() => {
+    if (!open || tab !== "runtime") return;
+    void studioApi.models(config.server_url).then((result) => setModels(result.models || [])).catch(() => setModels([]));
+  }, [open, tab, config.server_url, config.inference_engine, config.models_dir]);
+
   useEffect(() => {
     if (!open) setStatus("");
     if (open) void studioApi.userProfile().then((profile) => setUserProfile(normalizeUserProfile(profile))).catch(() => setUserProfile(DEFAULT_USER_PROFILE));
@@ -140,11 +147,42 @@ export function SettingsDrawer({ open, config, onConfig, appearance, onAppearanc
     try {
       const result = await studioApi.models(config.server_url, apiKey);
       setModels(result.models || []);
-      setStatus(`Found ${result.models?.length || 0} model(s)`);
+      setStatus(`Found ${result.models?.length || 0} model(s)${result.models_dir ? ` in ${result.models_dir}` : ""}`);
     } catch (error) {
       setStatus((error as Error).message);
     } finally {
       setLoadingModels(false);
+    }
+  };
+
+  const applyModelsFolder = async (models_dir: string) => {
+    setStatus("Scanning folder…");
+    try {
+      await studioApi.saveSettings({ models_dir });
+      onConfig({ ...config, models_dir });
+      const result = await studioApi.models(config.server_url);
+      setModels(result.models || []);
+      setStatus(`Found ${result.models?.length || 0} model(s) in ${result.models_dir || models_dir}`);
+    } catch (error) {
+      setStatus((error as Error).message);
+    }
+  };
+
+  const browseModelsFolder = async () => {
+    try {
+      const picked = await studioApi.pickModelsFolder();
+      if (picked.path) await applyModelsFolder(picked.path);
+    } catch (error) {
+      setStatus((error as Error).message);
+    }
+  };
+
+  const changeEngine = async (inference_engine: string) => {
+    onConfig({ ...config, inference_engine });
+    try {
+      await studioApi.saveSettings({ inference_engine });
+    } catch (error) {
+      setStatus((error as Error).message);
     }
   };
 
@@ -155,6 +193,7 @@ export function SettingsDrawer({ open, config, onConfig, appearance, onAppearanc
     browserStorage.set("arline:contrast", appearance.contrast);
     try {
       await studioApi.saveSettings({
+        inference_engine: config.inference_engine || "lmstudio",
         server_url: config.server_url,
         api_key: apiKey || null,
         model: config.model,
@@ -489,12 +528,20 @@ export function SettingsDrawer({ open, config, onConfig, appearance, onAppearanc
             </div>}
 
             {tab === "runtime" && <>
-              <PanelHeading title="Models & Runtime" description="The UI is TypeScript now; the model runtime remains local Python + LM Studio." />
-              <label><span>LM Studio server</span><input value={config.server_url} onChange={(event) => patch("server_url", event.target.value)} /></label>
-              <label><span>API token</span><input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={config.api_key_configured ? "Configured securely · optional override" : "Optional session token"} /></label>
+              <PanelHeading title="Models & Runtime" description="Choose the inference engine. With llama-server, pick the folder that holds your GGUF models, then choose a model; it loads right away." />
+              <label><span>Inference engine</span><ArlineSelect ariaLabel="Inference engine" value={config.inference_engine || "lmstudio"} options={(config.inference_engines || ["lmstudio", "llama_server"]).map((value) => ({ value, label: value === "llama_server" ? "llama-server (managed by Arline)" : "LM Studio" }))} onValueChange={(engine) => void changeEngine(engine)} /></label>
+              {config.inference_engine === "llama_server" && <div className="models-folder-row">
+                <label><span>Models folder</span><input value={config.models_dir || ""} placeholder={config.models_dir_effective || "Choose the folder with your GGUF models"} onChange={(event) => patch("models_dir", event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void applyModelsFolder(config.models_dir || ""); }} /></label>
+                <div className="models-folder-actions">
+                  <button className="secondary-action" onClick={() => void browseModelsFolder()}><FolderOpen size={13} />Browse…</button>
+                  <button className="secondary-action" onClick={() => void applyModelsFolder(config.models_dir || "")}><RefreshCcw size={13} />Scan</button>
+                </div>
+              </div>}
+              {(config.inference_engine || "lmstudio") === "lmstudio" && <label><span>LM Studio server</span><input value={config.server_url} onChange={(event) => patch("server_url", event.target.value)} /></label>}
+              {(config.inference_engine || "lmstudio") === "lmstudio" && <label><span>API token</span><input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} placeholder={config.api_key_configured ? "Configured securely · optional override" : "Optional session token"} /></label>}
               <button className="secondary-action wide" onClick={() => void refreshModels()} disabled={loadingModels}><RefreshCcw size={13} className={loadingModels ? "spin" : ""} />Refresh models</button>
               <button className="secondary-action wide" onClick={async () => { setStatus("Reloading model…"); try { await studioApi.reloadModel({ server_url: config.server_url, api_key: apiKey || null, model: config.model, gpu_ratio: config.gpu_ratio, context_length: config.context_length }); setStatus("Model reload requested"); } catch (error) { setStatus((error as Error).message); } }} disabled={!config.model}><RefreshCcw size={13} />Apply / Reload model</button>
-              <label><span>Model</span><ArlineSelect ariaLabel="Model" value={config.model || ""} options={[{ value: "", label: "Select model…", description: "Refresh models to discover local runtimes" }, ...models.map((model) => ({ value: model.key, label: model.display_name || model.key, description: model.loaded ? "Loaded and ready" : "Available in LM Studio" })), ...(config.model && !models.some((model) => model.key === config.model) ? [{ value: config.model, label: config.model, description: "Configured model" }] : [])]} onValueChange={(model) => patch("model", model)} menuMinWidth={300} /></label>
+              <label className="model-section"><span>Model</span><ModelPicker config={config} onConfig={onConfig} /></label>
               <label><span>GPU offload <em>{Number(config.gpu_ratio || 0).toFixed(2)}</em></span><input type="range" min={0} max={1} step={0.05} value={config.gpu_ratio} onChange={(event) => patch("gpu_ratio", Number(event.target.value))} /></label>
               <label><span>Context length</span><input type="number" min={1024} step={1024} value={config.context_length} onChange={(event) => patch("context_length", Number(event.target.value))} /></label>
             </>}

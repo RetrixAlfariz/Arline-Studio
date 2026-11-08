@@ -135,10 +135,6 @@ pub fn handle(
         ("GET", "workspace") if path.get(1) == Some(&"bootstrap") => bootstrap(state, query),
         ("POST", "canon") if path.get(1) == Some(&"promote") => promote(state, body),
         ("POST", "retcon") if path.get(1) == Some(&"apply") => retcon(state, body),
-        ("POST", "quick-create") if path.get(1) == Some(&"preview") => {
-            quick_create_preview(state, body)
-        }
-        ("POST", "quick-create") => quick_create(state, body),
         _ => route_by_table(state, &method, path, query, body),
     };
     Some(result)
@@ -164,7 +160,6 @@ fn owned_head(head: &str) -> bool {
             | "workspace"
             | "canon"
             | "retcon"
-            | "quick-create"
             | "entities"
             | "scenes"
             | "staged-changes"
@@ -208,267 +203,6 @@ fn link_project_world(state: &AppState, body: &Value) -> ApiResult<Value> {
         &[&project_id, &world_id, &role, &chrono::Utc::now().to_rfc3339()],
     )?;
     Ok(json!({"project_id":project_id,"world_id":world_id,"role":role}))
-}
-
-fn quick_create_preview(state: &AppState, body: &Value) -> ApiResult<Value> {
-    let text = body
-        .get("text")
-        .and_then(Value::as_str)
-        .unwrap_or("")
-        .trim();
-    if text.is_empty() {
-        return Err(ApiError::bad_request("Describe what you want to create"));
-    }
-    let forced = body.get("forced_kind").and_then(Value::as_str);
-    let mut raw = text.to_owned();
-    let mut detected = Vec::new();
-    let mut kind = forced.unwrap_or("").to_owned();
-    for (candidate, prefixes) in [
-        (
-            "project",
-            &["project ", "project:", "proyek ", "proyek:"][..],
-        ),
-        ("world", &["world ", "world:", "dunia ", "dunia:"][..]),
-        ("folder", &["folder ", "folder:"][..]),
-        (
-            "document",
-            &["document ", "document:", "dokumen ", "dokumen:"][..],
-        ),
-        ("entity", &["entity ", "entity:", "sheet ", "sheet:"][..]),
-    ] {
-        if kind.is_empty() {
-            if let Some(prefix) = prefixes
-                .iter()
-                .find(|prefix| raw.to_ascii_lowercase().starts_with(**prefix))
-            {
-                raw = raw[prefix.len()..]
-                    .trim_start_matches([' ', ':', '-'])
-                    .to_owned();
-                kind = candidate.to_owned();
-                detected.push(format!("explicit {}", candidate));
-                break;
-            }
-        }
-    }
-    let lower = raw.to_ascii_lowercase();
-    let document_words = [
-        "scene",
-        "chapter",
-        "bab",
-        "outline",
-        "draft",
-        "note",
-        "catatan",
-        "lore note",
-    ];
-    let (entity_type, confidence) =
-        if kind == "document" || document_words.iter().any(|word| lower.contains(word)) {
-            kind = "document".into();
-            (None, if forced.is_some() { 0.90 } else { 0.78 })
-        } else {
-            if kind.is_empty() {
-                kind = "entity".into();
-            }
-            let cues = [
-                (
-                    "location",
-                    &[
-                        "apartemen",
-                        "apartment",
-                        "lantai",
-                        "floor",
-                        "unit",
-                        "kamar",
-                        "room",
-                        "rumah",
-                        "house",
-                        "gedung",
-                        "building",
-                        "jalan",
-                        "street",
-                        "city",
-                        "kota",
-                        "forest",
-                        "hutan",
-                    ][..],
-                ),
-                (
-                    "item",
-                    &[
-                        "pedang", "sword", "blade", "weapon", "senjata", "cincin", "ring", "buku",
-                        "book", "armor", "potion", "artifact", "artefak",
-                    ][..],
-                ),
-                (
-                    "organization",
-                    &[
-                        "organization",
-                        "organisasi",
-                        "guild",
-                        "ordo",
-                        "faction",
-                        "faksi",
-                        "company",
-                        "perusahaan",
-                        "kingdom",
-                        "kerajaan",
-                        "academy",
-                        "akademi",
-                    ][..],
-                ),
-                (
-                    "world_rule",
-                    &[
-                        "rule",
-                        "aturan",
-                        "hukum",
-                        "magic system",
-                        "sistem sihir",
-                        "mekanisme dunia",
-                    ][..],
-                ),
-                (
-                    "character",
-                    &["character", "karakter", "tokoh", "orang", "person", "npc"][..],
-                ),
-            ];
-            let found = cues
-                .iter()
-                .find(|(_, words)| words.iter().any(|word| lower.contains(word)));
-            match found {
-                Some((kind, _)) => (
-                    Some((*kind).to_owned()),
-                    if *kind == "location" { 0.90 } else { 0.84 },
-                ),
-                None if raw.split_whitespace().count() <= 4
-                    && !raw.chars().any(|c| c.is_ascii_digit()) =>
-                {
-                    (Some("character".into()), 0.58)
-                }
-                None => (Some("lore".into()), 0.55),
-            }
-        };
-    let name_override = body
-        .get("name")
-        .and_then(Value::as_str)
-        .filter(|v| !v.trim().is_empty());
-    let name = name_override.unwrap_or(raw.as_str()).to_owned();
-    let doc_type = if kind == "document" {
-        Some(if lower.contains("chapter") || lower.contains("bab") {
-            "chapter"
-        } else if lower.contains("outline") {
-            "outline"
-        } else if lower.contains("note") || lower.contains("catatan") {
-            "note"
-        } else {
-            "scene"
-        })
-    } else {
-        None
-    };
-    let mut attributes = Map::new();
-    let mut shared = Map::new();
-    let mut warnings: Vec<String> = Vec::new();
-    if let Some(entity_type) = entity_type.as_deref() {
-        if entity_type == "character" {
-            shared.insert("identity".into(), json!({"name": raw}));
-        }
-        if entity_type == "item" {
-            shared.insert("kind".into(), json!("item"));
-        }
-        if entity_type == "organization" {
-            shared.insert("kind".into(), json!("organization"));
-        }
-        if entity_type == "world_rule" {
-            shared.insert("domain".into(), Value::Null);
-            attributes.insert("rule".into(), json!(raw));
-        }
-        if entity_type == "location" {
-            shared.insert("kind".into(), json!("location"));
-            for marker in ["floor", "lantai"] {
-                if let Some(value) = lower
-                    .split(marker)
-                    .nth(1)
-                    .and_then(|tail| tail.trim_matches([' ', ':', '-']).split_whitespace().next())
-                {
-                    attributes.insert(
-                        "floor".into(),
-                        value
-                            .parse::<i64>()
-                            .map(Value::from)
-                            .unwrap_or_else(|_| json!(value)),
-                    );
-                    detected.push(format!("floor {}", value));
-                    break;
-                }
-            }
-        }
-        if entity_type == "lore" {
-            warnings
-                .push("Arline could not confidently infer the sheet type; guessed Lore.".into());
-        }
-    }
-    let mut out = json!({
-        "kind": if kind == "document" { "document" } else if ["project","world","folder"].contains(&kind.as_str()) { kind.as_str() } else { "entity" },
-        "entity_type": entity_type.clone(),
-        "name": name,
-        "description": if kind == "entity" { raw.clone() } else { String::new() },
-        "confidence": confidence,
-        "attributes": attributes,
-        "shared_core": shared,
-        "document_type": doc_type,
-        "warnings": warnings,
-        "detected": detected,
-        "possible_matches": [],
-    });
-    if out["kind"] == "entity" {
-        let candidate_type = body
-            .get("entity_type")
-            .and_then(Value::as_str)
-            .or(entity_type.as_deref());
-        let mut matches = Vec::new();
-        for family in state.store.list("entity_families", &[])? {
-            if candidate_type.is_some()
-                && family.get("entity_type").and_then(Value::as_str) != candidate_type
-            {
-                continue;
-            }
-            let label = family.get("name").and_then(Value::as_str).unwrap_or("");
-            let score = similarity(&name, label);
-            if score >= 0.68 {
-                matches.push(json!({"type":"entity_family","id":family["id"],"label":label,"entity_type":family["entity_type"],"score":((score * 1000.0).round() / 1000.0),"alias":null}));
-            }
-        }
-        matches.sort_by(|a, b| {
-            b["score"]
-                .as_f64()
-                .partial_cmp(&a["score"].as_f64())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        out["possible_matches"] = Value::Array(matches.into_iter().take(5).collect());
-    }
-    Ok(out)
-}
-
-fn similarity(left: &str, right: &str) -> f64 {
-    let a: Vec<char> = left.to_ascii_lowercase().chars().collect();
-    let b: Vec<char> = right.to_ascii_lowercase().chars().collect();
-    if a.is_empty() || b.is_empty() {
-        return 0.0;
-    }
-    let mut row: Vec<usize> = (0..=b.len()).collect();
-    for (i, ca) in a.iter().enumerate() {
-        let mut next = vec![i + 1; b.len() + 1];
-        for (j, cb) in b.iter().enumerate() {
-            next[j + 1] = if ca == cb {
-                row[j]
-            } else {
-                1 + row[j].min(row[j + 1]).min(next[j])
-            };
-        }
-        row = next;
-    }
-    1.0 - row[b.len()] as f64 / a.len().max(b.len()) as f64
 }
 
 fn route_by_table(
@@ -1291,16 +1025,6 @@ fn retcon(state: &AppState, body: &Value) -> ApiResult<Value> {
     )
 }
 
-fn quick_create(state: &AppState, body: &Value) -> ApiResult<Value> {
-    let obj = body
-        .as_object()
-        .ok_or_else(|| ApiError::bad_request("payload must be an object"))?;
-    if obj.get("project_id").is_some() {
-        scope_gate(state, obj)?;
-    }
-    state.store.insert("workspace_documents", json!({"project_id": obj.get("project_id").cloned().unwrap_or(Value::String("".into())), "world_id": obj.get("world_id").cloned().unwrap_or(Value::Null), "branch_id": obj.get("branch_id").cloned().unwrap_or(Value::Null), "title": obj.get("title").cloned().unwrap_or_else(|| json!("Untitled")), "content": obj.get("content").cloned().unwrap_or_else(|| json!("")), "document_type":"scene", "status":"planned"}))
-}
-
 fn query_filter(query: &HashMap<String, String>, key: &'static str) -> Vec<(&'static str, Value)> {
     query
         .get(key)
@@ -1339,6 +1063,7 @@ mod tests {
             "preferences",
             "run-profiles",
             "memory",
+            "quick-create",
         ] {
             assert!(!owned_head(head), "{head} must fall through");
         }
@@ -1347,7 +1072,6 @@ mod tests {
             "worlds",
             "workspace",
             "world-bible",
-            "quick-create",
         ] {
             assert!(owned_head(head), "{head} belongs to workspace");
         }

@@ -1,5 +1,7 @@
 # Arline Architecture Hardening
 
+> **2026-11-08:** The Python backend (`src/`) and legacy static UI are frozen; the native Rust runtime is the product. Parity fixes only. Retirement gates: [PYTHON_RETIREMENT_GAPS.md](PYTHON_RETIREMENT_GAPS.md).
+
 This document records the integration boundaries introduced during the v1.2.2 hardening pass. The goal is not to redesign Arline's narrative model; it is to make the existing Canon, Memory, Discovery, and Continuity model easier to reason about and safer to extend.
 
 ## 1. Authority first, derived state second

@@ -46,6 +46,7 @@ import { runtimePayload, streamGeneration, studioApi } from "../api";
 import { deliberationSelectorMode, withDeliberationMode } from "../deliberation";
 import { OUTPUT_BUDGET_OPTIONS, withOutputBudgetMode, withResponseLength } from "../outputBudget";
 import { ArlineSelect, simpleOptions, type ArlineSelectOption } from "../components/ArlineSelect";
+import { ModelPicker } from "../components/ModelPicker";
 import type {
   CommandDefinition,
   GenerationResult,
@@ -908,7 +909,11 @@ export function ChatView({
           <button aria-pressed={conversationMode === "story_lab"} onClick={() => void changeConversation("story_lab")}><FlaskConical size={14} /><span>Story Lab</span></button>
           <button aria-pressed={conversationMode === "interactive"} onClick={() => void changeConversation("interactive")}><UserRound size={14} /><span>Interactive</span></button>
         </nav>
-        <div className="writing-mode-options"><div className="conversation-mode-control">
+        <div className="writing-mode-options"><div className="conversation-mode-control model-mode-control">
+            <span>Model</span>
+            <ModelPicker config={config} onConfig={onConfig} disabled={generating} />
+          </div>
+          <div className="conversation-mode-control">
             <span>Conversation</span>
             <ArlineSelect ariaLabel="Conversation mode" density="compact" value={conversationMode} options={MODE_OPTIONS} onValueChange={(value) => void changeConversation(value as ConversationMode)} menuMinWidth={330} />
           </div>
@@ -1198,7 +1203,7 @@ export function ChatView({
 
               <section className="run-settings-section model-section">
                 <div className="run-setting-heading"><span><Cpu size={13} />Model</span><small>{visionSupport === "supported" ? "Vision capable" : "Text generation"}</small></div>
-                <div className="model-field"><span className={`model-status ${config.model ? "online" : ""}`} /><input value={config.model || ""} onChange={(event) => onConfig({ ...config, model: event.target.value })} placeholder="Select a model in Settings" /><small>LM Studio</small></div>
+                <ModelPicker config={config} onConfig={onConfig} disabled={generating} />
               </section>
 
               <div className="run-settings-grid profile-grid">

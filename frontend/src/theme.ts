@@ -75,24 +75,23 @@ export function readableForeground(background: string): "#FFFFFF" | "#1E2120" {
   return contrastRatio(background, "#FFFFFF") >= contrastRatio(background, "#1E2120") ? "#FFFFFF" : "#1E2120";
 }
 
-export function appearancePalette(value: string, theme: ThemeMode) {
-  const hue = rgbToHsl(hexToRgb(value)).h;
-  const tone = (s: number, l: number) => rgbToHex(hslToRgb({ h: hue, s, l }));
+/** Notion-style neutrals: warm grays that do not take on the accent hue. */
+export function appearancePalette(_accent: string, theme: ThemeMode) {
   if (theme === "light") {
-    const text = tone(11, 17);
+    const text = "#37352F";
     return {
-      surface: tone(11, 94), surface0: tone(10, 91), surface1: tone(9, 98), surface2: "#FFFFFF",
-      surface3: tone(11, 91), surface4: tone(12, 85), canvas: tone(9, 96),
-      text, textSoft: tone(10, 29), muted: tone(8, 43), soft: tone(7, 58),
-      line: alpha(text, .11), lineStrong: alpha(text, .20),
+      surface: "#F7F7F5", surface0: "#F7F6F3", surface1: "#F7F7F5", surface2: "#FFFFFF",
+      surface3: "#EFEFED", surface4: "#E3E2E0", canvas: "#FFFFFF",
+      text, textSoft: "#4A4843", muted: "#787774", soft: "#9B9A97",
+      line: alpha(text, .09), lineStrong: alpha(text, .16), hover: alpha(text, .06),
     };
   }
-  const text = tone(8, 95);
+  const text = "#D4D4D4";
   return {
-    surface: tone(10, 10), surface0: tone(10, 7), surface1: tone(10, 9), surface2: tone(11, 12),
-    surface3: tone(12, 16), surface4: tone(12, 21), canvas: tone(9, 8),
-    text, textSoft: tone(8, 86), muted: tone(8, 65), soft: tone(8, 48),
-    line: alpha(text, .10), lineStrong: alpha(text, .19),
+    surface: "#202020", surface0: "#252525", surface1: "#202020", surface2: "#252525",
+    surface3: "#2F2F2F", surface4: "#373737", canvas: "#191919",
+    text, textSoft: "#C4C4C4", muted: "#9B9B9B", soft: "#7D7D7D",
+    line: "rgba(255,255,255,0.094)", lineStrong: "rgba(255,255,255,0.16)", hover: "rgba(255,255,255,0.055)",
   };
 }
 
@@ -117,10 +116,13 @@ export function appearanceVariables(settings: AppearanceSettings, theme: ThemeMo
     "--soft": palette.soft,
     "--core": accent,
     "--core-bright": bright,
-    "--core-soft": alpha(accent, settings.contrast === "high" ? .20 : .12),
-    "--core-line": alpha(accent, settings.contrast === "high" ? .68 : .44),
-    "--core-glow": alpha(bright, settings.contrast === "high" ? .32 : .20),
-    "--core-shadow": alpha(accent, settings.contrast === "high" ? .30 : .18),
+    // Selection and active states stay neutral (gray hover fill); the accent is
+    // reserved for primary actions, links, focus rings and status.
+    "--core-soft": settings.contrast === "high" ? palette.lineStrong : palette.hover,
+    "--core-line": settings.contrast === "high" ? alpha(accent, .68) : palette.lineStrong,
+    "--core-glow": alpha(accent, settings.contrast === "high" ? .45 : .32),
+    "--core-shadow": "transparent",
+    "--hover": palette.hover,
     "--accent-foreground": readableForeground(accent),
   } as CSSProperties;
 }

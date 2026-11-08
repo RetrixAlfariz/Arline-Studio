@@ -196,7 +196,6 @@ export function ManuscriptView({ projectId, worldId, branchId, documents, folder
         {doc ? (
           <>
             <div className="editor-toolbar">
-              <input className="document-title-input" value={title} onChange={(event) => setTitle(event.target.value)} />
               <div>
                 <select value={status} onChange={(event) => setStatus(event.target.value)}><option>planned</option><option>writing</option><option>revising</option><option>final</option></select>
                 <select value={doc.folder_id || ""} onChange={async (event) => { const updated = await studioApi.updateDocument(doc.id, { folder_id: event.target.value || null }); setDoc(updated); await onDocumentsChanged(); }} title="Move document"><option value="">No folder</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select>
@@ -207,6 +206,7 @@ export function ManuscriptView({ projectId, worldId, branchId, documents, folder
                 <button className="primary-action small" disabled={saving} onClick={() => void save()}><Save size={13} />{saving ? "Saving" : "Checkpoint"}</button>
               </div>
             </div>
+            <input className="document-title-input" aria-label="Document title" placeholder="Untitled" value={title} onChange={(event) => setTitle(event.target.value)} />
             <textarea className="manuscript-editor" value={content} onChange={(event) => setContent(event.target.value)} spellCheck placeholder="Write the scene here…" />
             <div className="editor-status"><span>{saveLabel}</span><span>{wordCount.toLocaleString()} words</span></div>
           </>

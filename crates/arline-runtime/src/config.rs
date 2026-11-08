@@ -6,6 +6,12 @@ use std::{
 };
 
 const DEFAULT_CONFIG: &str = r#"
+[inference]
+engine = "lmstudio"
+[llama_server]
+executable = ""
+models_dir = ""
+port = 18080
 [lmstudio]
 base_url = "http://127.0.0.1:1234"
 model = ""
@@ -278,6 +284,15 @@ impl RuntimeConfig {
     }
 
     pub fn api_payload(&self) -> Value {
+        let mut payload = self.api_payload_base();
+        payload["inference_engine"] = json!(self.str("inference.engine", "lmstudio"));
+        payload["inference_engines"] = json!(["lmstudio", "llama_server"]);
+        payload["models_dir"] = json!(self.str("llama_server.models_dir", ""));
+        payload["models_dir_effective"] = json!(crate::inference::engine::models_dir(self));
+        payload
+    }
+
+    fn api_payload_base(&self) -> Value {
         json!({
             "studio_version":"1.2.5a1-rust", "runtime":"rust", "python_required":false,
             "server_url":self.str("lmstudio.base_url","http://127.0.0.1:1234"),
@@ -308,7 +323,24 @@ impl RuntimeConfig {
             .as_object()
             .ok_or_else(|| ApiError::bad_request("Settings must be an object"))?;
         let mut updated = self.clone();
+        if let Some(engine) = object.get("inference_engine") {
+            if !matches!(engine.as_str(), Some("lmstudio" | "llama_server")) {
+                return Err(ApiError::bad_request(
+                    "inference_engine must be lmstudio or llama_server",
+                ));
+            }
+        }
+        if let Some(dir) = object.get("models_dir") {
+            let dir = dir
+                .as_str()
+                .ok_or_else(|| ApiError::bad_request("models_dir must be a string"))?;
+            if !dir.is_empty() && !Path::new(dir).is_dir() {
+                return Err(ApiError::bad_request(format!("Models folder not found: {dir}")));
+            }
+        }
         let fields = [
+            ("inference_engine", "inference.engine"),
+            ("models_dir", "llama_server.models_dir"),
             ("server_url", "lmstudio.base_url"),
             ("model", "lmstudio.model"),
             ("auto_load", "lmstudio.auto_load"),

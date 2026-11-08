@@ -32,3 +32,6 @@ tmp/
 # Ad hoc QA captures; curated evidence belongs in docs/design-qa/.
 /design-qa*.png
 /design-qa.md
+
+# Local inference engine binaries
+tools/

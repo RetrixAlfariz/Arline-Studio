@@ -275,7 +275,6 @@ pub(crate) async fn deliberate_with_override(
         analysis["narrative_brief"]["text"].as_str().unwrap_or(""),
         prompt
     );
-    let base = cfg.str("lmstudio.base_url", "http://127.0.0.1:1234");
     let configured_model = cfg.str("lmstudio.model", "");
     let model = cfg.str("deliberation.model",body.get("model").and_then(Value::as_str).unwrap_or(&configured_model));
     let limit = output_budget
@@ -290,8 +289,8 @@ pub(crate) async fn deliberate_with_override(
     };
     let mut request = state
         .client
-        .post(format!("{}/api/v1/chat", base.trim_end_matches('/')))
-        .json(&payload);
+        .post(crate::inference::engine::chat_url(&cfg))
+        .json(&crate::inference::engine::provider_body(&cfg, &payload));
     let key = cfg.str("lmstudio.api_key", "");
     if !key.is_empty() {
         request = request.bearer_auth(key);
@@ -306,7 +305,7 @@ pub(crate) async fn deliberate_with_override(
         return json!({"version":"1.2.4a1","status":"fallback","authority":"soft_non_canon","diagnostics":[format!("Deliberator HTTP {}",response.status())],"scene_goal":prompt});
     }
     let raw: Value = match response.json().await {
-        Ok(value) => value,
+        Ok(value) => crate::inference::engine::normalize_response(&cfg, value),
         Err(error) => {
             return json!({"version":"1.2.4a1","status":"fallback","authority":"soft_non_canon","diagnostics":[error.to_string()],"scene_goal":prompt})
         }

@@ -50,6 +50,10 @@ export interface PreferredName {
 export interface RuntimeConfig extends JsonMap {
   studio_version: string;
   server_url: string;
+  inference_engine?: string;
+  inference_engines?: string[];
+  models_dir?: string;
+  models_dir_effective?: string | null;
   api_key_configured?: boolean;
   model: string;
   gpu_ratio: number;

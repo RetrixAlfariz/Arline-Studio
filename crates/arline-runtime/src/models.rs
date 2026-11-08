@@ -29,6 +29,7 @@ pub async fn handle(
             .and_then(|mut config| config.apply_settings(body)),
         ("GET", ["models"]) | ("POST", ["models", "query"]) => query_models(&state, body).await,
         ("POST", ["model", "reload"]) => reload_model(&state, body).await,
+        ("POST", ["models", "pick-folder"]) => pick_models_folder(&state).await,
         _ => return None,
     };
     Some(result.map(|value| Json(value).into_response()))
@@ -483,12 +484,18 @@ async fn provider_json(request: reqwest::RequestBuilder) -> ApiResult<Value> {
 }
 
 pub async fn query_models(state: &AppState, body: &Value) -> ApiResult<Value> {
-    let (server, key) = provider(state, body)?;
-    let mut request = state.client.get(format!("{server}/api/v1/models"));
-    if !key.is_empty() {
-        request = request.bearer_auth(key);
-    }
-    let result = provider_json(request).await?;
+    let config = state.runtime_config()?;
+    let llama = crate::inference::engine::is_llama(&config);
+    let result = if llama {
+        crate::inference::engine::models_payload(state, &config).await
+    } else {
+        let (server, key) = provider(state, body)?;
+        let mut request = state.client.get(format!("{server}/api/v1/models"));
+        if !key.is_empty() {
+            request = request.bearer_auth(key);
+        }
+        provider_json(request).await?
+    };
     let models = result
         .get("models")
         .or_else(|| result.get("data"))
@@ -499,9 +506,28 @@ pub async fn query_models(state: &AppState, body: &Value) -> ApiResult<Value> {
                 "LM Studio model list has no models array",
             )
         })?;
+    let provider = if llama { "llama_server" } else { "lmstudio" };
+    let models_dir = llama
+        .then(|| crate::inference::engine::models_dir(&config))
+        .flatten();
     Ok(
-        json!({"models": models.iter().filter(|model| model.get("type").and_then(Value::as_str)!=Some("embedding")).map(normalize_model).collect::<Vec<_>>()}),
+        json!({"models_dir":models_dir,"models": models.iter().filter(|model| model.get("type").and_then(Value::as_str)!=Some("embedding")).map(|model| {
+            let mut normalized = normalize_model(model);
+            normalized["capabilities"]["provider"] = json!(provider);
+            normalized
+        }).collect::<Vec<_>>()}),
     )
+}
+
+async fn pick_models_folder(state: &AppState) -> ApiResult<Value> {
+    let config = state.runtime_config()?;
+    let picked =
+        crate::inference::engine::pick_folder(crate::inference::engine::models_dir(&config))
+            .await?;
+    Ok(match picked {
+        Some(path) => json!({"path":path,"cancelled":false}),
+        None => json!({"path":null,"cancelled":true}),
+    })
 }
 
 fn normalize_model(model: &Value) -> Value {
@@ -560,6 +586,15 @@ async fn reload_model(state: &AppState, body: &Value) -> ApiResult<Value> {
     };
     if context_length == 0 {
         return Err(ApiError::bad_request("context_length must be positive"));
+    }
+    if crate::inference::engine::is_llama(&config) {
+        let result =
+            crate::inference::engine::load(state, &config, &model, context_length, gpu_ratio)
+                .await?;
+        return Ok(json!({"ok":true,"result":{"action":"reloaded","model":model,"engine":"llama_server",
+            "native_response":result,"gpu_ratio":gpu_ratio,"context_length":context_length,
+            "flash_attention":{"requested":config.bool("model_load.flash_attention", true),"applied":config.bool("model_load.flash_attention", true)}},
+            "config":config.api_payload()}));
     }
     let (server, key) = provider(state, body)?;
     if !is_local_server(&server) {

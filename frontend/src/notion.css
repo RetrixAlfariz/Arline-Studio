@@ -1,0 +1,244 @@
+/* Notion-style layer, loaded last: calm neutral surfaces, readable sentence-case
+   type, hairline borders, soft shadows only on floating UI, no glows or grids. */
+
+:root,
+.studio-shell,
+.arline-app-theme {
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+/* Tokens also on the app root: select menus render in a portal outside .studio-shell. */
+.arline-app-theme,
+.studio-shell {
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --shadow-control-soft: none;
+  --shadow-control-accent: none;
+  --shadow-sm: 0 0 0 1px var(--line), 0 2px 4px rgba(15, 15, 15, .06);
+  --shadow-lg: 0 0 0 1px var(--line), 0 3px 6px rgba(15, 15, 15, .1), 0 9px 24px rgba(15, 15, 15, .2);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Flat page: no grid paper, radial glow or tinted gradients. */
+.studio-shell .studio-main,
+.studio-shell[data-theme] .studio-main,
+.studio-shell .chat-workspace {
+  background: var(--canvas);
+  background-image: none;
+}
+.studio-shell .chat-header,
+.studio-shell .studio-topbar {
+  background: var(--canvas);
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+/* Sidebar: Notion's quiet gray rail with 14px items and gray hover/active fill. */
+.studio-shell .studio-sidebar {
+  background: var(--surface-1);
+}
+.studio-shell .sidebar-nav button,
+.studio-shell .sidebar-actions button,
+.studio-shell .sidebar-primary button,
+.studio-shell .recent-list button {
+  height: 30px;
+  min-height: 30px;
+  border-color: transparent;
+  border-radius: 4px;
+  box-shadow: none;
+  color: var(--text-soft);
+  font-size: 14px;
+}
+.studio-shell .sidebar-nav button:hover,
+.studio-shell .sidebar-primary button:hover,
+.studio-shell .recent-list button:hover {
+  background: var(--hover);
+}
+.studio-shell .sidebar-nav button.active,
+.studio-shell .sidebar-nav button[aria-current="page"] {
+  background: var(--hover);
+  border-color: transparent;
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: none;
+}
+.studio-shell .sidebar-section-title {
+  color: var(--soft);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* Floating surfaces keep a soft lift; everything else stays flat. */
+.studio-shell .composer-shell,
+.studio-shell .settings-drawer,
+.studio-shell .global-palette,
+.studio-shell .quick-modal,
+.studio-shell .composer-settings,
+.studio-shell .composer-popup {
+  box-shadow: var(--shadow-lg);
+}
+.studio-shell .composer-shell {
+  box-shadow: var(--shadow-sm);
+}
+
+/* Headings read like a Notion page: large, bold, no tracking. */
+.studio-shell h1,
+.studio-shell h2,
+.studio-shell h3 {
+  letter-spacing: -.01em;
+}
+.studio-shell .chat-empty h2 {
+  font-weight: 700;
+}
+
+/* Decorative gradients flattened (the base colour of each shorthand remains). */
+.studio-shell .composer-zone,
+.studio-shell .home-hero,
+.studio-shell .home-metrics button,
+.studio-shell .living-session-panel,
+.studio-shell .personalization-summary,
+.studio-shell .planning-pane,
+.studio-shell .presence-studio-panel,
+.studio-shell .profile-importer,
+.studio-shell .scene-corkboard>article,
+.studio-shell .sheet-proposal-modal>header,
+.studio-shell .sidebar-actions .sidebar-primary,
+.studio-shell .sidebar-nav button.active {
+  background-image: none;
+}
+
+/* Page header instead of a hero card: title sits on the page. */
+.studio-shell .home-hero {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  padding-inline: 0;
+}
+.studio-shell .eyebrow {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+/* "New chat" reads like Notion's "New page": a plain row, not a pill. */
+.studio-shell .sidebar-actions .sidebar-primary {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--text-soft);
+}
+.studio-shell .sidebar-actions .sidebar-primary:hover {
+  background: var(--hover);
+  box-shadow: none;
+}
+.studio-shell .sidebar-nav button.active::before,
+.studio-shell .sidebar-nav button.active::after {
+  display: none;
+}
+
+/* Floating UI gets the soft Notion lift... */
+.studio-shell .arline-select-menu,
+.arline-select-menu,
+.studio-shell .composer-popup,
+.studio-shell .composer-settings,
+.studio-shell .global-palette,
+.studio-shell .identity-popover,
+.studio-shell .modal,
+.studio-shell .scope-menu,
+.studio-shell .settings-drawer,
+.studio-shell .sheet-proposal-modal,
+.studio-shell .studio-tools-drawer,
+.studio-shell .library-peek,
+.studio-shell .global-error,
+.studio-shell.mobile-sidebar-open .studio-sidebar {
+  box-shadow: var(--shadow-lg);
+}
+/* ...and inline controls stay flat. */
+.studio-shell .appearance-preview,
+.studio-shell .arline-select-mode .arline-select-trigger,
+.studio-shell .arline-select-options>button.selected,
+.studio-shell .chat-header-actions .chat-mode-switch button.active,
+.studio-shell .chat-header-glyph,
+.studio-shell .command-list button.active,
+.studio-shell .conversation-mode-control>div,
+.studio-shell .identity-choice-grid>button.active,
+.studio-shell .living-session-panel,
+.studio-shell .personalization-summary,
+.studio-shell .presence-studio-panel,
+.studio-shell .primary-action,
+.studio-shell .primary-action:hover,
+.studio-shell .runtime-control:hover,
+.studio-shell .scene-corkboard>article,
+.studio-shell .scene-corkboard>article.selected,
+.studio-shell .setting-segments button.active,
+.studio-shell .session-live-dot::before {
+  box-shadow: none;
+}
+.studio-shell .composer-shell:focus-within {
+  box-shadow: var(--shadow-sm), 0 0 0 2px var(--core-glow);
+}
+
+/* Writing studio: a white (or #191919) page instead of cream paper. */
+.studio-shell .chat-workspace.writing-studio[data-mode],
+.studio-shell[data-theme="light"] .writing-studio {
+  --writing-paper: var(--canvas);
+  --writing-paper-deep: var(--surface-1);
+  --writing-ink: var(--text);
+  --writing-muted: var(--muted);
+  --writing-rule: var(--line-strong);
+  --writing-accent: var(--core);
+}
+
+/* Manuscript editor as a Notion page: quiet action bar, big title, centered text column. */
+.studio-shell .editor-pane {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 44px auto minmax(0, 1fr) 34px;
+  background: var(--canvas);
+}
+.studio-shell .editor-toolbar {
+  justify-content: flex-end;
+  min-width: 0;
+  overflow-x: auto;
+  border-bottom: 0;
+}
+.studio-shell .editor-toolbar select,
+.studio-shell .editor-toolbar button:not(.primary-action) {
+  height: 28px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+}
+.studio-shell .editor-toolbar select:hover,
+.studio-shell .editor-toolbar button:not(.primary-action):hover {
+  background: var(--hover);
+  color: var(--text);
+}
+.studio-shell .editor-pane .document-title-input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 36px max(42px, calc((100% - 760px) / 2)) 4px;
+  font: 700 40px/1.2 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI Variable Display", "Segoe UI", sans-serif;
+  letter-spacing: -.01em;
+}
+.studio-shell .editor-pane .document-title-input::placeholder {
+  color: var(--soft);
+}
+.studio-shell .manuscript-editor {
+  background: var(--canvas);
+  padding-top: 16px;
+}
+.studio-shell .editor-toolbar button,
+.studio-shell .editor-toolbar select {
+  flex: none;
+  white-space: nowrap;
+}
+.studio-shell .editor-pane > .center-empty {
+  grid-row: 1 / -1;
+  align-self: center;
+}
