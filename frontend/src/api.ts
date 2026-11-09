@@ -402,3 +402,21 @@ export async function streamGeneration(
   });
   return finalResult;
 }
+
+/**
+ * Rename a Library sheet. Library cards show the world variant's display_name, so variants that
+ * still carry the old name follow along; a variant given its own per-world name keeps it.
+ */
+export async function renameSheet(familyId: string, oldName: string, name: string, variants: Array<{ id: string; family_id?: string; display_name?: unknown }>) {
+  await studioApi.updateEntityFamily(familyId, { name });
+  const stale = variants.filter((variant) => variant.family_id === familyId && (!variant.display_name || variant.display_name === oldName));
+  await Promise.all(stale.map((variant) => studioApi.updateVariant(variant.id, { display_name: name })));
+}
+
+/** The id of a sheet's variant in this world, creating a plain draft one when it has none yet. */
+export async function ensureVariant(familyId: string, name: string, worldId: string, branchId: string, variants: Array<{ id: string; family_id?: string; world_id?: string }>) {
+  const existing = variants.find((variant) => variant.family_id === familyId && variant.world_id === worldId);
+  if (existing) return existing.id;
+  const created = await studioApi.createVariant({ family_id: familyId, world_id: worldId, branch_id: branchId || null, display_name: name, summary: "", canon_status: "draft" });
+  return String(created.id);
+}

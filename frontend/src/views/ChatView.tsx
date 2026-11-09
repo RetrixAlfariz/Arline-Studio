@@ -187,7 +187,7 @@ export function ChatView({
   const [analysis, setAnalysis] = useState<Record<string, unknown> | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
-  const [notebookOpen, setNotebookOpen] = useState(() => window.matchMedia("(min-width: 1200px)").matches);
+  const [notebookOpen, setNotebookOpen] = useState(false); // opened on demand from "Notes", like a Notion side peek
   const [mentions, setMentions] = useState<Array<Record<string, unknown>>>([]);
   const [mentionsLoading, setMentionsLoading] = useState(false);
   const [mentionsFailed, setMentionsFailed] = useState(false);

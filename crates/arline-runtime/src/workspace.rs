@@ -518,7 +518,26 @@ fn update(state: &AppState, table: &str, id: &str, body: &Value) -> ApiResult<Va
         .as_object()
         .ok_or_else(|| ApiError::bad_request("payload must be an object"))?;
     scope_gate(state, obj)?;
-    state.store.update(table, id, body.clone())
+    // Parity with the Python store: `note` is the revision message, not a column.
+    let mut fields = obj.clone();
+    let note = fields
+        .remove("note")
+        .and_then(|value| value.as_str().map(str::to_owned))
+        .unwrap_or_else(|| "updated".to_owned());
+    let updated = state.store.update(table, id, Value::Object(fields))?;
+    // Every document save is a durable revision, except autosave recovery snapshots.
+    if table == "workspace_documents" && !note.to_ascii_lowercase().starts_with("autosave") {
+        let content = updated.get("content").and_then(Value::as_str).unwrap_or("");
+        let revision_id = format!("revision-{}", uuid::Uuid::new_v4());
+        let now = chrono::Utc::now().to_rfc3339();
+        // Version is computed inside the INSERT so concurrent saves cannot collide.
+        state.store.execute(
+            "INSERT INTO workspace_revisions(id,resource_type,resource_id,version,content_json,note,created_at) \
+             SELECT ?, 'document', ?, COALESCE(MAX(version),0)+1, ?, ?, ? FROM workspace_revisions WHERE resource_type='document' AND resource_id=?",
+            &[&revision_id, &id, &content, &note, &now, &id],
+        )?;
+    }
+    Ok(updated)
 }
 
 fn list(
@@ -810,6 +829,22 @@ fn hidden_project_ids(state: &AppState) -> ApiResult<std::collections::HashSet<S
         .collect())
 }
 
+/// Drop rows that are archived or in Trash, matching what the export path shows.
+fn not_hidden(state: &AppState, kind: &str, rows: Vec<Value>) -> ApiResult<Vec<Value>> {
+    let foundation = crate::foundation::FoundationStore::from_store(state.store.clone());
+    let mut kept = Vec::with_capacity(rows.len());
+    for row in rows {
+        let hidden = match row.get("id").and_then(Value::as_str) {
+            Some(id) => foundation.is_hidden(kind, id, false, false)?,
+            None => false,
+        };
+        if !hidden {
+            kept.push(row);
+        }
+    }
+    Ok(kept)
+}
+
 fn world_bible(state: &AppState, query: &HashMap<String, String>) -> ApiResult<Value> {
     let bible_project = query
         .get("project_id")
@@ -838,15 +873,21 @@ fn world_bible(state: &AppState, query: &HashMap<String, String>) -> ApiResult<V
     out.insert("worlds".into(), Value::Array(worlds));
     out.insert(
         "families".into(),
-        Value::Array(state.store.list("entity_families", &[])?),
+        Value::Array(not_hidden(
+            state,
+            "entity_family",
+            state.store.list("entity_families", &[])?,
+        )?),
     );
     out.insert(
         "documents".into(),
-        Value::Array(
+        Value::Array(not_hidden(
+            state,
+            "document",
             state
                 .store
                 .list("workspace_documents", &query_filter(query, "project_id"))?,
-        ),
+        )?),
     );
     out.insert(
         "variants".into(),
@@ -1246,6 +1287,66 @@ mod tests {
                 &[("resource_id", json!(document_id))],
             )
             .expect("history");
-        assert_eq!(revisions_after.len(), 2);
+        // initial + the PATCH save + the restore
+        assert_eq!(revisions_after.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn note_is_a_revision_message_not_a_column() {
+        let temp = tempfile::tempdir().expect("temp");
+        let config = RuntimeConfig::create_default(temp.path().join("config.toml"), temp.path())
+            .expect("config");
+        let state = AppState::open(config).expect("state");
+        state
+            .store
+            .insert("projects", json!({"id":"P-NOTE","name":"Note","slug":"note"}))
+            .expect("project");
+        let empty = HashMap::new();
+        let call = |method: &str, path: &[&str], body: serde_json::Value| {
+            handle(&state, method, path, &empty, &body).expect("route")
+        };
+        let document = call("POST", &["documents"], json!({"project_id":"P-NOTE","title":"Draft","content":"one"})).expect("create");
+        let id = document["id"].as_str().unwrap();
+        call("PATCH", &["documents", id], json!({"content":"two","note":"react checkpoint"})).expect("checkpoint saves");
+        call("PATCH", &["documents", id], json!({"content":"three","note":"autosave 12:00"})).expect("autosave saves");
+        let notes: Vec<String> = state
+            .store
+            .list("workspace_revisions", &[("resource_id", json!(id))])
+            .expect("history")
+            .iter()
+            .map(|row| row["note"].as_str().unwrap_or_default().to_owned())
+            .collect();
+        assert_eq!(notes, ["initial", "react checkpoint"], "autosave must not add a revision");
+        let family = call("POST", &["entities", "families"], json!({"project_id":"P-NOTE","entity_type":"character","name":"Mara"})).expect("family");
+        let family_id = family["id"].as_str().unwrap();
+        let renamed = call("PATCH", &["entities", "families", family_id], json!({"name":"Mara Vell","note":"edited"})).expect("family note accepted");
+        assert_eq!(renamed["name"], "Mara Vell");
+    }
+
+    #[tokio::test]
+    async fn world_bible_hides_trashed_sheets() {
+        let temp = tempfile::tempdir().expect("temp");
+        let config = RuntimeConfig::create_default(temp.path().join("config.toml"), temp.path())
+            .expect("config");
+        let state = AppState::open(config).expect("state");
+        state
+            .store
+            .insert("projects", json!({"id":"P-TRASH","name":"Trash","slug":"trash"}))
+            .expect("project");
+        let empty = HashMap::new();
+        let call = |method: &str, path: &[&str], body: serde_json::Value| {
+            handle(&state, method, path, &empty, &body).expect("route")
+        };
+        let kept = call("POST", &["entities", "families"], json!({"project_id":"P-TRASH","entity_type":"character","name":"Kept"})).expect("kept");
+        let gone = call("POST", &["entities", "families"], json!({"project_id":"P-TRASH","entity_type":"character","name":"Gone"})).expect("gone");
+        crate::foundation::FoundationStore::from_store(state.store.clone())
+            .trash("entity_family", gone["id"].as_str().unwrap(), Some(&gone))
+            .expect("trash");
+        let mut query = HashMap::new();
+        query.insert("project_id".to_owned(), "P-TRASH".to_owned());
+        let bible = handle(&state, "GET", &["world-bible"], &query, &json!({})).expect("route").expect("bible");
+        let names: Vec<&str> = bible["families"].as_array().unwrap().iter().filter_map(|row| row["name"].as_str()).collect();
+        assert!(names.contains(&kept["name"].as_str().unwrap()), "{names:?}");
+        assert!(!names.contains(&"Gone"), "trashed sheet must not be listed: {names:?}");
     }
 }

@@ -205,6 +205,8 @@ jobs:
         run: |
           npm --prefix frontend ci
           npm --prefix frontend run build
+      - name: Relation graph layout tests
+        run: node frontend/tests/relation_layout.test.mjs
       - name: Build native runtime
         working-directory: crates/arline-runtime
         run: cargo build --locked --release

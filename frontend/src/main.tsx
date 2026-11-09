@@ -6,6 +6,7 @@ import "./theme.css";
 import "./styles.css";
 import "./chat-writing.css";
 import "./notion.css";
+import "./notion-structure.css";
 
 document.documentElement.dataset.arlineUi = "react";
 

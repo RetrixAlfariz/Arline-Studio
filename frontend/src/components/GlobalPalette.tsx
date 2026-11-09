@@ -29,18 +29,19 @@ interface Props {
   onWorld: (id: string) => void;
   onCommand: (command: CommandDefinition) => void;
   onInspect: (title: string, data: unknown) => void;
+  onEntity: (id: string) => void;
   onAddToChat: (text: string) => void;
 }
 
 const NAVIGATION: PaletteItem[] = [
   { id: "nav-home", kind: "navigation", label: "Home", subtitle: "Workspace overview", view: "home" },
   { id: "nav-chat", kind: "navigation", label: "Chat", subtitle: "Write with Arline", view: "chat" },
-  { id: "nav-manuscript", kind: "navigation", label: "Manuscript", subtitle: "Binder, Corkboard, and Outliner", view: "manuscript" },
+  { id: "nav-manuscript", kind: "navigation", label: "Manuscript", subtitle: "Documents as pages, board, and table", view: "manuscript" },
   { id: "nav-library", kind: "navigation", label: "Library", subtitle: "Objects, canon, and relationships", view: "library" },
   { id: "nav-commands", kind: "navigation", label: "Command Center", subtitle: "Command documentation and workflows", view: "commands" },
 ];
 
-export function GlobalPalette({ open, commands, sessions, documents, families, worlds, canonFacts, onClose, onView, onSession, onDocument, onWorld, onCommand, onInspect, onAddToChat }: Props) {
+export function GlobalPalette({ open, commands, sessions, documents, families, worlds, canonFacts, onClose, onView, onSession, onDocument, onWorld, onCommand, onInspect, onEntity, onAddToChat }: Props) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -75,7 +76,7 @@ export function GlobalPalette({ open, commands, sessions, documents, families, w
     else if (item.kind === "chat") onSession(String(item.data?.id));
     else if (item.kind === "document") onDocument(String(item.data?.id));
     else if (item.kind === "world") onWorld(String(item.data?.id));
-    else if (item.kind === "entity") { onView("library"); onInspect(item.label, item.data); }
+    else if (item.kind === "entity") onEntity(String((item.data as EntityFamily).id));
     else onInspect(item.label, item.data);
     onClose();
   };

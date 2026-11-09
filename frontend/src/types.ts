@@ -1,4 +1,4 @@
-export type AppView = "home" | "chat" | "manuscript" | "library" | "commands";
+export type AppView = "home" | "chat" | "manuscript" | "library" | "commands" | "entity" | "graph";
 export type ThemeMode = "dark" | "light";
 export type ThemePreference = "system" | ThemeMode;
 export type ContrastMode = "standard" | "high";

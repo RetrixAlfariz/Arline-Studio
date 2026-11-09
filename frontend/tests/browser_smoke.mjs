@@ -38,26 +38,28 @@ try {
     await welcome.waitFor({ state: "detached" });
   }
 
-  await page.getByRole("button", { name: "Chat", exact: true }).click();
+  // Sidebar-first navigation: no global top bar.
+  const sidebar = page.locator(".studio-sidebar");
+  await sidebar.locator(".sidebar-quick").getByRole("button", { name: "New chat", exact: true }).click();
   await page.waitForSelector(".chat-workspace", { state: "visible" });
   await page.waitForSelector(".composer-shell textarea", { state: "visible" });
   const placeholder = await page.locator(".composer-shell textarea").getAttribute("placeholder");
   if (placeholder !== "Describe what should happen next…") throw new Error(`Unexpected composer placeholder: ${placeholder}`);
 
-  await page.locator(".global-command").click();
+  await sidebar.locator(".sidebar-quick").getByRole("button", { name: /^Search/ }).click();
   await page.waitForSelector(".global-palette", { state: "visible" });
   await page.locator(".global-palette").press("Escape");
   await page.waitForSelector(".global-palette", { state: "detached" });
 
-  // The top-bar search opens the palette; Command Center is a distinct view.
-  await page.getByRole("button", { name: "Commands", exact: true }).click();
+  // Search opens the palette; Command Center is a distinct page.
+  await sidebar.getByRole("button", { name: "Commands", exact: true }).click();
   await page.waitForSelector(".command-view", { state: "visible" });
   const commandHeading = page.getByRole("heading", { name: "Direct Arline explicitly", exact: true });
   if ((await commandHeading.count()) !== 1 || !(await commandHeading.isVisible())) {
     throw new Error("Command Center heading did not render");
   }
 
-  await page.locator(".topbar-tools .icon-control").last().click();
+  await sidebar.getByRole("button", { name: "Settings", exact: true }).click();
   await page.waitForSelector(".settings-drawer", { state: "visible" });
   if (!(await page.locator(".settings-drawer").innerText()).toLowerCase().includes("models & runtime")) {
     throw new Error("Settings runtime panel is missing");
@@ -65,7 +67,7 @@ try {
   await page.locator(".settings-drawer > header .icon-control").click();
   await page.waitForSelector(".settings-drawer", { state: "detached" });
 
-  await page.getByRole("button", { name: "Quick create", exact: true }).click();
+  await sidebar.locator(".sidebar-quick").getByRole("button", { name: /^Quick create/ }).click();
   await page.waitForSelector(".quick-modal", { state: "visible" });
   if (!(await page.locator(".quick-modal").getByRole("heading", { name: "Describe what you need" }).isVisible())
       || !(await page.locator(".quick-modal textarea").isVisible())) {

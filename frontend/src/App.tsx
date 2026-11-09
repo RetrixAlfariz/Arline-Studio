@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, LoaderCircle } from "lucide-react";
-import { studioApi } from "./api";
+import { AlertTriangle, LoaderCircle, X } from "lucide-react";
+import { renameSheet, studioApi } from "./api";
 import { browserStorage, createClientId } from "./browserStorage";
 import { InspectorDrawer } from "./components/InspectorDrawer";
 import { GlobalPalette } from "./components/GlobalPalette";
@@ -9,6 +9,9 @@ import { SettingsDrawer } from "./components/SettingsDrawer";
 import { StudioToolsDrawer } from "./components/StudioToolsDrawer";
 import { WelcomeDialog } from "./components/WelcomeDialog";
 import { Shell } from "./components/Shell";
+import { PageHeader } from "./components/PageHeader";
+import { EntityPage } from "./views/EntityPage";
+import { RelationsPage } from "./views/RelationsPage";
 import { appearanceVariables, DEFAULT_ACCENT } from "./theme";
 import { ChatView } from "./views/ChatView";
 import { CommandCenterView } from "./views/CommandCenterView";
@@ -83,7 +86,9 @@ export default function App() {
   const [bible, setBible] = useState<WorldBible | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeSession, setActiveSession] = useState<Session | null>(null);
-  const [activeDocumentId, setActiveDocumentId] = useState("");
+  const [activeDocumentId, setActiveDocumentId] = useState(() => browserStorage.get("arline:react:document") || "");
+  const [activeEntityId, setActiveEntityId] = useState(() => browserStorage.get("arline:react:entity") || "");
+  const [libraryTab, setLibraryTab] = useState("all");
   const [selection, setSelection] = useState<Selection | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -95,6 +100,13 @@ export default function App() {
   const [scopeLoading, setScopeLoading] = useState(false);
   const [hydratedScopeKey, setHydratedScopeKey] = useState("");
   const [fatalError, setFatalError] = useState("");
+  const [toast, setToast] = useState<{ text: string; undo?: () => void } | null>(null);
+  const toastTimer = useRef<number | undefined>(undefined);
+  const showToast = (text: string, undo?: () => void) => {
+    window.clearTimeout(toastTimer.current);
+    setToast({ text, undo });
+    toastTimer.current = window.setTimeout(() => setToast(null), 7000);
+  };
   const scopeRequestRef = useRef<{ version: number; controller: AbortController | null }>({ version: 0, controller: null });
   const activeScopeKeyRef = useRef("");
 
@@ -288,8 +300,96 @@ export default function App() {
   };
 
   const openDocument = (id: string) => {
+    browserStorage.set("arline:react:document", id);
     setActiveDocumentId(id);
     setViewAndPersist("manuscript");
+  };
+
+  const openEntity = (id: string) => {
+    browserStorage.set("arline:react:entity", id);
+    setActiveEntityId(id);
+    setViewAndPersist("entity");
+  };
+
+  const openLibrary = (entityType: string) => {
+    setLibraryTab(entityType);
+    setViewAndPersist("library");
+  };
+
+  const newDocument = async () => {
+    if (!activeProjectId) return;
+    try {
+      const created = await studioApi.createDocument({ project_id: activeProjectId, world_id: activeWorldId || null, branch_id: activeBranchId || null, folder_id: null, title: "Untitled", document_type: "scene", status: "planned", content: "" });
+      await refreshScope();
+      openDocument(created.id);
+    } catch (error) {
+      setFatalError((error as Error).message);
+    }
+  };
+
+  const newEntity = async (entityType: string, name: string) => {
+    if (!activeProjectId) return;
+    try {
+      const family = await studioApi.createEntityFamily({ project_id: activeProjectId, entity_type: entityType, name });
+      // The sheet page edits the world variant's summary, so give the new sheet one in the active world.
+      if (activeWorldId) await studioApi.createVariant({ family_id: family.id, world_id: activeWorldId, branch_id: activeBranchId || null, display_name: name, summary: "", canon_status: "draft" });
+      await refreshScope();
+      openEntity(String(family.id));
+    } catch (error) {
+      setFatalError((error as Error).message);
+    }
+  };
+
+  const renameEntity = async (id: string, name: string) => {
+    const family = (bible?.families || []).find((item) => item.id === id);
+    try { await renameSheet(id, family?.name || "", name, bible?.variants || []); await refreshScope(); }
+    catch (error) { setFatalError((error as Error).message); }
+  };
+
+  // No confirm dialog: Trash is reversible, so offer Undo instead.
+  const trashEntity = async (id: string, name: string) => {
+    const wasOpen = view === "entity" && activeEntityId === id;
+    try {
+      await studioApi.trash("entity_family", id);
+      await refreshScope();
+      if (wasOpen) openLibrary("all");
+      showToast(`“${name}” moved to Trash`, async () => {
+        setToast(null);
+        try {
+          await studioApi.lifecycle("restore", "entity_family", id);
+          await refreshScope();
+          if (wasOpen) openEntity(id);
+        } catch (error) {
+          setFatalError((error as Error).message);
+        }
+      });
+    } catch (error) {
+      setFatalError((error as Error).message);
+    }
+  };
+
+  // A copy starts as a draft so it never silently becomes canon.
+  const duplicateEntity = async (id: string) => {
+    const family = (bible?.families || []).find((item) => item.id === id);
+    if (!family || !activeProjectId) return;
+    const name = `${family.name} copy`;
+    try {
+      const created = await studioApi.createEntityFamily({ project_id: activeProjectId, entity_type: family.entity_type, name, description: family.description || "", shared_core: family.shared_core || {} });
+      for (const variant of (bible?.variants || []).filter((item) => item.family_id === id && item.world_id)) {
+        await studioApi.createVariant({ family_id: created.id, world_id: variant.world_id, branch_id: variant.branch_id || null, display_name: name, summary: variant.summary || "", canon_status: "draft", attributes: variant.attributes || {}, current_state: variant.current_state || {} });
+      }
+      await refreshScope();
+      openEntity(String(created.id));
+      showToast(`Duplicated as “${name}”`);
+    } catch (error) {
+      setFatalError((error as Error).message);
+    }
+  };
+
+  // Library sheets open as pages; everything else keeps the inspector drawer.
+  const selectFromLibrary = (item: Selection) => {
+    if (item.kind === "entity" && item.id) openEntity(item.id);
+    else setSelection(item);
   };
 
   const inspect = (title: string, data: unknown) => setSelection({ kind: "analysis", title, data });
@@ -302,13 +402,16 @@ export default function App() {
   const documents = tree?.documents || [];
   const scopeReady = !activeProjectId || hydratedScopeKey === currentScopeKey;
 
+  const projectCrumb = { label: activeProject?.name || "Project", onClick: () => setViewAndPersist("home") };
   const mainContent = useMemo(() => {
-    if (view === "home") return <HomeView project={activeProject} documents={documents} sessions={sessions} bible={bible} tree={tree} onOpenChat={(id) => id ? void openSession(id) : newChat()} onOpenDocument={openDocument} onManuscript={() => setViewAndPersist("manuscript")} onLibrary={() => setViewAndPersist("library")} onQuickCreate={() => setQuickCreateOpen(true)} onStartPrompt={(prompt) => { setSeedPrompt(prompt); setViewAndPersist("chat"); }} />;
+    if (view === "entity") return <EntityPage familyId={activeEntityId} bible={bible} projectId={activeProjectId} worldId={activeWorldId} branchId={activeBranchId} crumbs={[projectCrumb, { label: "Library", onClick: () => openLibrary("all") }, { label: (bible?.families || []).find((item) => item.id === activeEntityId)?.name || "Sheet" }]} onOpenEntity={openEntity} onInspect={setSelection} onChanged={refreshScope} onTrash={() => { const family = (bible?.families || []).find((item) => item.id === activeEntityId); if (family) void trashEntity(family.id, family.name); }} onDuplicate={() => void duplicateEntity(activeEntityId)} />;
+    if (view === "graph") return <RelationsPage bible={bible} crumbs={[projectCrumb, { label: "Library", onClick: () => openLibrary("all") }, { label: "Relation graph" }]} onOpenEntity={openEntity} />;
+    if (view === "home") return <div className="page-frame"><PageHeader crumbs={[projectCrumb, { label: "Home" }]} /><HomeView project={activeProject} documents={documents} sessions={sessions} bible={bible} tree={tree} onOpenChat={(id) => id ? void openSession(id) : newChat()} onOpenDocument={openDocument} onManuscript={() => setViewAndPersist("manuscript")} onLibrary={() => setViewAndPersist("library")} onQuickCreate={() => setQuickCreateOpen(true)} onStartPrompt={(prompt) => { setSeedPrompt(prompt); setViewAndPersist("chat"); }} /></div>;
     if (view === "chat") return <ChatView config={config} activeProjectId={activeProjectId} activeWorldId={activeWorldId} activeBranchId={activeBranchId} projectName={activeProject?.name || "Project"} worldName={activeWorld?.name || "World"} branchName={activeBranch?.name || "Main"} worldBible={bible} activeSession={activeSession} commands={commands.commands || []} onConfig={setConfig} onSession={setActiveSession} onSessionsChanged={refreshSessions} onLibraryChanged={refreshScope} onInspect={inspect} seedPrompt={seedPrompt} onSeedConsumed={() => setSeedPrompt("")} />;
-    if (view === "manuscript") return <ManuscriptView projectId={activeProjectId} worldId={activeWorldId} branchId={activeBranchId} documents={documents} folders={tree?.folders || tree?.folder_tree || []} initialDocumentId={activeDocumentId} documentTypes={documentTypes} onDocumentsChanged={refreshScope} onInspect={inspect} />;
-    if (view === "library") return <LibraryView projectId={activeProjectId} worldId={activeWorldId} branchId={activeBranchId} bible={bible} entityTypes={entityTypes} onChanged={async () => { await refreshBootstrap(); await refreshScope(); }} onSelect={setSelection} />;
-    return <CommandCenterView projectId={activeProjectId} commands={commands.commands || []} registryVersion={commands.command_registry_version} dynamicReferences={commands.dynamic_references} referenceSelectors={commands.reference_selectors} onUse={(command, compiledText) => { setSeedPrompt(compiledText || `/${command.id} `); setViewAndPersist("chat"); }} />;
-  }, [view, activeProject, activeWorld, activeBranch, documents, sessions, bible, tree, config, activeProjectId, activeWorldId, activeBranchId, activeSession, commands, seedPrompt, activeDocumentId, documentTypes, entityTypes, refreshSessions, refreshScope, refreshBootstrap]);
+    if (view === "manuscript") return <ManuscriptView crumbs={[projectCrumb, { label: "Manuscript" }]} onNewDocument={() => void newDocument()} projectId={activeProjectId} worldId={activeWorldId} branchId={activeBranchId} documents={documents} folders={tree?.folders || tree?.folder_tree || []} initialDocumentId={activeDocumentId} documentTypes={documentTypes} onDocumentsChanged={refreshScope} onInspect={inspect} />;
+    if (view === "library") return <div className="page-frame"><PageHeader crumbs={[projectCrumb, { label: "Library" }]} /><LibraryView initialTab={libraryTab} projectId={activeProjectId} worldId={activeWorldId} branchId={activeBranchId} bible={bible} entityTypes={entityTypes} onChanged={async () => { await refreshBootstrap(); await refreshScope(); }} onSelect={selectFromLibrary} /></div>;
+    return <div className="page-frame"><PageHeader crumbs={[projectCrumb, { label: "Commands" }]} /><CommandCenterView projectId={activeProjectId} commands={commands.commands || []} registryVersion={commands.command_registry_version} dynamicReferences={commands.dynamic_references} referenceSelectors={commands.reference_selectors} onUse={(command, compiledText) => { setSeedPrompt(compiledText || `/${command.id} `); setViewAndPersist("chat"); }} /></div>;
+  }, [view, activeEntityId, libraryTab, activeProject, activeWorld, activeBranch, documents, sessions, bible, tree, config, activeProjectId, activeWorldId, activeBranchId, activeSession, commands, seedPrompt, activeDocumentId, documentTypes, entityTypes, refreshSessions, refreshScope, refreshBootstrap]);
 
   if (booting) return <div className="boot-screen" data-theme={theme} style={appearanceStyle}><span className="brand-mark boot-brand-mark" aria-hidden="true" /><LoaderCircle className="spin" size={20} /><span>Starting Arline Studio…</span></div>;
 
@@ -329,6 +432,21 @@ export default function App() {
         activeWorldId={activeWorldId}
         activeBranchId={activeBranchId}
         sessions={sessions}
+        activeSessionId={activeSession?.id}
+        documents={documents}
+        folders={tree?.folders || tree?.folder_tree || []}
+        families={bible?.families || []}
+        entityTypes={entityTypes}
+        activeDocumentId={activeDocumentId}
+        activeEntityId={activeEntityId}
+        onNewDocument={() => void newDocument()}
+        onOpenDocument={openDocument}
+        onOpenEntity={openEntity}
+        onLibrary={openLibrary}
+        onNewEntity={(type, name) => void newEntity(type, name)}
+        onRenameEntity={(id, name) => void renameEntity(id, name)}
+        onTrashEntity={(id, name) => void trashEntity(id, name)}
+        onDuplicateEntity={(id) => void duplicateEntity(id)}
         connectionLabel={connectionLabel}
         onView={setViewAndPersist}
         onProject={chooseProject}
@@ -343,6 +461,7 @@ export default function App() {
         onTheme={setThemeAndPersist}
       >
         {scopeLoading ? <div className="scope-progress"><span /></div> : null}
+        {toast ? <div className="app-toast" role="status"><span>{toast.text}</span>{toast.undo && <button className="toast-undo" onClick={toast.undo}>Undo</button>}<button aria-label="Dismiss" onClick={() => setToast(null)}><X size={13} /></button></div> : null}
         {fatalError ? <div className="global-error"><AlertTriangle size={13} /><span>{fatalError}</span><button onClick={() => setFatalError("")}>×</button></div> : null}
         {scopeReady ? mainContent : <div className="scope-loading-state" role="status" aria-live="polite"><LoaderCircle className="spin" size={20} /><strong>{scopeLoading ? "Loading workspace…" : "Workspace data unavailable"}</strong>{!scopeLoading ? <button onClick={() => void refreshScope()}>Retry</button> : null}</div>}
       </Shell>
@@ -361,6 +480,7 @@ export default function App() {
         onWorld={chooseWorld}
         onCommand={(command) => { setSeedPrompt(`/${command.id} `); setViewAndPersist("chat"); }}
         onInspect={inspect}
+        onEntity={openEntity}
         onAddToChat={(text) => { setSeedPrompt(text); setViewAndPersist("chat"); }}
       />
       <SettingsDrawer open={settingsOpen} config={config} onConfig={setConfig} appearance={appearance} onAppearance={setAppearance} activeProjectId={activeProjectId} activeWorldId={activeWorldId} activeBranchId={activeBranchId} worldBible={bible} onLibraryChanged={refreshScope} onClose={() => setSettingsOpen(false)} />
